@@ -1,4 +1,4 @@
-# Audio Reproducer Tool
+# Tango Studio
 
 A simple audio player built with Python, using Tkinter for the GUI and VLC for playback. Supports playlist management and browsing local audio files.
 

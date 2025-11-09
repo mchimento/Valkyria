@@ -71,7 +71,7 @@ class DraggableListbox(tk.Listbox):
         self.insert(to_idx, item)
         if self.on_reorder:
             self.on_reorder(from_idx, to_idx)
-            
+
 class AudioPlayerApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -219,8 +219,7 @@ class AudioPlayerApp(tk.Tk):
             if file_path not in self.playlist:
                 self.playlist.append(file_path)
                 count += 1
-        self._refresh_playlist_box()
-        self.status.set(f'Added {count} files to playlist')
+        self._refresh_playlist_box()        
 
     def remove_selected_from_playlist(self, event=None):
         sel = self.playlist_box.curselection()
@@ -282,6 +281,14 @@ class AudioPlayerApp(tk.Tk):
         for p in self.playlist:
             self.playlist_box.insert(tk.END, os.path.basename(p))
 
+    def highlight_current_song(self, index):
+        # Clear previous highlights
+        for i in range(self.playlist_box.size()):
+            self.playlist_box.itemconfig(i, bg='white')
+        # Highlight current song in yellow
+        if index is not None and 0 <= index < self.playlist_box.size():
+            self.playlist_box.itemconfig(index, bg='yellow')
+
     # -------- Playback --------
 
     def play_selected(self):
@@ -290,6 +297,7 @@ class AudioPlayerApp(tk.Tk):
             self.current_index = sel[0]
         elif self.current_index is None and self.playlist:
             self.current_index = 0
+        self.highlight_current_song(self.current_index)
         self.play_current()
 
     def play_current(self):
@@ -401,6 +409,7 @@ class AudioPlayerApp(tk.Tk):
         sel = self.playlist_box.curselection()
         if sel:
             self.current_index = sel[0]
+            self.highlight_current_song(self.current_index)
             self.play_current()
 
 
