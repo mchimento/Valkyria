@@ -78,12 +78,21 @@ class AudioPlayerApp(tk.Tk):
         self.title("Tango Studio")
         self.geometry("1000x500")
 
+        self.configure(bg="#d9d9d9")
+
+        # tool look and feel
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TButton', font=('Segoe UI', 10), padding=6, background="#188BE9", foreground='white')
+        style.map('TButton', background=[('active', "#5DADE2")])
+        style.configure('Treeview', font=('Segoe UI', 10), rowheight=25)
+        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'))
+
+        # VLC setup
         self.instance = vlc.Instance()
         self.player = self.instance.media_player_new() # persistent player
         self.media = None
-
-        # Attach end-of-track event once
-        em = self.player.event_manager()
+        em = self.player.event_manager() # Attach end-of-track event once
         em.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_track_end)
 
         self.playlist = []
@@ -96,7 +105,6 @@ class AudioPlayerApp(tk.Tk):
         self.time_var = tk.StringVar(value='00:00 / 00:00')
 
         self._build_ui()
-
         self.after(500, self.update_time)
 
     def _build_ui(self):
@@ -125,53 +133,31 @@ class AudioPlayerApp(tk.Tk):
         main.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         # --- Left: Playlist ---
-        left_frame = ttk.Frame(main)
+        left_frame = ttk.Frame(main, padding=(5,5))
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        ttk.Label(left_frame, text="Playlist").pack(anchor=tk.W)
-        playlist_container = ttk.Frame(left_frame)
-        playlist_container.pack(fill=tk.BOTH, expand=True)
-        v_scroll_p = ttk.Scrollbar(playlist_container, orient=tk.VERTICAL)
-        h_scroll_p = ttk.Scrollbar(playlist_container, orient=tk.HORIZONTAL)
-        self.playlist_box = DraggableListbox(
-            playlist_container,
-            selectmode=tk.SINGLE,
-            yscrollcommand=v_scroll_p.set,
-            xscrollcommand=h_scroll_p.set
-        )
-        v_scroll_p.config(command=self.playlist_box.yview)
-        h_scroll_p.config(command=self.playlist_box.xview)
-        v_scroll_p.pack(side=tk.RIGHT, fill=tk.Y)
-        h_scroll_p.pack(side=tk.BOTTOM, fill=tk.X)
-        self.playlist_box.pack(fill=tk.BOTH, expand=True)
-        self.playlist_box.bind('<Double-1>', self.on_playlist_double)
-        self.playlist_box.bind('<Delete>', self.remove_selected_from_playlist)
-        self.playlist_box.on_reorder = self.reorder_playlist
+        self.playlist_tree = ttk.Treeview(left_frame, columns=('Playlist',), show='headings', selectmode='browse')
+        self.playlist_tree.tag_configure('current', background='#FFF59D')  # Soft yellow
+        self.playlist_tree.heading('Playlist', text='Playlist')
+        self.playlist_tree.pack(fill=tk.BOTH, expand=True)
+        self.playlist_tree.bind('<Double-1>', self.on_playlist_double)
+        self.playlist_tree.bind('<Delete>', self.remove_selected_from_playlist)
+        self.playlist_tree.bind('<ButtonPress-1>', self._on_drag_start)
+        self.playlist_tree.bind('<B1-Motion>', self._on_drag_motion)
+        self.dragged_item = None        
 
         # --- Right: Browser ---
-        right_frame = ttk.Frame(main)
+        right_frame = ttk.Frame(main, padding=(5,5))
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        ttk.Label(right_frame, text="Files Browser").pack(anchor=tk.W)
-        browser_container = ttk.Frame(right_frame)
-        browser_container.pack(fill=tk.BOTH, expand=True)
-        v_scroll_b = ttk.Scrollbar(browser_container, orient=tk.VERTICAL)
-        h_scroll_b = ttk.Scrollbar(browser_container, orient=tk.HORIZONTAL)
-        self.browser_box = tk.Listbox(
-            browser_container,
-            selectmode=tk.EXTENDED,
-            yscrollcommand=v_scroll_b.set,
-            xscrollcommand=h_scroll_b.set
-        )
-        v_scroll_b.config(command=self.browser_box.yview)
-        h_scroll_b.config(command=self.browser_box.xview)
-        v_scroll_b.pack(side=tk.RIGHT, fill=tk.Y)
-        h_scroll_b.pack(side=tk.BOTTOM, fill=tk.X)
-        self.browser_box.pack(fill=tk.BOTH, expand=True)
+        self.browser_tree = ttk.Treeview(right_frame, columns=('Song',), show='headings', selectmode='extended')
+        self.browser_tree.heading('Song', text='Songs')
+        self.browser_tree.pack(fill=tk.BOTH, expand=True)
+        self.browser_tree.bind('<Delete>', self.remove_selected_from_browser)
 
         # --- Middle: Buttons ---
         mid_frame = ttk.Frame(main)
         mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=4, anchor=tk.N)
 
-        ttk.Button(mid_frame, text="Browse Files", command=self.open_folder_browse).pack(pady=15)
+        ttk.Button(mid_frame, text="Browse Songs", command=self.open_folder_browse).pack(pady=2)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
 
         # --- Bottom controls ---
@@ -192,14 +178,13 @@ class AudioPlayerApp(tk.Tk):
         ttk.Label(self, textvariable=self.status).pack(side=tk.BOTTOM, anchor=tk.W, padx=8)
 
     # -------- File Menu Actions --------
-
     def open_file(self):
         path = filedialog.askopenfilename(filetypes=[('Audio files', '*.mp3 *.wav *.flac *.ogg *.m4a'), ('All files', '*.*')])
         if path:
             self.playlist = [path]
             self.current_index = 0
             self.current_playlist_path = None
-            self._refresh_playlist_box()
+            self.update_playlist_tree()
             self.play_current()
 
     def open_playlist(self):
@@ -213,7 +198,7 @@ class AudioPlayerApp(tk.Tk):
                 self.playlist = items
                 self.current_index = 0
                 self.current_playlist_path = path
-                self._refresh_playlist_box()
+                self.update_playlist_tree()
                 self.play_current()
             except Exception as e:
                 messagebox.showerror('Error', f'Failed to load playlist: {e}')
@@ -221,57 +206,66 @@ class AudioPlayerApp(tk.Tk):
     def open_folder(self):
         folder = filedialog.askdirectory()
         if folder:
+            for item in self.playlist_tree.get_children():
+                self.playlist_tree.delete(item)
             self.playlist.clear()
-            self.playlist_box.delete(0, tk.END)
-            for root, dirs, files in os.walk(folder):
-                for f in files:
-                    if f.lower().endswith(SUPPORTED_EXTS):
-                        full_path = os.path.join(root, f)
-                        self.playlist.append(full_path)
-                        self.playlist_box.insert(tk.END, os.path.basename(f))
+            for f in os.listdir(folder):
+                if f.lower().endswith(SUPPORTED_EXTS):
+                    full_path = os.path.join(folder, f)
+                    self.playlist.append(full_path)
+                    self.playlist_tree.insert('', tk.END, values=(f,))
             self.status.set(f'Loaded {len(self.playlist)} files into playlist')
             self.current_index = 0
 
     def open_folder_browse(self):
-        path = filedialog.askdirectory()
-        if path:
+        folder = filedialog.askdirectory()
+        if folder:
+            for item in self.browser_tree.get_children():
+                self.browser_tree.delete(item)
             self.browser_files.clear()
-            self.browser_box.delete(0, tk.END)
-            for root, dirs, filenames in os.walk(path):
-                for f in filenames:
-                    if f.lower().endswith(SUPPORTED_EXTS):
-                        full_path = os.path.join(root, f)
-                        self.browser_files.append(full_path)
-                        self.browser_box.insert(tk.END, os.path.basename(f))
+            for f in os.listdir(folder):
+                if f.lower().endswith(SUPPORTED_EXTS):
+                    full_path = os.path.join(folder, f)
+                    self.browser_files.append(full_path)
+                    self.browser_tree.insert('', tk.END, values=(f,))
             self.status.set(f'Loaded {len(self.browser_files)} files from folder')
 
     def add_selected_to_playlist(self):
-        selections = self.browser_box.curselection()
-        count = 0
-        for i in selections:
-            file_path = self.browser_files[i]
-            if file_path not in self.playlist:
-                self.playlist.append(file_path)
-                count += 1
-        self._refresh_playlist_box()        
+        selections = self.browser_tree.selection()
+        for sel in selections:
+            idx = self.browser_tree.index(sel)
+            fpath = self.browser_files[idx]
+            if fpath not in self.playlist:
+                self.playlist.append(fpath)        
+        self.update_playlist_tree()        
 
     def remove_selected_from_playlist(self, event=None):
-        sel = self.playlist_box.curselection()
-        if not sel:
+        selections = self.playlist_tree.selection()
+        if not selections:
             return
-        index = sel[0]
-        removed = self.playlist.pop(index)
-        self._refresh_playlist_box()
-        self.status.set(f'Removed from playlist: {os.path.basename(removed)}')
 
+        removed_indices = sorted([self.playlist_tree.index(sel) for sel in selections], reverse=True)
 
+        for idx in removed_indices:
+            self.playlist.pop(idx)
+
+        if self.current_index is not None:
+            # If the current song itself was removed, reset highlight
+            if self.current_index in removed_indices:
+                self.current_index = None
+            else:
+                # Count how many removed indices were before current
+                shift = sum(1 for i in removed_indices if i < self.current_index)
+                self.current_index -= shift
+
+        self.update_playlist_tree()
+        
     def remove_selected_from_browser(self, event=None):
-        sels = list(self.browser_box.curselection())[::-1]
-        for i in sels:
-            removed = self.browser_files.pop(i)
-            self.browser_box.delete(i)
-        if sels:
-            self.status.set(f'Removed {len(sels)} items from browser list')
+        selections = self.browser_tree.selection()
+        for sel in selections[::-1]:
+            idx = self.browser_tree.index(sel)
+            self.browser_files.pop(idx)
+            self.browser_tree.delete(sel)
 
     def save_playlist(self):
         if not self.current_playlist_path:
@@ -297,7 +291,6 @@ class AudioPlayerApp(tk.Tk):
         self.destroy()
 
     # -------- Playlist --------
-
     def reorder_playlist(self, from_idx, to_idx):
         if from_idx < 0 or from_idx >= len(self.playlist) or to_idx < 0 or to_idx >= len(self.playlist):
             return
@@ -310,22 +303,47 @@ class AudioPlayerApp(tk.Tk):
         elif to_idx <= self.current_index < from_idx:
             self.current_index += 1
 
-    def _refresh_playlist_box(self):
-        self.playlist_box.delete(0, tk.END)
-        for p in self.playlist:
-            self.playlist_box.insert(tk.END, os.path.basename(p))
+    def update_playlist_tree(self, highlight_current=True):
+        for item in self.playlist_tree.get_children():
+            self.playlist_tree.delete(item)
+        for f in self.playlist:
+            self.playlist_tree.insert('', tk.END, values=(os.path.basename(f),))
+        if highlight_current:
+            self.highlight_current_song(self.current_index)
 
-    def highlight_current_song(self, index):
-        # Clear previous highlights
-        for i in range(self.playlist_box.size()):
-            self.playlist_box.itemconfig(i, bg='white')
-        # Highlight current song in yellow
-        if index is not None and 0 <= index < self.playlist_box.size():
-            self.playlist_box.itemconfig(index, bg='yellow')
+    def update_browser_tree(self):
+        for item in self.browser_tree.get_children():
+            self.browser_tree.delete(item)
+        for f in self.browser_files:
+            self.browser_tree.insert('', tk.END, values=(os.path.basename(f),))
+
+    # ----------------- Drag & Drop -----------------
+    def _on_drag_start(self, event):
+        item = self.playlist_tree.identify_row(event.y)
+        if item:
+            self.dragged_item = self.playlist_tree.index(item)
+
+    def _on_drag_motion(self, event):
+        if self.dragged_item is None:
+            return
+        item = self.playlist_tree.identify_row(event.y)
+        if not item:
+            return
+        index = self.playlist_tree.index(item)
+        if index != self.dragged_item:
+            self.playlist[self.dragged_item], self.playlist[index] = self.playlist[index], self.playlist[self.dragged_item]
+            self.update_playlist_tree()
+            self.dragged_item = index
 
     # -------- Playback --------
+    def fade_out_and_play(self, index):
+        if self.player is not None and self.player.is_playing():
+            vol = self.player.audio_get_volume()
+            for v in range(vol, -1, -5):
+                self.player.audio_set_volume(v)
+                self.update()
+                time.sleep(0.01)
 
-    def play_song(self, index):
         if index < 0 or index >= len(self.playlist):
             return
         self.current_index = index
@@ -339,23 +357,12 @@ class AudioPlayerApp(tk.Tk):
         self.player.audio_set_volume(self.volume_var.get())
 
         self.player.play()
-
-        # Update status
         self.status.set(f'Playing: {os.path.basename(path)}')
 
-    def fade_out_and_play(self, index):
-        if self.player is not None and self.player.is_playing():
-            vol = self.player.audio_get_volume()
-            for v in range(vol, -1, -5):
-                self.player.audio_set_volume(v)
-                self.update()
-                time.sleep(0.01)
-        self.play_song(index)
-
     def play_selected(self):
-        sel = self.playlist_box.curselection()
+        sel = self.playlist_tree.selection()
         if sel:
-            self.current_index = sel[0]
+            self.current_index = self.playlist_tree.index(sel[0])
         elif self.current_index is None and self.playlist:
             self.current_index = 0
         self.highlight_current_song(self.current_index)
@@ -369,23 +376,15 @@ class AudioPlayerApp(tk.Tk):
         if not os.path.exists(path):
             messagebox.showerror('Playback error', f'File not found: {path}')
             return
-
-        # Initialize player once
-        if self.player is None:
-            self.player = self.instance.media_player_new()
-
-        # Stop current playback first
         if self.player.is_playing():
             self.player.stop()
 
         self.media = self.instance.media_new(path)
         self.player.set_media(self.media)
         self.player.audio_set_volume(self.volume_var.get())
-        
-        self.status.set(f'Playing: {os.path.basename(path)}')
         self.highlight_current_song(self.current_index)
+        self.status.set(f'Playing: {os.path.basename(path)}')
         self.player.play()
-
 
     def _on_track_end(self, event):
         self.after(100, self._play_next_after_end)
@@ -450,37 +449,53 @@ class AudioPlayerApp(tk.Tk):
         self.after(500, self.update_time)
 
     def highlight_current_song(self, index):
-        for i in range(self.playlist_box.size()):
-            self.playlist_box.itemconfig(i, bg='white')
-        if index is not None and 0 <= index < self.playlist_box.size():
-            self.playlist_box.itemconfig(index, bg='yellow')
+        for item in self.playlist_tree.get_children():
+            self.playlist_tree.item(item, tags=())
+        if index is not None and 0 <= index < len(self.playlist):
+            item = self.playlist_tree.get_children()[index]
+            self.playlist_tree.item(item, tags=('current',))            
 
     def on_playlist_double(self, event):
-        sel = self.playlist_box.curselection()
+        sel = self.playlist_tree.selection()
         if sel:
-            self.current_index = sel[0]
+            self.current_index = self.playlist_tree.index(sel[0])
             self.highlight_current_song(self.current_index)
             self.fade_out_and_play(self.current_index)
 
     # -------- Playlist operations --------
 
     def shuffle_playlist(self):
+        current_song = None
+        if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
+            current_song = self.playlist[self.current_index]
+
         random.shuffle(self.playlist)
-        self.update_playlist_box()
+        self.update_playlist_tree(False)
+
+        if current_song in self.playlist:
+            self.current_index = self.playlist.index(current_song)
+            self.highlight_current_song(self.current_index)
+        else:
+            self.current_index = None
 
     def sort_playlist(self):
+        current_song = None
+        if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
+            current_song = self.playlist[self.current_index]
+
         self.playlist.sort(key=lambda f: os.path.basename(f).lower())
-        self.update_playlist_box()
+        self.update_playlist_tree(False)
+
+        if current_song in self.playlist:
+            self.current_index = self.playlist.index(current_song)
+            self.highlight_current_song(self.current_index)
+        else:
+            self.current_index = None
 
     def clear_playlist(self):
         self.playlist.clear()
-        self.update_playlist_box()
+        self.update_playlist_tree()
         self.current_index = None
-
-    def update_playlist_box(self):
-        self.playlist_box.delete(0, tk.END)
-        for f in self.playlist:
-            self.playlist_box.insert(tk.END, os.path.basename(f))
 
 
 if __name__ == '__main__':
