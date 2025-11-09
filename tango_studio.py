@@ -115,11 +115,22 @@ class AudioPlayerApp(tk.Tk):
         # --- Left: Playlist ---
         left_frame = ttk.Frame(main)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         ttk.Label(left_frame, text="Playlist (Queue)").pack(anchor=tk.W)
-        self.playlist_box = DraggableListbox(left_frame, selectmode=tk.SINGLE)
-        #self.playlist_box = tk.Listbox(left_frame, selectmode=tk.SINGLE)
-        self.playlist_box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        playlist_container = ttk.Frame(left_frame)
+        playlist_container.pack(fill=tk.BOTH, expand=True)
+        v_scroll_p = ttk.Scrollbar(playlist_container, orient=tk.VERTICAL)
+        h_scroll_p = ttk.Scrollbar(playlist_container, orient=tk.HORIZONTAL)
+        self.playlist_box = DraggableListbox(
+            playlist_container,
+            selectmode=tk.SINGLE,
+            yscrollcommand=v_scroll_p.set,
+            xscrollcommand=h_scroll_p.set
+        )
+        v_scroll_p.config(command=self.playlist_box.yview)
+        h_scroll_p.config(command=self.playlist_box.xview)
+        v_scroll_p.pack(side=tk.RIGHT, fill=tk.Y)
+        h_scroll_p.pack(side=tk.BOTTOM, fill=tk.X)
+        self.playlist_box.pack(fill=tk.BOTH, expand=True)
         self.playlist_box.bind('<Double-1>', self.on_playlist_double)
         self.playlist_box.bind('<Delete>', self.remove_selected_from_playlist)
         self.playlist_box.on_reorder = self.reorder_playlist
@@ -127,17 +138,28 @@ class AudioPlayerApp(tk.Tk):
         # --- Right: Browser ---
         right_frame = ttk.Frame(main)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
         ttk.Label(right_frame, text="Browser (Folder Contents)").pack(anchor=tk.W)
-        self.browser_box = tk.Listbox(right_frame, selectmode=tk.EXTENDED)
-        self.browser_box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4, side=tk.BOTTOM)
-        self.browser_box.bind('<Delete>', self.remove_selected_from_browser)
+        browser_container = ttk.Frame(right_frame)
+        browser_container.pack(fill=tk.BOTH, expand=True)
+        v_scroll_b = ttk.Scrollbar(browser_container, orient=tk.VERTICAL)
+        h_scroll_b = ttk.Scrollbar(browser_container, orient=tk.HORIZONTAL)
+        self.browser_box = tk.Listbox(
+            browser_container,
+            selectmode=tk.EXTENDED,
+            yscrollcommand=v_scroll_b.set,
+            xscrollcommand=h_scroll_b.set
+        )
+        v_scroll_b.config(command=self.browser_box.yview)
+        h_scroll_b.config(command=self.browser_box.xview)
+        v_scroll_b.pack(side=tk.RIGHT, fill=tk.Y)
+        h_scroll_b.pack(side=tk.BOTTOM, fill=tk.X)
+        self.browser_box.pack(fill=tk.BOTH, expand=True)
 
         # --- Middle: Buttons ---
         mid_frame = ttk.Frame(main)
         mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=4, anchor=tk.N)
 
-        ttk.Button(mid_frame, text="Browse Files", command=self.open_folder_browse).pack(pady=20)
+        ttk.Button(mid_frame, text="Browse Files", command=self.open_folder_browse).pack(pady=15)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
 
         # --- Bottom controls ---
