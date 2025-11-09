@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Audio Reproducer Tool
+Tango Studio
 - Tkinter GUI
 - python-vlc backend
 
@@ -39,11 +39,43 @@ def write_m3u(path, entries):
             title = os.path.basename(e)
             f.write(f'#EXTINF:-1,{title}\n{e}\n')
 
+class DraggableListbox(tk.Listbox):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        self.bind('<Button-1>', self.set_current)
+        self.bind('<B1-Motion>', self.shift_selection)
+        self.curIndex = None
+        self.on_reorder = None
 
+    def set_current(self, event):
+        self.curIndex = self.nearest(event.y)
+        # Preserve selection highlight
+        self.selection_clear(0, tk.END)
+        self.selection_set(self.curIndex)
+
+    def shift_selection(self, event):
+        i = self.nearest(event.y)
+        if i == self.curIndex:
+            return
+        self.move_item(self.curIndex, i)
+        self.curIndex = i
+        # Preserve selection highlight after move
+        self.selection_clear(0, tk.END)
+        self.selection_set(self.curIndex)
+
+    def move_item(self, from_idx, to_idx):
+        if from_idx < 0 or from_idx >= self.size():
+            return
+        item = self.get(from_idx)
+        self.delete(from_idx)
+        self.insert(to_idx, item)
+        if self.on_reorder:
+            self.on_reorder(from_idx, to_idx)
+            
 class AudioPlayerApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Audio Reproducer")
+        self.title("Tango Studio")
         self.geometry("1000x500")
 
         self.instance = vlc.Instance()
@@ -85,26 +117,28 @@ class AudioPlayerApp(tk.Tk):
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         ttk.Label(left_frame, text="Playlist (Queue)").pack(anchor=tk.W)
-        self.playlist_box = tk.Listbox(left_frame, selectmode=tk.SINGLE)
+        self.playlist_box = DraggableListbox(left_frame, selectmode=tk.SINGLE)
+        #self.playlist_box = tk.Listbox(left_frame, selectmode=tk.SINGLE)
         self.playlist_box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         self.playlist_box.bind('<Double-1>', self.on_playlist_double)
         self.playlist_box.bind('<Delete>', self.remove_selected_from_playlist)
-
-        # --- Middle: Buttons ---
-        mid_frame = ttk.Frame(main)
-        mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5)
-
-        ttk.Button(mid_frame, text="Browse Files", command=self.open_folder).pack(pady=5)
-        ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=10)
+        self.playlist_box.on_reorder = self.reorder_playlist
 
         # --- Right: Browser ---
         right_frame = ttk.Frame(main)
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         ttk.Label(right_frame, text="Browser (Folder Contents)").pack(anchor=tk.W)
         self.browser_box = tk.Listbox(right_frame, selectmode=tk.EXTENDED)
-        self.browser_box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.browser_box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4, side=tk.BOTTOM)
         self.browser_box.bind('<Delete>', self.remove_selected_from_browser)
+
+        # --- Middle: Buttons ---
+        mid_frame = ttk.Frame(main)
+        mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=4, anchor=tk.N)
+
+        ttk.Button(mid_frame, text="Browse Files", command=self.open_folder_browse).pack(pady=20)
+        ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
 
         # --- Bottom controls ---
         controls = ttk.Frame(self)
@@ -164,6 +198,19 @@ class AudioPlayerApp(tk.Tk):
             self.status.set(f'Loaded {len(self.playlist)} files into playlist')
             self.current_index = 0
 
+    def open_folder_browse(self):
+        path = filedialog.askdirectory()
+        if path:
+            self.browser_files.clear()
+            self.browser_box.delete(0, tk.END)
+            for root, dirs, filenames in os.walk(path):
+                for f in filenames:
+                    if f.lower().endswith(SUPPORTED_EXTS):
+                        full_path = os.path.join(root, f)
+                        self.browser_files.append(full_path)
+                        self.browser_box.insert(tk.END, os.path.basename(f))
+            self.status.set(f'Loaded {len(self.browser_files)} files from folder')
+
     def add_selected_to_playlist(self):
         selections = self.browser_box.curselection()
         count = 0
@@ -217,6 +264,18 @@ class AudioPlayerApp(tk.Tk):
         self.destroy()
 
     # -------- Playlist --------
+
+    def reorder_playlist(self, from_idx, to_idx):
+        if from_idx < 0 or from_idx >= len(self.playlist) or to_idx < 0 or to_idx >= len(self.playlist):
+            return
+        item = self.playlist.pop(from_idx)
+        self.playlist.insert(to_idx, item)
+        if self.current_index == from_idx:
+            self.current_index = to_idx
+        elif from_idx < self.current_index <= to_idx:
+            self.current_index -= 1
+        elif to_idx <= self.current_index < from_idx:
+            self.current_index += 1
 
     def _refresh_playlist_box(self):
         self.playlist_box.delete(0, tk.END)
