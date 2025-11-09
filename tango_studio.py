@@ -79,8 +79,12 @@ class AudioPlayerApp(tk.Tk):
         self.geometry("1000x500")
 
         self.instance = vlc.Instance()
-        self.player = None
+        self.player = self.instance.media_player_new() # persistent player
         self.media = None
+
+        # Attach end-of-track event once
+        em = self.player.event_manager()
+        em.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_track_end)
 
         self.playlist = []
         self.browser_files = []
@@ -326,11 +330,18 @@ class AudioPlayerApp(tk.Tk):
             return
         self.current_index = index
         self.highlight_current_song(index)
-        media = self.instance.media_new(self.playlist[index])
+        
+        path = self.playlist[index]
+        self.media = self.instance.media_new(path)
         if self.player is None:
             self.player = self.instance.media_player_new()
-        self.player.set_media(media)
+        self.player.set_media(self.media)
+        self.player.audio_set_volume(self.volume_var.get())
+
         self.player.play()
+
+        # Update status
+        self.status.set(f'Playing: {os.path.basename(path)}')
 
     def fade_out_and_play(self, index):
         if self.player is not None and self.player.is_playing():
@@ -340,7 +351,6 @@ class AudioPlayerApp(tk.Tk):
                 self.update()
                 time.sleep(0.01)
         self.play_song(index)
-        self.player.audio_set_volume(self.volume_var.get())  # restore volume
 
     def play_selected(self):
         sel = self.playlist_box.curselection()
@@ -371,10 +381,6 @@ class AudioPlayerApp(tk.Tk):
         self.media = self.instance.media_new(path)
         self.player.set_media(self.media)
         self.player.audio_set_volume(self.volume_var.get())
-
-        # Attach end event
-        em = self.player.event_manager()
-        em.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_track_end)
 
         self.player.play()
         self.status.set(f'Playing: {os.path.basename(path)}')
