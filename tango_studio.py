@@ -587,8 +587,8 @@ class AudioPlayerApp(tk.Tk):
             self.after_cancel(self.tooltip_after_id)
             self.tooltip_after_id = None
         
-        # Schedule tooltip hide with a small delay
-        if self.tooltip and self.tooltip_visible:
+        # Hide tooltip immediately
+        if self.tooltip:
             self.tooltip.withdraw()
             self.tooltip_visible = False
             self.current_tooltip_item = None
@@ -602,7 +602,7 @@ class AudioPlayerApp(tk.Tk):
         if self.current_tooltip_item == item and self.tooltip_visible:
             return
             
-        self.tooltip_after_id = self.after(400, lambda: self._show_tooltip(tree, item, filepath))
+        self.tooltip_after_id = self.after(600, lambda: self._show_tooltip(tree, item, filepath))
         
     def _show_tooltip(self, tree, item, filepath):
         self.tooltip_after_id = None
@@ -633,7 +633,7 @@ class AudioPlayerApp(tk.Tk):
         # Get the item under cursor
         item = tree.identify_row(event.y)
         if not item:
-            # If mouse is not over an item, schedule hide
+            # Hide tooltip immediately when not over an item
             if self.tooltip_visible:
                 self.tooltip.withdraw()
                 self.tooltip_visible = False
