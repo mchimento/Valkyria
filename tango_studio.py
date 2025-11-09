@@ -151,17 +151,18 @@ class AudioPlayerApp(tk.Tk):
                 messagebox.showerror('Error', f'Failed to load playlist: {e}')
 
     def open_folder(self):
-        path = filedialog.askdirectory()
-        if path:
-            self.browser_files.clear()
-            self.browser_box.delete(0, tk.END)
-            for root, dirs, filenames in os.walk(path):
-                for f in filenames:
+        folder = filedialog.askdirectory()
+        if folder:
+            self.playlist.clear()
+            self.playlist_box.delete(0, tk.END)
+            for root, dirs, files in os.walk(folder):
+                for f in files:
                     if f.lower().endswith(SUPPORTED_EXTS):
                         full_path = os.path.join(root, f)
-                        self.browser_files.append(full_path)
-                        self.browser_box.insert(tk.END, os.path.basename(f))
-            self.status.set(f'Loaded {len(self.browser_files)} files from folder')
+                        self.playlist.append(full_path)
+                        self.playlist_box.insert(tk.END, os.path.basename(f))
+            self.status.set(f'Loaded {len(self.playlist)} files into playlist')
+            self.current_index = 0
 
     def add_selected_to_playlist(self):
         selections = self.browser_box.curselection()
