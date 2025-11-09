@@ -12,6 +12,7 @@ import vlc
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import random
 
 SUPPORTED_EXTS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a')
 
@@ -109,13 +110,21 @@ class AudioPlayerApp(tk.Tk):
         menubar.add_cascade(label="File", menu=filemenu)
         self.config(menu=menubar)
 
+        playlist_menu = tk.Menu(menubar, tearoff=0)
+        playlist_menu.add_command(label="Shuffle", command=self.shuffle_playlist)
+        playlist_menu.add_command(label="Sort Alphabetically", command=self.sort_playlist)
+        playlist_menu.add_separator()
+        playlist_menu.add_command(label="Clear Playlist", command=self.clear_playlist)
+        menubar.add_cascade(label="Playlist", menu=playlist_menu)
+        self.config(menu=menubar)
+
         main = ttk.Frame(self)
         main.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         # --- Left: Playlist ---
         left_frame = ttk.Frame(main)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        ttk.Label(left_frame, text="Playlist (Queue)").pack(anchor=tk.W)
+        ttk.Label(left_frame, text="Playlist").pack(anchor=tk.W)
         playlist_container = ttk.Frame(left_frame)
         playlist_container.pack(fill=tk.BOTH, expand=True)
         v_scroll_p = ttk.Scrollbar(playlist_container, orient=tk.VERTICAL)
@@ -138,7 +147,7 @@ class AudioPlayerApp(tk.Tk):
         # --- Right: Browser ---
         right_frame = ttk.Frame(main)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        ttk.Label(right_frame, text="Browser (Folder Contents)").pack(anchor=tk.W)
+        ttk.Label(right_frame, text="Files Browser").pack(anchor=tk.W)
         browser_container = ttk.Frame(right_frame)
         browser_container.pack(fill=tk.BOTH, expand=True)
         v_scroll_b = ttk.Scrollbar(browser_container, orient=tk.VERTICAL)
@@ -433,6 +442,26 @@ class AudioPlayerApp(tk.Tk):
             self.current_index = sel[0]
             self.highlight_current_song(self.current_index)
             self.play_current()
+
+    # -------- Playlist operations --------
+
+    def shuffle_playlist(self):
+        random.shuffle(self.playlist)
+        self.update_playlist_box()
+
+    def sort_playlist(self):
+        self.playlist.sort(key=lambda f: os.path.basename(f).lower())
+        self.update_playlist_box()
+
+    def clear_playlist(self):
+        self.playlist.clear()
+        self.update_playlist_box()
+        self.current_index = None
+
+    def update_playlist_box(self):
+        self.playlist_box.delete(0, tk.END)
+        for f in self.playlist:
+            self.playlist_box.insert(tk.END, os.path.basename(f))
 
 
 if __name__ == '__main__':
