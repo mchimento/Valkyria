@@ -13,9 +13,9 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import random
+import time
 
 SUPPORTED_EXTS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a')
-
 
 def parse_m3u(path):
     items = []
@@ -31,7 +31,6 @@ def parse_m3u(path):
             else:
                 items.append(line)
     return items
-
 
 def write_m3u(path, entries):
     with open(path, 'w', encoding='utf-8') as f:
@@ -322,6 +321,27 @@ class AudioPlayerApp(tk.Tk):
 
     # -------- Playback --------
 
+    def play_song(self, index):
+        if index < 0 or index >= len(self.playlist):
+            return
+        self.current_index = index
+        self.highlight_current_song(index)
+        media = self.instance.media_new(self.playlist[index])
+        if self.player is None:
+            self.player = self.instance.media_player_new()
+        self.player.set_media(media)
+        self.player.play()
+
+    def fade_out_and_play(self, index):
+        if self.player is not None and self.player.is_playing():
+            vol = self.player.audio_get_volume()
+            for v in range(vol, -1, -5):
+                self.player.audio_set_volume(v)
+                self.update()
+                time.sleep(0.01)
+        self.play_song(index)
+        self.player.audio_set_volume(self.volume_var.get())  # restore volume
+
     def play_selected(self):
         sel = self.playlist_box.curselection()
         if sel:
@@ -335,32 +355,31 @@ class AudioPlayerApp(tk.Tk):
         if self.current_index is None or not self.playlist:
             self.status.set('No track to play')
             return
-        if self.current_index < 0 or self.current_index >= len(self.playlist):
-            self.status.set('Index out of range')
-            return
-
         path = self.playlist[self.current_index]
         if not os.path.exists(path):
             messagebox.showerror('Playback error', f'File not found: {path}')
             return
 
-        if self.player:
-            try:
-                self.player.stop()
-            except Exception:
-                pass
+        # Initialize player once
+        if self.player is None:
+            self.player = self.instance.media_player_new()
+
+        # Stop current playback first
+        if self.player.is_playing():
+            self.player.stop()
 
         self.media = self.instance.media_new(path)
-        self.player = self.instance.media_player_new()
         self.player.set_media(self.media)
         self.player.audio_set_volume(self.volume_var.get())
 
+        # Attach end event
         em = self.player.event_manager()
         em.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_track_end)
 
         self.player.play()
         self.status.set(f'Playing: {os.path.basename(path)}')
         self._highlight_current()
+
 
     def _on_track_end(self, event):
         self.after(100, self._play_next_after_end)
@@ -396,20 +415,14 @@ class AudioPlayerApp(tk.Tk):
     def previous_track(self):
         if not self.playlist:
             return
-        if self.current_index is None:
-            self.current_index = 0
-        else:
-            self.current_index = max(0, self.current_index - 1)
-        self.play_current()
+        if self.current_index is not None and self.current_index - 1 >= 0:
+            self.fade_out_and_play(self.current_index - 1)
 
-    def next_track(self):
+    def next_track(self):        
         if not self.playlist:
             return
-        if self.current_index is None:
-            self.current_index = 0
-        else:
-            self.current_index = min(len(self.playlist) - 1, self.current_index + 1)
-        self.play_current()
+        if self.current_index is not None and self.current_index + 1 < len(self.playlist):
+            self.fade_out_and_play(self.current_index + 1)        
 
     def on_volume(self, value):
         if self.player:
@@ -441,7 +454,7 @@ class AudioPlayerApp(tk.Tk):
         if sel:
             self.current_index = sel[0]
             self.highlight_current_song(self.current_index)
-            self.play_current()
+            self.fade_out_and_play(self.current_index)
 
     # -------- Playlist operations --------
 
