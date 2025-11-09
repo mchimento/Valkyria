@@ -381,10 +381,10 @@ class AudioPlayerApp(tk.Tk):
         self.media = self.instance.media_new(path)
         self.player.set_media(self.media)
         self.player.audio_set_volume(self.volume_var.get())
-
-        self.player.play()
+        
         self.status.set(f'Playing: {os.path.basename(path)}')
-        self._highlight_current()
+        self.highlight_current_song(self.current_index)
+        self.player.play()
 
 
     def _on_track_end(self, event):
@@ -449,11 +449,11 @@ class AudioPlayerApp(tk.Tk):
             self.time_var.set('00:00 / 00:00')
         self.after(500, self.update_time)
 
-    def _highlight_current(self):
-        self.playlist_box.selection_clear(0, tk.END)
-        if self.current_index is not None:
-            self.playlist_box.selection_set(self.current_index)
-            self.playlist_box.see(self.current_index)
+    def highlight_current_song(self, index):
+        for i in range(self.playlist_box.size()):
+            self.playlist_box.itemconfig(i, bg='white')
+        if index is not None and 0 <= index < self.playlist_box.size():
+            self.playlist_box.itemconfig(index, bg='yellow')
 
     def on_playlist_double(self, event):
         sel = self.playlist_box.curselection()
