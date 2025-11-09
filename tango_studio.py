@@ -78,6 +78,12 @@ class AudioPlayerApp(tk.Tk):
         self.title("Tango Studio")
         self.geometry("1000x500")
 
+        # Tooltip state
+        self.tooltip = None
+        self.tooltip_visible = False
+        self.current_tooltip_item = None
+        self.tooltip_after_id = None
+        
         self.configure(bg="#d9d9d9")
 
         # tool look and feel
@@ -99,6 +105,7 @@ class AudioPlayerApp(tk.Tk):
         self.browser_files = []
         self.current_index = None
         self.current_playlist_path = None
+        self.dragged_index = None
 
         self.volume_var = tk.IntVar(value=80)
         self.status = tk.StringVar(value='Ready')
@@ -135,15 +142,31 @@ class AudioPlayerApp(tk.Tk):
         # --- Left: Playlist ---
         left_frame = ttk.Frame(main, padding=(5,5))
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.playlist_tree = ttk.Treeview(left_frame, columns=('Playlist',), show='headings', selectmode='browse')
-        self.playlist_tree.tag_configure('current', background='#FFF59D')  # Soft yellow
+
+        tree_container = ttk.Frame(left_frame)
+        tree_container.pack(fill=tk.BOTH, expand=True)
+
+        self.playlist_tree = ttk.Treeview(tree_container, columns=('Playlist',), show='headings', selectmode='browse')        
         self.playlist_tree.heading('Playlist', text='Playlist')
-        self.playlist_tree.pack(fill=tk.BOTH, expand=True)
+        self.playlist_tree.column('Playlist', width=200, minwidth=100, stretch=True)
+        self.playlist_tree.tag_configure('current', background='#FFF59D')  # Soft yellow        
+        self.playlist_tree.grid(row=0, column=0, sticky='nsew')
+
         self.playlist_tree.bind('<Double-1>', self.on_playlist_double)
         self.playlist_tree.bind('<Delete>', self.remove_selected_from_playlist)
         self.playlist_tree.bind('<ButtonPress-1>', self._on_drag_start)
         self.playlist_tree.bind('<B1-Motion>', self._on_drag_motion)
-        self.dragged_item = None        
+        self.playlist_tree.bind('<Enter>', lambda e: self._on_tree_enter(e, self.playlist_tree))
+        self.playlist_tree.bind('<Leave>', self._on_tree_leave)
+        self.playlist_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.playlist_tree))
+        self.dragged_item = None
+
+        vsb = ttk.Scrollbar(tree_container, orient="vertical", command=self.playlist_tree.yview)
+        vsb.grid(row=0, column=1, sticky='ns')
+        self.playlist_tree.configure(yscrollcommand=vsb.set)
+
+        tree_container.grid_rowconfigure(0, weight=1)
+        tree_container.grid_columnconfigure(0, weight=1)  
 
         # --- Right: Browser ---
         right_frame = ttk.Frame(main, padding=(5,5))
@@ -152,6 +175,9 @@ class AudioPlayerApp(tk.Tk):
         self.browser_tree.heading('Song', text='Songs')
         self.browser_tree.pack(fill=tk.BOTH, expand=True)
         self.browser_tree.bind('<Delete>', self.remove_selected_from_browser)
+        self.browser_tree.bind('<Enter>', lambda e: self._on_tree_enter(e, self.browser_tree))
+        self.browser_tree.bind('<Leave>', self._on_tree_leave)
+        self.browser_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.browser_tree))
 
         # --- Middle: Buttons ---
         mid_frame = ttk.Frame(main)
@@ -161,28 +187,26 @@ class AudioPlayerApp(tk.Tk):
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
 
         # --- Bottom controls ---
-        controls = ttk.Frame(self)
-        controls.pack(fill=tk.X, padx=8, pady=6)
+        bottom_frame = ttk.Frame(self, padding=(5,5))
+        bottom_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-        ttk.Button(controls, text='Play', command=self.play_selected).pack(side=tk.LEFT, padx=4)
-        ttk.Button(controls, text='Pause/Resume', command=self.pause_resume).pack(side=tk.LEFT, padx=4)
-        ttk.Button(controls, text='Stop', command=self.stop).pack(side=tk.LEFT, padx=4)
-        ttk.Button(controls, text='Previous', command=self.previous_track).pack(side=tk.LEFT, padx=4)
-        ttk.Button(controls, text='Next', command=self.next_track).pack(side=tk.LEFT, padx=4)
+        button_frame = ttk.Frame(bottom_frame)
+        button_frame.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Label(controls, text='Volume').pack(side=tk.LEFT, padx=(20, 4))
-        ttk.Scale(controls, from_=0, to=100, variable=self.volume_var, command=self.on_volume).pack(side=tk.LEFT)
+        for text, cmd in [('Play', self.play_selected), ('Pause', self.pause_resume), ('Stop', self.stop), ('Previous', self.previous_track), ('Next', self.next_track)]:
+            ttk.Button(button_frame, text=text, command=cmd).pack(side=tk.LEFT, padx=5, pady=10)
 
-        ttk.Label(controls, textvariable=self.time_var).pack(side=tk.LEFT, padx=(10, 0))
+        ttk.Label(button_frame, textvariable=self.time_var).pack(side=tk.LEFT, padx=10)
+        ttk.Label(button_frame, text="Volume:").pack(side=tk.LEFT)
+        ttk.Scale(button_frame, from_=0, to=100, orient=tk.HORIZONTAL, variable=self.volume_var, command=self.set_volume).pack(side=tk.LEFT)
 
-        ttk.Label(self, textvariable=self.status).pack(side=tk.BOTTOM, anchor=tk.W, padx=8)
+        ttk.Label(bottom_frame, textvariable=self.status, foreground='blue', font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=5)
 
     # -------- File Menu Actions --------
     def open_file(self):
         path = filedialog.askopenfilename(filetypes=[('Audio files', '*.mp3 *.wav *.flac *.ogg *.m4a'), ('All files', '*.*')])
         if path:
             self.playlist = [path]
-            self.current_index = 0
             self.current_playlist_path = None
             self.update_playlist_tree()
             self.play_current()
@@ -196,7 +220,6 @@ class AudioPlayerApp(tk.Tk):
                     messagebox.showinfo('Playlist', 'No entries found in playlist')
                     return
                 self.playlist = items
-                self.current_index = 0
                 self.current_playlist_path = path
                 self.update_playlist_tree()
                 self.play_current()
@@ -209,13 +232,14 @@ class AudioPlayerApp(tk.Tk):
             for item in self.playlist_tree.get_children():
                 self.playlist_tree.delete(item)
             self.playlist.clear()
-            for f in os.listdir(folder):
-                if f.lower().endswith(SUPPORTED_EXTS):
-                    full_path = os.path.join(folder, f)
-                    self.playlist.append(full_path)
-                    self.playlist_tree.insert('', tk.END, values=(f,))
+            # Walk through folder and subfolders recursively
+            for root, dirs, files in os.walk(folder):
+                for f in files:
+                    if f.lower().endswith(SUPPORTED_EXTS):
+                        full_path = os.path.join(root, f)
+                        self.playlist.append(full_path)
+                        self.playlist_tree.insert('', tk.END, values=(f,))
             self.status.set(f'Loaded {len(self.playlist)} files into playlist')
-            self.current_index = 0
 
     def open_folder_browse(self):
         folder = filedialog.askdirectory()
@@ -223,12 +247,14 @@ class AudioPlayerApp(tk.Tk):
             for item in self.browser_tree.get_children():
                 self.browser_tree.delete(item)
             self.browser_files.clear()
-            for f in os.listdir(folder):
-                if f.lower().endswith(SUPPORTED_EXTS):
-                    full_path = os.path.join(folder, f)
-                    self.browser_files.append(full_path)
-                    self.browser_tree.insert('', tk.END, values=(f,))
-            self.status.set(f'Loaded {len(self.browser_files)} files from folder')
+            # Walk through folder and subfolders recursively
+            for root, dirs, files in os.walk(folder):
+                for f in files:
+                    if f.lower().endswith(SUPPORTED_EXTS):
+                        full_path = os.path.join(root, f)
+                        self.browser_files.append(full_path)
+                        self.browser_tree.insert('', tk.END, values=(f,))                                    
+            self.status.set(f'Loaded {len(self.playlist)} files into playlist')
 
     def add_selected_to_playlist(self):
         selections = self.browser_tree.selection()
@@ -303,13 +329,23 @@ class AudioPlayerApp(tk.Tk):
         elif to_idx <= self.current_index < from_idx:
             self.current_index += 1
 
-    def update_playlist_tree(self, highlight_current=True):
-        for item in self.playlist_tree.get_children():
-            self.playlist_tree.delete(item)
+    def update_playlist_tree(self, highlight_current=True, preserve_selection=False):
+        # Optionally store current selection
+        selected_indices = []
+        if preserve_selection:
+            selected_items = self.playlist_tree.selection()
+            selected_indices = [self.playlist_tree.index(i) for i in selected_items]
+
+        self.playlist_tree.delete(*self.playlist_tree.get_children())
         for f in self.playlist:
-            self.playlist_tree.insert('', tk.END, values=(os.path.basename(f),))
-        if highlight_current:
-            self.highlight_current_song(self.current_index)
+            self.playlist_tree.insert('', tk.END, values=(os.path.basename(f), f))
+
+        # Restore selection
+        if preserve_selection:
+            children = self.playlist_tree.get_children()
+            for i in selected_indices:
+                if i < len(children):
+                    self.playlist_tree.selection_add(children[i])
 
     def update_browser_tree(self):
         for item in self.browser_tree.get_children():
@@ -319,21 +355,48 @@ class AudioPlayerApp(tk.Tk):
 
     # ----------------- Drag & Drop -----------------
     def _on_drag_start(self, event):
-        item = self.playlist_tree.identify_row(event.y)
-        if item:
-            self.dragged_item = self.playlist_tree.index(item)
+        row_id = self.playlist_tree.identify_row(event.y)
+        if row_id:
+            self.dragged_index = self.playlist_tree.index(row_id)
 
     def _on_drag_motion(self, event):
-        if self.dragged_item is None:
+        if self.dragged_index is None:
             return
-        item = self.playlist_tree.identify_row(event.y)
-        if not item:
+
+        target_row = self.playlist_tree.identify_row(event.y)
+        if not target_row:
             return
-        index = self.playlist_tree.index(item)
-        if index != self.dragged_item:
-            self.playlist[self.dragged_item], self.playlist[index] = self.playlist[index], self.playlist[self.dragged_item]
-            self.update_playlist_tree()
-            self.dragged_item = index
+
+        target_index = self.playlist_tree.index(target_row)
+        if target_index == self.dragged_index:
+            return
+
+        # Swap playlist entries
+        self.playlist.insert(target_index, self.playlist.pop(self.dragged_index))
+
+        # Adjust current index if a song is playing and dragged song is current
+        if self.current_index is not None:
+            if self.dragged_index == self.current_index:
+                self.current_index = target_index
+            elif self.dragged_index < self.current_index <= target_index:
+                self.current_index -= 1
+            elif target_index <= self.current_index < self.dragged_index:
+                self.current_index += 1
+
+        # Update tree and preserve selection
+        self.update_playlist_tree(preserve_selection=True)
+
+        # Move selection highlight to follow dragged item
+        children = self.playlist_tree.get_children()
+        if target_index < len(children):
+            self.playlist_tree.selection_set(children[target_index])
+            self.playlist_tree.see(children[target_index])
+
+        # Highlight current song if there is one playing
+        if self.current_index is not None:
+            self.highlight_current_song(self.current_index)
+
+        self.dragged_index = target_index
 
     # -------- Playback --------
     def fade_out_and_play(self, index):
@@ -436,6 +499,10 @@ class AudioPlayerApp(tk.Tk):
             except Exception:
                 pass
 
+    def set_volume(self, _=None):
+        if self.player is not None:
+            self.player.audio_set_volume(self.volume_var.get())
+
     def update_time(self):
         if self.player and self.media:
             length = self.player.get_length() // 1000  # ms to sec
@@ -496,6 +563,94 @@ class AudioPlayerApp(tk.Tk):
         self.playlist.clear()
         self.update_playlist_tree()
         self.current_index = None
+
+    # -------- Tooltip handling --------
+    def _create_tooltip(self):
+        if self.tooltip:
+            return
+        self.tooltip = tk.Toplevel(self)
+        self.tooltip.wm_overrideredirect(True)
+        self.tooltip.wm_geometry("+0+0")
+        self.tooltip.configure(bg='lightyellow')
+        self.tooltip_label = tk.Label(self.tooltip, justify=tk.LEFT,
+                                    relief=tk.SOLID, borderwidth=1,
+                                    font=("Segoe UI", 9), bg='lightyellow')
+        self.tooltip_label.pack()
+        self.tooltip.withdraw()
+
+    def _on_tree_enter(self, event, tree):
+        self._create_tooltip()
+        
+    def _on_tree_leave(self, event):
+        # Cancel any pending show operations
+        if self.tooltip_after_id:
+            self.after_cancel(self.tooltip_after_id)
+            self.tooltip_after_id = None
+        
+        # Schedule tooltip hide with a small delay
+        if self.tooltip and self.tooltip_visible:
+            self.tooltip.withdraw()
+            self.tooltip_visible = False
+            self.current_tooltip_item = None
+
+    def _schedule_tooltip_show(self, tree, item, filepath):
+        # Cancel any existing scheduled show/hide
+        if self.tooltip_after_id:
+            self.after_cancel(self.tooltip_after_id)
+        
+        # If we're already showing this item, don't restart the timer
+        if self.current_tooltip_item == item and self.tooltip_visible:
+            return
+            
+        self.tooltip_after_id = self.after(400, lambda: self._show_tooltip(tree, item, filepath))
+        
+    def _show_tooltip(self, tree, item, filepath):
+        self.tooltip_after_id = None
+        self.current_tooltip_item = item
+        
+        # Update tooltip text and position
+        self.tooltip_label.config(text=filepath)
+        
+        # Position tooltip near the item but not directly under mouse
+        x, y, _, h = tree.bbox(item)
+        x += tree.winfo_rootx() + 25
+        y += tree.winfo_rooty() + h  # Position below the item
+        
+        # Ensure tooltip is fully visible
+        screen_width = self.winfo_screenwidth()
+        tooltip_width = self.tooltip_label.winfo_reqwidth()
+        if x + tooltip_width > screen_width:
+            x = screen_width - tooltip_width - 10
+            
+        self.tooltip.wm_geometry(f"+{x}+{y}")
+        self.tooltip.deiconify()
+        self.tooltip_visible = True
+
+    def _on_tree_motion(self, event, tree):
+        if not self.tooltip:
+            return
+            
+        # Get the item under cursor
+        item = tree.identify_row(event.y)
+        if not item:
+            # If mouse is not over an item, schedule hide
+            if self.tooltip_visible:
+                self.tooltip.withdraw()
+                self.tooltip_visible = False
+                self.current_tooltip_item = None
+            return
+            
+        # Get the full path for the item
+        idx = tree.index(item)
+        if tree == self.playlist_tree and idx < len(self.playlist):
+            filepath = self.playlist[idx]
+        elif tree == self.browser_tree and idx < len(self.browser_files):
+            filepath = self.browser_files[idx]
+        else:
+            return
+            
+        # Schedule showing the tooltip
+        self._schedule_tooltip_show(tree, item, filepath)
 
 
 if __name__ == '__main__':
