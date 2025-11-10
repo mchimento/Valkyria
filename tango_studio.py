@@ -83,6 +83,8 @@ class AudioPlayerApp(tk.Tk):
         self.tooltip_visible = False
         self.current_tooltip_item = None
         self.tooltip_after_id = None
+        # Status restore timer id (used to restore status after temporary messages)
+        self._status_restore_after_id = None
         
         self.configure(bg="#d9d9d9")
 
@@ -156,6 +158,7 @@ class AudioPlayerApp(tk.Tk):
         self.playlist_tree.bind('<Delete>', self.remove_selected_from_playlist)
         self.playlist_tree.bind('<ButtonPress-1>', self._on_drag_start)
         self.playlist_tree.bind('<B1-Motion>', self._on_drag_motion)
+        self.playlist_tree.bind('<ButtonRelease-1>', self._on_drag_end)
         self.playlist_tree.bind('<Enter>', lambda e: self._on_tree_enter(e, self.playlist_tree))
         self.playlist_tree.bind('<Leave>', self._on_tree_leave)
         self.playlist_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.playlist_tree))
@@ -185,6 +188,7 @@ class AudioPlayerApp(tk.Tk):
 
         ttk.Button(mid_frame, text="Browse Songs", command=self.open_folder_browse).pack(pady=2)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
+        ttk.Button(mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=5)
 
         # --- Bottom controls ---
         bottom_frame = ttk.Frame(self, padding=(5,5))
@@ -239,7 +243,8 @@ class AudioPlayerApp(tk.Tk):
                         full_path = os.path.join(root, f)
                         self.playlist.append(full_path)
                         self.playlist_tree.insert('', tk.END, values=(f,))
-            self.status.set(f'Loaded {len(self.playlist)} files into playlist')
+            # Show a temporary status message and restore previous status after 3s
+            self._set_temporary_status(f'Loaded {len(self.playlist)} files into playlist', 3000)
 
     def open_folder_browse(self):
         folder = filedialog.askdirectory()
@@ -253,17 +258,55 @@ class AudioPlayerApp(tk.Tk):
                     if f.lower().endswith(SUPPORTED_EXTS):
                         full_path = os.path.join(root, f)
                         self.browser_files.append(full_path)
-                        self.browser_tree.insert('', tk.END, values=(f,))                                    
-            self.status.set(f'Loaded {len(self.playlist)} files into playlist')
+                        self.browser_tree.insert('', tk.END, values=(f,))                                                
+            # Use centralized temporary-status helper
+            self._set_temporary_status(f'Loaded {len(self.browser_files)} files into browser', 3000)
 
     def add_selected_to_playlist(self):
         selections = self.browser_tree.selection()
+        added = 0
         for sel in selections:
             idx = self.browser_tree.index(sel)
             fpath = self.browser_files[idx]
             if fpath not in self.playlist:
-                self.playlist.append(fpath)        
+                self.playlist.append(fpath)
+                added += 1
+        self._set_temporary_status(f'Added {added} file(s) to the bottom of the playlist', 3000)
+                
         self.update_playlist_tree()        
+
+    def add_selected_below_playlist(self):
+        """
+        Insert selected browser files into the playlist immediately below the currently playing track.
+        If no track is currently playing, append to the end of the playlist.
+        Duplicate entries are skipped to match existing add behavior.
+        """
+        selections = self.browser_tree.selection()
+        if not selections:
+            return
+
+        # Determine selected files in browser order
+        sel_indices = sorted([self.browser_tree.index(s) for s in selections])
+        files_to_add = [self.browser_files[i] for i in sel_indices]
+
+        # Insert position: after current_index if present, otherwise at end
+        if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
+            insert_pos = self.current_index + 1
+        else:
+            insert_pos = len(self.playlist)
+
+        added = 0
+        for fpath in files_to_add:
+            if fpath in self.playlist:
+                continue
+            self.playlist.insert(insert_pos + added, fpath)
+            added += 1
+
+        if added:
+            self.update_playlist_tree()
+            self._set_temporary_status(f'Added {added} file(s) below current track', 3000)
+        else:
+            self._set_temporary_status('No new files added (duplicates skipped)', 3000)
 
     def remove_selected_from_playlist(self, event=None):
         selections = self.playlist_tree.selection()
@@ -298,7 +341,8 @@ class AudioPlayerApp(tk.Tk):
             return self.save_playlist_as()
         try:
             write_m3u(self.current_playlist_path, self.playlist)
-            self.status.set(f'Saved playlist: {self.current_playlist_path}')
+            # Show temporary saved message
+            self._set_temporary_status(f'Saved playlist: {self.current_playlist_path}', 3000)
         except Exception as e:
             messagebox.showerror('Error', f'Failed to save playlist: {e}')
 
@@ -308,7 +352,8 @@ class AudioPlayerApp(tk.Tk):
             try:
                 write_m3u(path, self.playlist)
                 self.current_playlist_path = path
-                self.status.set(f'Saved playlist: {path}')
+                # Show temporary saved message
+                self._set_temporary_status(f'Saved playlist: {path}', 3000)
             except Exception as e:
                 messagebox.showerror('Error', f'Failed to save playlist: {e}')
 
@@ -357,6 +402,22 @@ class AudioPlayerApp(tk.Tk):
     def _on_drag_start(self, event):
         row_id = self.playlist_tree.identify_row(event.y)
         if row_id:
+            # Cancel any pending tooltip and hide it while dragging to avoid
+            # scheduled tooltip callbacks referencing now-missing items.
+            if self.tooltip_after_id:
+                try:
+                    self.after_cancel(self.tooltip_after_id)
+                except Exception:
+                    pass
+                self.tooltip_after_id = None
+            if self.tooltip:
+                try:
+                    self.tooltip.withdraw()
+                except Exception:
+                    pass
+                self.tooltip_visible = False
+                self.current_tooltip_item = None
+
             self.dragged_index = self.playlist_tree.index(row_id)
 
     def _on_drag_motion(self, event):
@@ -398,6 +459,34 @@ class AudioPlayerApp(tk.Tk):
 
         self.dragged_index = target_index
 
+    def _on_drag_end(self, event):
+        """
+        Called when mouse button is released after a drag.
+        """
+        # Clear dragging flag
+        self.dragged_index = None
+
+        # Cancel any leftover scheduled tooltip (we will re-evaluate immediately)
+        if self.tooltip_after_id:
+            try:
+                self.after_cancel(self.tooltip_after_id)
+            except Exception:
+                pass
+            self.tooltip_after_id = None
+
+        # If the pointer is over the playlist_tree, synthesize a Motion
+        # event so hover logic runs and may schedule/show a tooltip.
+        try:
+            tree = self.playlist_tree
+            px = tree.winfo_pointerx()
+            py = tree.winfo_pointery()
+            rel_x = px - tree.winfo_rootx()
+            rel_y = py - tree.winfo_rooty()
+            if 0 <= rel_x <= tree.winfo_width() and 0 <= rel_y <= tree.winfo_height():
+                tree.event_generate('<Motion>', x=rel_x, y=rel_y)
+        except Exception:
+            pass
+
     # -------- Playback --------
     def fade_out_and_play(self, index):
         if self.player is not None and self.player.is_playing():
@@ -433,7 +522,7 @@ class AudioPlayerApp(tk.Tk):
 
     def play_current(self):
         if self.current_index is None or not self.playlist:
-            self.status.set('No track to play')
+            self.status.set('Ready')
             return
         path = self.playlist[self.current_index]
         if not os.path.exists(path):
@@ -607,12 +696,32 @@ class AudioPlayerApp(tk.Tk):
     def _show_tooltip(self, tree, item, filepath):
         self.tooltip_after_id = None
         self.current_tooltip_item = item
-        
-        # Update tooltip text and position
+
+        # If a drag operation is in progress, don't show tooltips
+        if getattr(self, 'dragged_index', None) is not None:
+            return
+
+        # Ensure the item still exists in the tree (it may have been
+        # removed or the tree reordered while the tooltip was scheduled).
+        try:
+            if not tree.exists(item):
+                return
+        except Exception:
+            # Tree may have been destroyed or unsupported widget; bail out
+            return
+
+        # Update tooltip text
         self.tooltip_label.config(text=filepath)
-        
+
         # Position tooltip near the item but not directly under mouse
-        x, y, _, h = tree.bbox(item)
+        try:
+            bbox = tree.bbox(item)
+            if not bbox:
+                return
+            x, y, _, h = bbox
+        except tk.TclError:
+            # Item may no longer be present; nothing to show
+            return
         x += tree.winfo_rootx() + 25
         y += tree.winfo_rooty() + h  # Position below the item
         
@@ -649,8 +758,33 @@ class AudioPlayerApp(tk.Tk):
         else:
             return
             
-        # Schedule showing the tooltip
         self._schedule_tooltip_show(tree, item, filepath)
+
+    # -------- Status helpers --------
+    def _restore_status(self, prev_status):
+        """Restore the previous status string and clear the scheduled id."""
+        try:
+            self.status.set(prev_status)
+        finally:
+            self._status_restore_after_id = None
+
+    def _set_temporary_status(self, msg, duration=3000):
+        """
+        Set a temporary status message for `duration` milliseconds, then restore the previous value.
+        Cancels any previously scheduled restore so repeated calls behave sensibly.
+        """
+        prev = self.status.get()
+        # Cancel existing restore if any
+        if getattr(self, '_status_restore_after_id', None):
+            try:
+                self.after_cancel(self._status_restore_after_id)
+            except Exception:
+                pass
+            self._status_restore_after_id = None
+
+        self.status.set(msg)
+        # Schedule restore
+        self._status_restore_after_id = self.after(duration, lambda: self._restore_status(prev))
 
 
 if __name__ == '__main__':
