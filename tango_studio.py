@@ -14,6 +14,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import random
 import time
+import json
 
 SUPPORTED_EXTS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a')
 
@@ -72,6 +73,160 @@ class DraggableListbox(tk.Listbox):
         if self.on_reorder:
             self.on_reorder(from_idx, to_idx)
 
+class PreferencesWindow(tk.Toplevel):
+    """Preferences window for theme selection."""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.title("Preferences")
+        self.geometry("300x150")
+        self.resizable(False, False)
+
+        self.configure(bg=parent.BG_COLOR)
+        self.theme_frame = ttk.Frame(self)
+        # Do not expand the theme frame so the button row remains visible
+        self.theme_frame.pack(pady=12, padx=20, fill=tk.BOTH, expand=False)
+
+        self.theme_label = ttk.Label(self.theme_frame, text="Theme:")
+        self.theme_label.pack(anchor=tk.CENTER, pady=5)
+
+        # Remember the original theme so we can revert on Cancel
+        self.original_theme = getattr(parent, '_current_theme', 'light')
+        self.theme_var = tk.StringVar(value=self.original_theme)
+
+        style = ttk.Style(self)
+        style.configure('Prefs.TRadiobutton', background=parent.BG_COLOR, foreground=parent.FG_COLOR)
+        # Prevent the radiobutton background from visibly changing on hover/selection
+        # by mapping the active/selected states to the same background color.
+        try:
+            style.map('Prefs.TRadiobutton', background=[('active', parent.BG_COLOR), ('selected', parent.BG_COLOR)],
+                      foreground=[('!disabled', parent.FG_COLOR)])
+        except Exception:
+            # Some ttk themes may not accept map changes; ignore failures.
+            pass
+
+        self.dark_radio = ttk.Radiobutton(self.theme_frame, text="Dark Mode", variable=self.theme_var, value='dark', command=self.apply_theme, style='Prefs.TRadiobutton')
+        self.dark_radio.pack(anchor=tk.CENTER, pady=5)
+
+        self.light_radio = ttk.Radiobutton(self.theme_frame, text="Light Mode", variable=self.theme_var, value='light', command=self.apply_theme, style='Prefs.TRadiobutton')
+        self.light_radio.pack(anchor=tk.CENTER, pady=5)
+
+        # Buttons: Save (persist) and Cancel (revert)
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=8, fill=tk.X)
+
+        # Ensure buttons are readable in dark/light themes by using a local style
+        fg = getattr(parent, 'FG_COLOR', '#000000')
+        bg = getattr(parent, 'BUTTON_COLOR', '#0078d4')
+
+        self.cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.on_cancel,
+                                    font=('Segoe UI', 10), fg=fg,
+                                    bg=bg,
+                                    activebackground=getattr(parent, 'BUTTON_HOVER', '#106ebe'),
+                                    activeforeground=fg,
+                                    relief=tk.RAISED, bd=1)
+        self.cancel_btn.pack(side=tk.RIGHT, padx=5)
+
+        self.save_btn = tk.Button(btn_frame, text="Save", command=self.on_save,
+                                  font=('Segoe UI', 10), fg=fg,
+                                  bg=bg,
+                                  activebackground=getattr(parent, 'BUTTON_HOVER', '#106ebe'),
+                                  activeforeground=fg,
+                                  relief=tk.RAISED, bd=1)
+        self.save_btn.pack(side=tk.RIGHT, padx=5)
+    
+    def apply_theme(self):
+        """Apply selected theme to the parent app."""
+        theme = self.theme_var.get()
+        # First apply theme to the main app (updates global ttk styles)
+        self.parent.apply_theme(theme)
+
+        # Now update the preferences window widgets to match the new colors.
+        bg = getattr(self.parent, 'BG_COLOR', '#f0f0f0')
+        fg = getattr(self.parent, 'FG_COLOR', '#000000')
+        btn_bg = getattr(self.parent, 'BUTTON_COLOR', '#0078d4')
+        btn_hover = getattr(self.parent, 'BUTTON_HOVER', btn_bg)
+
+        try:
+            # Window background
+            self.configure(bg=bg)
+        except Exception:
+            pass
+
+        # Update the theme frame background (ttk may use style; set explicitly on children)
+        try:
+            self.theme_frame.configure(style='TFrame')
+        except Exception:
+            pass
+
+        # Update label (ttk.Label will pick up TLabel style, but ensure bg/fg if possible)
+        try:
+            self.theme_label.configure(background=bg)
+        except Exception:
+            pass
+
+        # Update radiobutton style so text color matches
+        try:
+            s = ttk.Style(self)
+            s.configure('Prefs.TRadiobutton', background=bg, foreground=fg)
+            # Also update the map so hover/selection don't alter background
+            try:
+                s.map('Prefs.TRadiobutton', background=[('active', bg), ('selected', bg)],
+                      foreground=[('!disabled', fg)])
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        # Update tk.Button colors which were created with explicit bg/fg
+        try:
+            self.save_btn.configure(bg=btn_bg, fg=fg, activebackground=btn_hover, activeforeground=fg)
+            self.cancel_btn.configure(bg=btn_bg, fg=fg, activebackground=btn_hover, activeforeground=fg)
+        except Exception:
+            pass
+
+    def on_save(self):
+        """Persist the selected theme and close the window."""
+        theme = self.theme_var.get()
+        # Update parent's current theme and apply (apply_theme no longer auto-saves)
+        self.parent._current_theme = theme
+        self.parent.apply_theme(theme)
+        try:
+            PreferencesWindow.save_preferences_for(self.parent)
+        except Exception:
+            pass
+        self.destroy()
+
+    def on_cancel(self):
+        """Revert any previewed changes and close the window without saving."""
+        # Revert to original theme
+        self.parent.apply_theme(self.original_theme)
+        self.destroy()
+
+    @staticmethod
+    def load_preferences_for(app):
+        """Load preferences for the given AudioPlayerApp instance."""
+        try:
+            if app._config_path.exists():
+                with open(app._config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                theme = data.get('theme', 'light')
+                if theme in ('dark', 'light'):
+                    app._current_theme = theme
+                    app.apply_theme(theme)
+        except Exception as e:
+            print(f'Warning: failed to load preferences: {e}')
+
+    @staticmethod
+    def save_preferences_for(app):
+        """Save preferences for the given AudioPlayerApp instance."""
+        try:
+            data = {'theme': app._current_theme}
+            with open(app._config_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+        except Exception as e:
+            print(f'Warning: failed to save preferences: {e}')
+
 class AudioPlayerApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -86,15 +241,31 @@ class AudioPlayerApp(tk.Tk):
         # Status restore timer id (used to restore status after temporary messages)
         self._status_restore_after_id = None
         
-        self.configure(bg="#d9d9d9")
+        # Colours
+        self.BG_COLOR = "#1e1e1e"        # Dark background
+        self.FG_COLOR = "#e0e0e0"        # Light foreground
+        self.ACCENT_COLOR = "#0d47a1"    # Dark blue accent
+        self.BUTTON_COLOR = "#0d47a1"    # Button color
+        self.BUTTON_HOVER = "#1565c0"    # Button hover color
+        
+        self.configure(bg=self.BG_COLOR)
 
         # tool look and feel
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure('TButton', font=('Segoe UI', 10), padding=6, background="#188BE9", foreground='white')
-        style.map('TButton', background=[('active', "#5DADE2")])
-        style.configure('Treeview', font=('Segoe UI', 10), rowheight=25)
-        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'))
+        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground='white')
+        style.map('TButton', background=[('active', self.BUTTON_HOVER)])
+        style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background='#2d2d2d', foreground=self.FG_COLOR, fieldbackground='#2d2d2d')
+        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background='#1a1a1a', foreground=self.FG_COLOR)
+        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', 'white')])
+        style.configure('TFrame', background=self.BG_COLOR)
+        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
+        style.configure('TScale', background=self.BG_COLOR)
+
+        # Track current theme
+        self._current_theme = 'light'
+        # Preferences file path
+        self._config_path = Path.home() / '.tango_studio_config.json'
 
         # VLC setup
         self.instance = vlc.Instance()
@@ -114,6 +285,7 @@ class AudioPlayerApp(tk.Tk):
         self.time_var = tk.StringVar(value='00:00 / 00:00')
 
         self._build_ui()
+        PreferencesWindow.load_preferences_for(self)
         self.after(500, self.update_time)
 
     def _build_ui(self):
@@ -125,6 +297,8 @@ class AudioPlayerApp(tk.Tk):
         filemenu.add_separator()
         filemenu.add_command(label="Save Playlist", command=self.save_playlist)
         filemenu.add_command(label="Save Playlist As...", command=self.save_playlist_as)
+        filemenu.add_separator()
+        filemenu.add_command(label="Preferences", command=self.open_preferences)
         filemenu.add_separator()
         filemenu.add_command(label="Quit", command=self.quit_app)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -204,7 +378,7 @@ class AudioPlayerApp(tk.Tk):
         ttk.Label(button_frame, text="Volume:").pack(side=tk.LEFT)
         ttk.Scale(button_frame, from_=0, to=100, orient=tk.HORIZONTAL, variable=self.volume_var, command=self.set_volume).pack(side=tk.LEFT)
 
-        ttk.Label(bottom_frame, textvariable=self.status, foreground='blue', font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=5)
+        ttk.Label(bottom_frame, textvariable=self.status, font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=5)
 
     # -------- File Menu Actions --------
     def open_file(self):
@@ -360,6 +534,57 @@ class AudioPlayerApp(tk.Tk):
     def quit_app(self):
         self.stop()
         self.destroy()
+
+    def open_preferences(self):
+        """Open the preferences window."""
+        PreferencesWindow(self)
+
+    def apply_theme(self, theme):
+        """Apply dark or light theme to the entire application."""
+        self._current_theme = theme
+        
+        if theme == 'dark':
+            # Dark mode colors
+            self.BG_COLOR = "#1e1e1e"
+            self.FG_COLOR = "#e0e0e0"
+            self.ACCENT_COLOR = "#0d47a1"
+            self.BUTTON_COLOR = "#0d47a1"
+            self.BUTTON_HOVER = "#1565c0"
+            tree_bg = "#2d2d2d"
+            heading_bg = "#1a1a1a"
+            tooltip_bg = "#333333"
+        else:
+            # Light mode colors
+            self.BG_COLOR = "#f0f0f0"
+            self.FG_COLOR = "#000000"
+            self.ACCENT_COLOR = "#0078d4"
+            self.BUTTON_COLOR = "#0078d4"
+            self.BUTTON_HOVER = "#106ebe"
+            tree_bg = "#ffffff"
+            heading_bg = "#e0e0e0"
+            tooltip_bg = "#ffffe0"
+        
+        # Update main window
+        self.configure(bg=self.BG_COLOR)
+        
+        # Update styles
+        style = ttk.Style()
+        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground='white')
+        style.map('TButton', background=[('active', self.BUTTON_HOVER)])
+        style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background=tree_bg, foreground=self.FG_COLOR, fieldbackground=tree_bg)
+        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background=heading_bg, foreground=self.FG_COLOR)
+        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', 'white')])
+        style.configure('TFrame', background=self.BG_COLOR)
+        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
+        style.configure('TScale', background=self.BG_COLOR)
+        
+        # Update tooltip colors
+        if self.tooltip:
+            try:
+                self.tooltip.configure(bg=tooltip_bg)
+                self.tooltip_label.configure(bg=tooltip_bg, fg=self.FG_COLOR)
+            except Exception:
+                pass
 
     # -------- Playlist --------
     def reorder_playlist(self, from_idx, to_idx):
@@ -660,10 +885,10 @@ class AudioPlayerApp(tk.Tk):
         self.tooltip = tk.Toplevel(self)
         self.tooltip.wm_overrideredirect(True)
         self.tooltip.wm_geometry("+0+0")
-        self.tooltip.configure(bg='lightyellow')
+        self.tooltip.configure(bg='#333333')
         self.tooltip_label = tk.Label(self.tooltip, justify=tk.LEFT,
                                     relief=tk.SOLID, borderwidth=1,
-                                    font=("Segoe UI", 9), bg='lightyellow')
+                                    font=("Segoe UI", 9), bg='#333333', fg=self.FG_COLOR)
         self.tooltip_label.pack()
         self.tooltip.withdraw()
 
