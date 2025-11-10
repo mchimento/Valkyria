@@ -258,6 +258,9 @@ class AudioPlayerApp(tk.Tk):
         style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background='#2d2d2d', foreground=self.FG_COLOR, fieldbackground='#2d2d2d')
         style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background='#1a1a1a', foreground=self.FG_COLOR)
         style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', 'white')])
+        # Prevent tree heading colors from changing on hover/active in dark mode
+        style.map('Treeview.Heading', background=[('active', '#1a1a1a'), ('pressed', '#1a1a1a')], 
+                  foreground=[('active', self.FG_COLOR), ('pressed', self.FG_COLOR)])
         style.configure('TFrame', background=self.BG_COLOR)
         style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
         style.configure('TScale', background=self.BG_COLOR)
@@ -574,6 +577,9 @@ class AudioPlayerApp(tk.Tk):
         style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background=tree_bg, foreground=self.FG_COLOR, fieldbackground=tree_bg)
         style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background=heading_bg, foreground=self.FG_COLOR)
         style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', 'white')])
+        # Prevent tree heading colors from changing on hover/active
+        style.map('Treeview.Heading', background=[('active', heading_bg), ('pressed', heading_bg)], 
+                  foreground=[('active', self.FG_COLOR), ('pressed', self.FG_COLOR)])
         style.configure('TFrame', background=self.BG_COLOR)
         style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
         style.configure('TScale', background=self.BG_COLOR)
