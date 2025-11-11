@@ -244,6 +244,7 @@ class AudioPlayerApp(tk.Tk):
         # Colours
         self.BG_COLOR = "#1e1e1e"        # Dark background
         self.FG_COLOR = "#e0e0e0"        # Light foreground
+        self.BUTTON_FG_COLOR = "#e0e0e0" # Button text color
         self.ACCENT_COLOR = "#0d47a1"    # Dark blue accent
         self.BUTTON_COLOR = "#0d47a1"    # Button color
         self.BUTTON_HOVER = "#1565c0"    # Button hover color
@@ -253,20 +254,23 @@ class AudioPlayerApp(tk.Tk):
         # tool look and feel
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground='white')
+        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground=self.BUTTON_FG_COLOR)
         style.map('TButton', background=[('active', self.BUTTON_HOVER)])
         style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background='#2d2d2d', foreground=self.FG_COLOR, fieldbackground='#2d2d2d')
         style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background='#1a1a1a', foreground=self.FG_COLOR)
-        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', 'white')])
+        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', self.FG_COLOR)])
         # Prevent tree heading colors from changing on hover/active in dark mode
         style.map('Treeview.Heading', background=[('active', '#1a1a1a'), ('pressed', '#1a1a1a')], 
                   foreground=[('active', self.FG_COLOR), ('pressed', self.FG_COLOR)])
         style.configure('TFrame', background=self.BG_COLOR)
         style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
+        style.configure('TCheckbutton', background=self.BG_COLOR, foreground=self.FG_COLOR)
+        style.map('TCheckbutton', background=[('active', self.BG_COLOR)], foreground=[('!disabled', self.FG_COLOR)])
         style.configure('TScale', background=self.BG_COLOR)
 
         # Track current theme
         self._current_theme = 'light'
+
         # Preferences file path
         self._config_path = Path.home() / '.tango_studio_config.json'
 
@@ -282,6 +286,9 @@ class AudioPlayerApp(tk.Tk):
         self.current_index = None
         self.current_playlist_path = None
         self.dragged_index = None
+
+        # Whether double-click plays a song
+        self.play_on_double_var = tk.BooleanVar(value=True)
 
         self.volume_var = tk.IntVar(value=80)
         self.status = tk.StringVar(value='Ready')
@@ -366,6 +373,7 @@ class AudioPlayerApp(tk.Tk):
         ttk.Button(mid_frame, text="Browse Songs", command=self.open_folder_browse).pack(pady=2)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
         ttk.Button(mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=5)
+        ttk.Checkbutton(mid_frame, text="Play on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)        
 
         # --- Bottom controls ---
         bottom_frame = ttk.Frame(self, padding=(5,5))
@@ -518,7 +526,6 @@ class AudioPlayerApp(tk.Tk):
             return self.save_playlist_as()
         try:
             write_m3u(self.current_playlist_path, self.playlist)
-            # Show temporary saved message
             self._set_temporary_status(f'Saved playlist: {self.current_playlist_path}', 3000)
         except Exception as e:
             messagebox.showerror('Error', f'Failed to save playlist: {e}')
@@ -529,7 +536,6 @@ class AudioPlayerApp(tk.Tk):
             try:
                 write_m3u(path, self.playlist)
                 self.current_playlist_path = path
-                # Show temporary saved message
                 self._set_temporary_status(f'Saved playlist: {path}', 3000)
             except Exception as e:
                 messagebox.showerror('Error', f'Failed to save playlist: {e}')
@@ -550,6 +556,7 @@ class AudioPlayerApp(tk.Tk):
             # Dark mode colors
             self.BG_COLOR = "#1e1e1e"
             self.FG_COLOR = "#e0e0e0"
+            self.BUTTON_FG_COLOR = "#e0e0e0"
             self.ACCENT_COLOR = "#0d47a1"
             self.BUTTON_COLOR = "#0d47a1"
             self.BUTTON_HOVER = "#1565c0"
@@ -560,6 +567,7 @@ class AudioPlayerApp(tk.Tk):
             # Light mode colors
             self.BG_COLOR = "#f0f0f0"
             self.FG_COLOR = "#000000"
+            self.BUTTON_FG_COLOR = "#ffffff"
             self.ACCENT_COLOR = "#0078d4"
             self.BUTTON_COLOR = "#0078d4"
             self.BUTTON_HOVER = "#106ebe"
@@ -572,19 +580,21 @@ class AudioPlayerApp(tk.Tk):
         
         # Update styles
         style = ttk.Style()
-        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground='white')
+        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground=self.BUTTON_FG_COLOR)
         style.map('TButton', background=[('active', self.BUTTON_HOVER)])
         style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background=tree_bg, foreground=self.FG_COLOR, fieldbackground=tree_bg)
         style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background=heading_bg, foreground=self.FG_COLOR)
-        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', 'white')])
-        # Prevent tree heading colors from changing on hover/active
+        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', self.FG_COLOR)])
         style.map('Treeview.Heading', background=[('active', heading_bg), ('pressed', heading_bg)], 
                   foreground=[('active', self.FG_COLOR), ('pressed', self.FG_COLOR)])
         style.configure('TFrame', background=self.BG_COLOR)
-        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
+        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)        
+
+        style.configure('TCheckbutton', background=self.BG_COLOR, foreground=self.FG_COLOR)
+        style.map('TCheckbutton', background=[('active', self.BG_COLOR)], foreground=[('!disabled', self.FG_COLOR)])
         style.configure('TScale', background=self.BG_COLOR)
         
-        # Update tooltip colors
+        # Update tooltip colors if it has been created
         if self.tooltip:
             try:
                 self.tooltip.configure(bg=tooltip_bg)
@@ -843,6 +853,10 @@ class AudioPlayerApp(tk.Tk):
             self.playlist_tree.item(item, tags=('current',))            
 
     def on_playlist_double(self, event):
+        # If double-click-to-play is disabled, do nothing.
+        if getattr(self, 'play_on_double_var', None) is not None and not self.play_on_double_var.get():
+            return
+
         sel = self.playlist_tree.selection()
         if sel:
             self.current_index = self.playlist_tree.index(sel[0])
