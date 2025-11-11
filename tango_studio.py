@@ -18,6 +18,41 @@ import json
 
 SUPPORTED_EXTS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a')
 
+# UI Configuration Constants
+UI_FONT = ('Segoe UI', 10)
+UI_FONT_BOLD = ('Segoe UI', 10, 'bold')
+TOOLTIP_DELAY_MS = 600  # Milliseconds before tooltip appears
+TOOLTIP_OFFSET_X = 25  # Pixel offset for tooltip position
+TIME_UPDATE_INTERVAL_MS = 500  # Milliseconds between time updates
+TRACK_CHANGE_THROTTLE_MS = 500  # Minimum milliseconds between rapid track changes
+HIGHLIGHT_COLOR = "#FFF59D"  # Yellow highlight for current song
+
+# Theme color palettes
+THEMES = {
+    'dark': {
+        'BG_COLOR': "#1e1e1e",
+        'FG_COLOR': "#e0e0e0",
+        'BUTTON_FG_COLOR': "#e0e0e0",
+        'ACCENT_COLOR': "#0d47a1",
+        'BUTTON_COLOR': "#0d47a1",
+        'BUTTON_HOVER': "#1565c0",
+        'TREE_BG': "#2d2d2d",
+        'HEADING_BG': "#1a1a1a",
+        'TOOLTIP_BG': "#333333",
+    },
+    'light': {
+        'BG_COLOR': "#f0f0f0",
+        'FG_COLOR': "#000000",
+        'BUTTON_FG_COLOR': "#ffffff",
+        'ACCENT_COLOR': "#0078d4",
+        'BUTTON_COLOR': "#0078d4",
+        'BUTTON_HOVER': "#106ebe",
+        'TREE_BG': "#ffffff",
+        'HEADING_BG': "#e0e0e0",
+        'TOOLTIP_BG': "#ffffe0",
+    }
+}
+
 def parse_m3u(path):
     items = []
     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -115,73 +150,52 @@ class PreferencesWindow(tk.Toplevel):
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=8, fill=tk.X)
 
-        # Ensure buttons are readable in dark/light themes by using a local style
-        fg = getattr(parent, 'FG_COLOR', '#000000')
-        bg = getattr(parent, 'BUTTON_COLOR', '#0078d4')
-
+        # Use parent's color attributes (now guaranteed to be set by apply_theme)
         self.cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.on_cancel,
-                                    font=('Segoe UI', 10), fg=fg,
-                                    bg=bg,
-                                    activebackground=getattr(parent, 'BUTTON_HOVER', '#106ebe'),
-                                    activeforeground=fg,
+                                    font=UI_FONT, fg=parent.BUTTON_FG_COLOR,
+                                    bg=parent.BUTTON_COLOR,
+                                    activebackground=parent.BUTTON_HOVER,
+                                    activeforeground=parent.BUTTON_FG_COLOR,
                                     relief=tk.RAISED, bd=1)
         self.cancel_btn.pack(side=tk.RIGHT, padx=5)
 
         self.save_btn = tk.Button(btn_frame, text="Save", command=self.on_save,
-                                  font=('Segoe UI', 10), fg=fg,
-                                  bg=bg,
-                                  activebackground=getattr(parent, 'BUTTON_HOVER', '#106ebe'),
-                                  activeforeground=fg,
+                                  font=UI_FONT, fg=parent.BUTTON_FG_COLOR,
+                                  bg=parent.BUTTON_COLOR,
+                                  activebackground=parent.BUTTON_HOVER,
+                                  activeforeground=parent.BUTTON_FG_COLOR,
                                   relief=tk.RAISED, bd=1)
         self.save_btn.pack(side=tk.RIGHT, padx=5)
     
     def apply_theme(self):
         """Apply selected theme to the parent app."""
         theme = self.theme_var.get()
-        # First apply theme to the main app (updates global ttk styles)
+        # Apply theme to the main app (updates colors and global ttk styles)
         self.parent.apply_theme(theme)
 
-        # Now update the preferences window widgets to match the new colors.
-        bg = getattr(self.parent, 'BG_COLOR', '#f0f0f0')
-        fg = getattr(self.parent, 'FG_COLOR', '#000000')
-        btn_bg = getattr(self.parent, 'BUTTON_COLOR', '#0078d4')
-        btn_hover = getattr(self.parent, 'BUTTON_HOVER', btn_bg)
+        # Update the preferences window to match new colors
+        bg = self.parent.BG_COLOR
+        fg = self.parent.FG_COLOR
+        btn_bg = self.parent.BUTTON_COLOR
+        btn_hover = self.parent.BUTTON_HOVER
+        btn_fg = self.parent.BUTTON_FG_COLOR
 
         try:
-            # Window background
             self.configure(bg=bg)
         except Exception:
             pass
 
-        # Update the theme frame background (ttk may use style; set explicitly on children)
-        try:
-            self.theme_frame.configure(style='TFrame')
-        except Exception:
-            pass
-
-        # Update label (ttk.Label will pick up TLabel style, but ensure bg/fg if possible)
-        try:
-            self.theme_label.configure(background=bg)
-        except Exception:
-            pass
-
-        # Update radiobutton style so text color matches
         try:
             s = ttk.Style(self)
             s.configure('Prefs.TRadiobutton', background=bg, foreground=fg)
-            # Also update the map so hover/selection don't alter background
-            try:
-                s.map('Prefs.TRadiobutton', background=[('active', bg), ('selected', bg)],
-                      foreground=[('!disabled', fg)])
-            except Exception:
-                pass
+            s.map('Prefs.TRadiobutton', background=[('active', bg), ('selected', bg)],
+                  foreground=[('!disabled', fg)])
         except Exception:
             pass
 
-        # Update tk.Button colors which were created with explicit bg/fg
         try:
-            self.save_btn.configure(bg=btn_bg, fg=fg, activebackground=btn_hover, activeforeground=fg)
-            self.cancel_btn.configure(bg=btn_bg, fg=fg, activebackground=btn_hover, activeforeground=fg)
+            self.save_btn.configure(bg=btn_bg, fg=btn_fg, activebackground=btn_hover, activeforeground=btn_fg)
+            self.cancel_btn.configure(bg=btn_bg, fg=btn_fg, activebackground=btn_hover, activeforeground=btn_fg)
         except Exception:
             pass
 
@@ -241,38 +255,19 @@ class AudioPlayerApp(tk.Tk):
         # Status restore timer id (used to restore status after temporary messages)
         self._status_restore_after_id = None
         
-        # Colours
-        self.BG_COLOR = "#1e1e1e"        # Dark background
-        self.FG_COLOR = "#e0e0e0"        # Light foreground
-        self.BUTTON_FG_COLOR = "#e0e0e0" # Button text color
-        self.ACCENT_COLOR = "#0d47a1"    # Dark blue accent
-        self.BUTTON_COLOR = "#0d47a1"    # Button color
-        self.BUTTON_HOVER = "#1565c0"    # Button hover color
-        
-        self.configure(bg=self.BG_COLOR)
-
-        # tool look and feel
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground=self.BUTTON_FG_COLOR)
-        style.map('TButton', background=[('active', self.BUTTON_HOVER)])
-        style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background='#2d2d2d', foreground=self.FG_COLOR, fieldbackground='#2d2d2d')
-        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background='#1a1a1a', foreground=self.FG_COLOR)
-        style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', self.FG_COLOR)])
-        # Prevent tree heading colors from changing on hover/active in dark mode
-        style.map('Treeview.Heading', background=[('active', '#1a1a1a'), ('pressed', '#1a1a1a')], 
-                  foreground=[('active', self.FG_COLOR), ('pressed', self.FG_COLOR)])
-        style.configure('TFrame', background=self.BG_COLOR)
-        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
-        style.configure('TCheckbutton', background=self.BG_COLOR, foreground=self.FG_COLOR)
-        style.map('TCheckbutton', background=[('active', self.BG_COLOR)], foreground=[('!disabled', self.FG_COLOR)])
-        style.configure('TScale', background=self.BG_COLOR)
-
-        # Track current theme
+        # Track current theme (default to light; will be overridden by apply_theme)
         self._current_theme = 'light'
 
         # Preferences file path
         self._config_path = Path.home() / '.tango_studio_config.json'
+
+        # Initialize color attributes (will be set by apply_theme)
+        self.BG_COLOR = None
+        self.FG_COLOR = None
+        self.BUTTON_FG_COLOR = None
+        self.ACCENT_COLOR = None
+        self.BUTTON_COLOR = None
+        self.BUTTON_HOVER = None
 
         # VLC setup
         self.instance = vlc.Instance()
@@ -286,6 +281,10 @@ class AudioPlayerApp(tk.Tk):
         self.current_index = None
         self.current_playlist_path = None
         self.dragged_index = None
+        
+        # Throttle rapid track changes to prevent VLC buffer errors
+        self._last_track_change_time = 0
+        self._min_track_change_interval = TRACK_CHANGE_THROTTLE_MS / 1000  # Convert to seconds
 
         # Whether double-click plays a song
         self.play_on_double_var = tk.BooleanVar(value=True)
@@ -294,9 +293,12 @@ class AudioPlayerApp(tk.Tk):
         self.status = tk.StringVar(value='Ready')
         self.time_var = tk.StringVar(value='00:00 / 00:00')
 
+        # Apply the default theme (sets colors and configures styles)
+        self.apply_theme(self._current_theme)
+        
         self._build_ui()
         PreferencesWindow.load_preferences_for(self)
-        self.after(500, self.update_time)
+        self.after(TIME_UPDATE_INTERVAL_MS, self.update_time)
 
     def _build_ui(self):
         menubar = tk.Menu(self)
@@ -335,7 +337,7 @@ class AudioPlayerApp(tk.Tk):
         self.playlist_tree = ttk.Treeview(tree_container, columns=('Playlist',), show='headings', selectmode='browse')        
         self.playlist_tree.heading('Playlist', text='Playlist')
         self.playlist_tree.column('Playlist', width=200, minwidth=100, stretch=True)
-        self.playlist_tree.tag_configure('current', background='#FFF59D')  # Soft yellow        
+        self.playlist_tree.tag_configure('current', background=HIGHLIGHT_COLOR)        
         self.playlist_tree.grid(row=0, column=0, sticky='nsew')
 
         self.playlist_tree.bind('<Double-1>', self.on_playlist_double)
@@ -346,7 +348,6 @@ class AudioPlayerApp(tk.Tk):
         self.playlist_tree.bind('<Enter>', lambda e: self._on_tree_enter(e, self.playlist_tree))
         self.playlist_tree.bind('<Leave>', self._on_tree_leave)
         self.playlist_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.playlist_tree))
-        self.dragged_item = None
 
         vsb = ttk.Scrollbar(tree_container, orient="vertical", command=self.playlist_tree.yview)
         vsb.grid(row=0, column=1, sticky='ns')
@@ -392,6 +393,32 @@ class AudioPlayerApp(tk.Tk):
         ttk.Label(bottom_frame, textvariable=self.status, font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=5)
 
     # -------- File Menu Actions --------
+    def _load_files_into_tree(self, folder, tree, file_list, status_label):
+        """
+        Load audio files from a folder into a tree and file list.
+        
+        Args:
+            folder: Path to folder to scan
+            tree: Treeview widget to populate
+            file_list: List to store full file paths
+            status_label: Descriptive label for the status message (e.g., 'playlist', 'browser')
+        """
+        # Clear existing items
+        for item in tree.get_children():
+            tree.delete(item)
+        file_list.clear()
+        
+        # Walk through folder and subfolders recursively
+        for root, dirs, files in os.walk(folder):
+            for f in files:
+                if f.lower().endswith(SUPPORTED_EXTS):
+                    full_path = os.path.join(root, f)
+                    file_list.append(full_path)
+                    tree.insert('', tk.END, values=(f,))
+        
+        # Show temporary status message
+        self._set_temporary_status(f'Loaded {len(file_list)} files into {status_label}', 3000)
+    
     def open_file(self):
         path = filedialog.askopenfilename(filetypes=[('Audio files', '*.mp3 *.wav *.flac *.ogg *.m4a'), ('All files', '*.*')])
         if path:
@@ -418,34 +445,12 @@ class AudioPlayerApp(tk.Tk):
     def open_folder(self):
         folder = filedialog.askdirectory()
         if folder:
-            for item in self.playlist_tree.get_children():
-                self.playlist_tree.delete(item)
-            self.playlist.clear()
-            # Walk through folder and subfolders recursively
-            for root, dirs, files in os.walk(folder):
-                for f in files:
-                    if f.lower().endswith(SUPPORTED_EXTS):
-                        full_path = os.path.join(root, f)
-                        self.playlist.append(full_path)
-                        self.playlist_tree.insert('', tk.END, values=(f,))
-            # Show a temporary status message and restore previous status after 3s
-            self._set_temporary_status(f'Loaded {len(self.playlist)} files into playlist', 3000)
+            self._load_files_into_tree(folder, self.playlist_tree, self.playlist, 'playlist')
 
     def open_folder_browse(self):
         folder = filedialog.askdirectory()
         if folder:
-            for item in self.browser_tree.get_children():
-                self.browser_tree.delete(item)
-            self.browser_files.clear()
-            # Walk through folder and subfolders recursively
-            for root, dirs, files in os.walk(folder):
-                for f in files:
-                    if f.lower().endswith(SUPPORTED_EXTS):
-                        full_path = os.path.join(root, f)
-                        self.browser_files.append(full_path)
-                        self.browser_tree.insert('', tk.END, values=(f,))                                                
-            # Use centralized temporary-status helper
-            self._set_temporary_status(f'Loaded {len(self.browser_files)} files into browser', 3000)
+            self._load_files_into_tree(folder, self.browser_tree, self.browser_files, 'browser')
 
     def add_selected_to_playlist(self):
         selections = self.browser_tree.selection()
@@ -552,44 +557,41 @@ class AudioPlayerApp(tk.Tk):
         """Apply dark or light theme to the entire application."""
         self._current_theme = theme
         
-        if theme == 'dark':
-            # Dark mode colors
-            self.BG_COLOR = "#1e1e1e"
-            self.FG_COLOR = "#e0e0e0"
-            self.BUTTON_FG_COLOR = "#e0e0e0"
-            self.ACCENT_COLOR = "#0d47a1"
-            self.BUTTON_COLOR = "#0d47a1"
-            self.BUTTON_HOVER = "#1565c0"
-            tree_bg = "#2d2d2d"
-            heading_bg = "#1a1a1a"
-            tooltip_bg = "#333333"
-        else:
-            # Light mode colors
-            self.BG_COLOR = "#f0f0f0"
-            self.FG_COLOR = "#000000"
-            self.BUTTON_FG_COLOR = "#ffffff"
-            self.ACCENT_COLOR = "#0078d4"
-            self.BUTTON_COLOR = "#0078d4"
-            self.BUTTON_HOVER = "#106ebe"
-            tree_bg = "#ffffff"
-            heading_bg = "#e0e0e0"
-            tooltip_bg = "#ffffe0"
+        # Get theme palette from THEMES dictionary
+        if theme not in THEMES:
+            theme = 'light'
+        
+        palette = THEMES[theme]
+        
+        # Update instance color attributes
+        self.BG_COLOR = palette['BG_COLOR']
+        self.FG_COLOR = palette['FG_COLOR']
+        self.BUTTON_FG_COLOR = palette['BUTTON_FG_COLOR']
+        self.ACCENT_COLOR = palette['ACCENT_COLOR']
+        self.BUTTON_COLOR = palette['BUTTON_COLOR']
+        self.BUTTON_HOVER = palette['BUTTON_HOVER']
+        tree_bg = palette['TREE_BG']
+        heading_bg = palette['HEADING_BG']
+        tooltip_bg = palette['TOOLTIP_BG']
         
         # Update main window
         self.configure(bg=self.BG_COLOR)
         
-        # Update styles
+        # Configure all TTk styles
         style = ttk.Style()
-        style.configure('TButton', font=('Segoe UI', 10), padding=6, background=self.BUTTON_COLOR, foreground=self.BUTTON_FG_COLOR)
+        style.theme_use('clam')
+        
+        style.configure('TButton', font=UI_FONT, padding=6, background=self.BUTTON_COLOR, foreground=self.BUTTON_FG_COLOR)
         style.map('TButton', background=[('active', self.BUTTON_HOVER)])
-        style.configure('Treeview', font=('Segoe UI', 10), rowheight=25, background=tree_bg, foreground=self.FG_COLOR, fieldbackground=tree_bg)
-        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), background=heading_bg, foreground=self.FG_COLOR)
+        
+        style.configure('Treeview', font=UI_FONT, rowheight=25, background=tree_bg, foreground=self.FG_COLOR, fieldbackground=tree_bg)
+        style.configure('Treeview.Heading', font=UI_FONT_BOLD, background=heading_bg, foreground=self.FG_COLOR)
         style.map('Treeview', background=[('selected', self.ACCENT_COLOR)], foreground=[('selected', self.FG_COLOR)])
         style.map('Treeview.Heading', background=[('active', heading_bg), ('pressed', heading_bg)], 
                   foreground=[('active', self.FG_COLOR), ('pressed', self.FG_COLOR)])
+        
         style.configure('TFrame', background=self.BG_COLOR)
-        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)        
-
+        style.configure('TLabel', background=self.BG_COLOR, foreground=self.FG_COLOR)
         style.configure('TCheckbutton', background=self.BG_COLOR, foreground=self.FG_COLOR)
         style.map('TCheckbutton', background=[('active', self.BG_COLOR)], foreground=[('!disabled', self.FG_COLOR)])
         style.configure('TScale', background=self.BG_COLOR)
@@ -632,12 +634,10 @@ class AudioPlayerApp(tk.Tk):
             for i in selected_indices:
                 if i < len(children):
                     self.playlist_tree.selection_add(children[i])
-
-    def update_browser_tree(self):
-        for item in self.browser_tree.get_children():
-            self.browser_tree.delete(item)
-        for f in self.browser_files:
-            self.browser_tree.insert('', tk.END, values=(os.path.basename(f),))
+        
+        # Restore the yellow highlight for the currently playing song
+        if highlight_current and self.current_index is not None:
+            self.highlight_current_song(self.current_index)
 
     # ----------------- Drag & Drop -----------------
     def _on_drag_start(self, event):
@@ -800,7 +800,12 @@ class AudioPlayerApp(tk.Tk):
             self.status.set('Paused')
         elif state in (vlc.State.Paused, vlc.State.Stopped, vlc.State.NothingSpecial):
             self.player.play()
-            self.status.set('Resumed')
+            # Display the song name when resuming
+            if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
+                path = self.playlist[self.current_index]
+                self.status.set(f'Playing: {os.path.basename(path)}')
+            else:
+                self.status.set('Resumed')
 
     def stop(self):
         if self.player:
@@ -813,21 +818,28 @@ class AudioPlayerApp(tk.Tk):
     def previous_track(self):
         if not self.playlist:
             return
+        # Throttle rapid track changes to prevent VLC buffer errors
+        if not self._can_change_track():
+            return
         if self.current_index is not None and self.current_index - 1 >= 0:
             self.fade_out_and_play(self.current_index - 1)
 
     def next_track(self):        
         if not self.playlist:
             return
+        # Throttle rapid track changes to prevent VLC buffer errors
+        if not self._can_change_track():
+            return
         if self.current_index is not None and self.current_index + 1 < len(self.playlist):
             self.fade_out_and_play(self.current_index + 1)        
 
-    def on_volume(self, value):
-        if self.player:
-            try:
-                self.player.audio_set_volume(int(float(value)))
-            except Exception:
-                pass
+    def _can_change_track(self):
+        """Check if enough time has passed since last track change."""
+        current_time = time.time()
+        if current_time - self._last_track_change_time < self._min_track_change_interval:
+            return False
+        self._last_track_change_time = current_time
+        return True
 
     def set_volume(self, _=None):
         if self.player is not None:
@@ -843,7 +855,7 @@ class AudioPlayerApp(tk.Tk):
             self.time_var.set(f'{current_min:02d}:{current_sec:02d} / {length_min:02d}:{length_sec:02d}')
         else:
             self.time_var.set('00:00 / 00:00')
-        self.after(500, self.update_time)
+        self.after(TIME_UPDATE_INTERVAL_MS, self.update_time)
 
     def highlight_current_song(self, index):
         for item in self.playlist_tree.get_children():
@@ -864,30 +876,32 @@ class AudioPlayerApp(tk.Tk):
             self.fade_out_and_play(self.current_index)
 
     # -------- Playlist operations --------
+    
+    def _get_current_song(self):
+        """Get the currently playing song path, or None if no song is playing."""
+        if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
+            return self.playlist[self.current_index]
+        return None
 
     def shuffle_playlist(self):
-        current_song = None
-        if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
-            current_song = self.playlist[self.current_index]
+        current_song = self._get_current_song()
 
         random.shuffle(self.playlist)
         self.update_playlist_tree(False)
 
-        if current_song in self.playlist:
+        if current_song and current_song in self.playlist:
             self.current_index = self.playlist.index(current_song)
             self.highlight_current_song(self.current_index)
         else:
             self.current_index = None
 
     def sort_playlist(self):
-        current_song = None
-        if self.current_index is not None and 0 <= self.current_index < len(self.playlist):
-            current_song = self.playlist[self.current_index]
+        current_song = self._get_current_song()
 
         self.playlist.sort(key=lambda f: os.path.basename(f).lower())
         self.update_playlist_tree(False)
 
-        if current_song in self.playlist:
+        if current_song and current_song in self.playlist:
             self.current_index = self.playlist.index(current_song)
             self.highlight_current_song(self.current_index)
         else:
@@ -902,13 +916,14 @@ class AudioPlayerApp(tk.Tk):
     def _create_tooltip(self):
         if self.tooltip:
             return
+        tooltip_bg = THEMES[self._current_theme]['TOOLTIP_BG']
         self.tooltip = tk.Toplevel(self)
         self.tooltip.wm_overrideredirect(True)
         self.tooltip.wm_geometry("+0+0")
-        self.tooltip.configure(bg='#333333')
+        self.tooltip.configure(bg=tooltip_bg)
         self.tooltip_label = tk.Label(self.tooltip, justify=tk.LEFT,
                                     relief=tk.SOLID, borderwidth=1,
-                                    font=("Segoe UI", 9), bg='#333333', fg=self.FG_COLOR)
+                                    font=("Segoe UI", 9), bg=tooltip_bg, fg=self.FG_COLOR)
         self.tooltip_label.pack()
         self.tooltip.withdraw()
 
@@ -936,7 +951,7 @@ class AudioPlayerApp(tk.Tk):
         if self.current_tooltip_item == item and self.tooltip_visible:
             return
             
-        self.tooltip_after_id = self.after(600, lambda: self._show_tooltip(tree, item, filepath))
+        self.tooltip_after_id = self.after(TOOLTIP_DELAY_MS, lambda: self._show_tooltip(tree, item, filepath))
         
     def _show_tooltip(self, tree, item, filepath):
         self.tooltip_after_id = None
@@ -967,7 +982,7 @@ class AudioPlayerApp(tk.Tk):
         except tk.TclError:
             # Item may no longer be present; nothing to show
             return
-        x += tree.winfo_rootx() + 25
+        x += tree.winfo_rootx() + TOOLTIP_OFFSET_X
         y += tree.winfo_rooty() + h  # Position below the item
         
         # Ensure tooltip is fully visible
