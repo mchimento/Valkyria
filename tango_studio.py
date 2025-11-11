@@ -373,7 +373,7 @@ class AudioPlayerApp(tk.Tk):
         ttk.Button(mid_frame, text="Browse Songs", command=self.open_folder_browse).pack(pady=2)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
         ttk.Button(mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=5)
-        ttk.Checkbutton(mid_frame, text="Play on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)        
+        ttk.Checkbutton(mid_frame, text="Play song on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)        
 
         # --- Bottom controls ---
         bottom_frame = ttk.Frame(self, padding=(5,5))
