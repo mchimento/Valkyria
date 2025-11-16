@@ -331,12 +331,12 @@ class AudioPlayerApp(tk.Tk):
         left_frame = ttk.Frame(main, padding=(5,5))
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        tree_container = ttk.Frame(left_frame)
-        tree_container.pack(fill=tk.BOTH, expand=True)
+        playlist_tree_container = ttk.Frame(left_frame)
+        playlist_tree_container.pack(fill=tk.BOTH, expand=True)
 
-        self.playlist_tree = ttk.Treeview(tree_container, columns=('Playlist',), show='headings', selectmode='browse')        
+        self.playlist_tree = ttk.Treeview(playlist_tree_container, columns=('Playlist',), show='headings', selectmode='browse')        
         self.playlist_tree.heading('Playlist', text='Playlist')
-        self.playlist_tree.column('Playlist', width=200, minwidth=100, stretch=True)
+        self.playlist_tree.column('Playlist', width=250, minwidth=100, stretch=True)
         self.playlist_tree.tag_configure('current', background=HIGHLIGHT_COLOR)        
         self.playlist_tree.grid(row=0, column=0, sticky='nsew')
 
@@ -349,23 +349,37 @@ class AudioPlayerApp(tk.Tk):
         self.playlist_tree.bind('<Leave>', self._on_tree_leave)
         self.playlist_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.playlist_tree))
 
-        vsb = ttk.Scrollbar(tree_container, orient="vertical", command=self.playlist_tree.yview)
+        vsb = ttk.Scrollbar(playlist_tree_container, orient="vertical", command=self.playlist_tree.yview)
         vsb.grid(row=0, column=1, sticky='ns')
         self.playlist_tree.configure(yscrollcommand=vsb.set)
 
-        tree_container.grid_rowconfigure(0, weight=1)
-        tree_container.grid_columnconfigure(0, weight=1)  
+        playlist_tree_container.grid_rowconfigure(0, weight=1)
+        playlist_tree_container.grid_columnconfigure(0, weight=1)  
 
         # --- Right: Browser ---
         right_frame = ttk.Frame(main, padding=(5,5))
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.browser_tree = ttk.Treeview(right_frame, columns=('Song',), show='headings', selectmode='extended')
+
+        browser_tree_container = ttk.Frame(right_frame)
+        browser_tree_container.pack(fill=tk.BOTH, expand=True)
+
+        self.browser_tree = ttk.Treeview(browser_tree_container, columns=('Song',), show='headings', selectmode='extended')
         self.browser_tree.heading('Song', text='Songs')
-        self.browser_tree.pack(fill=tk.BOTH, expand=True)
+        self.browser_tree.column('Song', width=200, minwidth=100, stretch=True)
+        self.browser_tree.grid(row=0, column=0, sticky='nsew')  # <-- inside container, not right_frame
+
         self.browser_tree.bind('<Delete>', self.remove_selected_from_browser)
         self.browser_tree.bind('<Enter>', lambda e: self._on_tree_enter(e, self.browser_tree))
         self.browser_tree.bind('<Leave>', self._on_tree_leave)
         self.browser_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.browser_tree))
+
+        vsb_browser = ttk.Scrollbar(browser_tree_container, orient="vertical", command=self.browser_tree.yview)
+        vsb_browser.grid(row=0, column=1, sticky='ns')
+        self.browser_tree.configure(yscrollcommand=vsb_browser.set)
+
+        # Make the container grid expandable
+        browser_tree_container.grid_rowconfigure(0, weight=1)
+        browser_tree_container.grid_columnconfigure(0, weight=1)
 
         # --- Middle: Buttons ---
         mid_frame = ttk.Frame(main)
