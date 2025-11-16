@@ -371,7 +371,8 @@ class AudioPlayerApp(tk.Tk):
         mid_frame = ttk.Frame(main)
         mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=4, anchor=tk.N)
 
-        ttk.Button(mid_frame, text="Browse Songs", command=self.open_folder_browse).pack(pady=2)
+        ttk.Button(mid_frame, text="Browse Folder", command=self.open_folder_browse).pack(pady=2)
+        ttk.Button(mid_frame, text="Browse Song", command=self.open_file_browse).pack(pady=2)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
         ttk.Button(mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=5)
         ttk.Checkbutton(mid_frame, text="Play song on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)        
@@ -392,7 +393,17 @@ class AudioPlayerApp(tk.Tk):
 
         ttk.Label(bottom_frame, textvariable=self.status, font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT, padx=5)
 
-    # -------- File Menu Actions --------
+    # -------- File Menu Actions --------'
+    def open_folder(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self._load_files_into_tree(folder, self.playlist_tree, self.playlist, 'playlist')
+
+    def open_folder_browse(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self._load_files_into_tree(folder, self.browser_tree, self.browser_files, 'browser')
+
     def _load_files_into_tree(self, folder, tree, file_list, status_label):
         """
         Load audio files from a folder into a tree and file list.
@@ -420,9 +431,9 @@ class AudioPlayerApp(tk.Tk):
         self._set_temporary_status(f'Loaded {len(file_list)} files into {status_label}', 3000)
     
     def open_file(self):
-        path = filedialog.askopenfilename(filetypes=[('Audio files', '*.mp3 *.wav *.flac *.ogg *.m4a'), ('All files', '*.*')])
-        if path:
-            self.playlist = [path]
+        paths = filedialog.askopenfilenames(filetypes=[('Audio files', '*.mp3 *.wav *.flac *.ogg *.m4a'), ('All files', '*.*')])
+        if paths:
+            self.playlist = list(paths)
             self.current_playlist_path = None
             self.update_playlist_tree()
             self.play_current()
@@ -442,15 +453,37 @@ class AudioPlayerApp(tk.Tk):
             except Exception as e:
                 messagebox.showerror('Error', f'Failed to load playlist: {e}')
 
-    def open_folder(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self._load_files_into_tree(folder, self.playlist_tree, self.playlist, 'playlist')
+    def open_file_browse(self):
+        file_paths = filedialog.askopenfilenames(
+            filetypes=[("Audio Files", " ".join(f"*{ext}" for ext in SUPPORTED_EXTS)),
+                    ("All Files", "*.*")]
+        )
 
-    def open_folder_browse(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self._load_files_into_tree(folder, self.browser_tree, self.browser_files, 'browser')
+        if file_paths:
+            added_count = 0
+            skipped_count = 0
+
+            for file_path in file_paths:
+                file_path = str(Path(file_path).resolve())
+                basename = os.path.basename(file_path)
+
+                if file_path not in self.browser_files:
+                    self.browser_files.append(file_path)
+                    self.browser_tree.insert('', 'end', values=(basename,))
+                    added_count += 1
+                else:
+                    skipped_count += 1
+
+            # Build status message
+            if added_count > 0 and skipped_count == 0:
+                msg = f"Added {added_count} song{'s' if added_count > 1 else ''} to browser"
+            elif added_count > 0 and skipped_count > 0:
+                msg = (f"Added {added_count} new song{'s' if added_count > 1 else ''}, "
+                       f"{skipped_count} song already available in browsed songs list")
+            else:
+                msg = "All selected songs already in browser"
+
+            self._set_temporary_status(msg, 3000)
 
     def add_selected_to_playlist(self):
         selections = self.browser_tree.selection()
@@ -805,7 +838,7 @@ class AudioPlayerApp(tk.Tk):
                 path = self.playlist[self.current_index]
                 self.status.set(f'Playing: {os.path.basename(path)}')
             else:
-                self.status.set('Resumed')
+                self.status.set('Ready')
 
     def stop(self):
         if self.player:
