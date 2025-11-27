@@ -11,7 +11,6 @@ from ui.styles import apply_base_styles
 
 logger = logging.getLogger(__name__)
 
-
 class ThemeManager:
     def __init__(self, settings) -> None:
         """
@@ -32,12 +31,12 @@ class ThemeManager:
         Uses hardcoded defaults if theme file cannot be loaded.
         """
         name = self.settings.theme or "light"
-        base = Path(__file__).parent
-        path = base / f"{name}.json"
+        path = Path(f"themes/{name}.json")
 
-        if not path.exists():
-            logger.warning(f"Theme file not found: {path}, falling back to light.json")
-            path = base / "light.json"
+        if not path.is_file():
+            logger.warning(f"Theme file not found: {path}, falling back to light theme")
+            name = "light"
+            path = Path("themes/light.json")
 
         try:
             with open(path, "r", encoding="utf-8") as f:

@@ -4,7 +4,6 @@ from typing import Callable, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-
 class TooltipManager:
     def __init__(self, root: tk.Tk, palette: Dict[str, Any]) -> None:
         self.root = root
