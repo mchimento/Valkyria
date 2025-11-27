@@ -360,26 +360,26 @@ class AudioPlayerApp(tk.Tk):
         right_frame = ttk.Frame(main, padding=(5,5))
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        browser_tree_container = ttk.Frame(right_frame)
-        browser_tree_container.pack(fill=tk.BOTH, expand=True)
+        tree_frame = ttk.Frame(right_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.browser_tree = ttk.Treeview(browser_tree_container, columns=('Song',), show='headings', selectmode='extended')
+        self.browser_tree = ttk.Treeview(tree_frame, columns=('Song',), show='headings', selectmode='extended')
         self.browser_tree.heading('Song', text='Songs')
         self.browser_tree.column('Song', width=200, minwidth=100, stretch=True)
-        self.browser_tree.grid(row=0, column=0, sticky='nsew')  # <-- inside container, not right_frame
+        self.browser_tree.grid(row=0, column=0, sticky='nsew')
 
         self.browser_tree.bind('<Delete>', self.remove_selected_from_browser)
         self.browser_tree.bind('<Enter>', lambda e: self._on_tree_enter(e, self.browser_tree))
         self.browser_tree.bind('<Leave>', self._on_tree_leave)
         self.browser_tree.bind('<Motion>', lambda e: self._on_tree_motion(e, self.browser_tree))
 
-        vsb_browser = ttk.Scrollbar(browser_tree_container, orient="vertical", command=self.browser_tree.yview)
+        vsb_browser = ttk.Scrollbar(tree_frame, orient="vertical", command=self.browser_tree.yview)
         vsb_browser.grid(row=0, column=1, sticky='ns')
         self.browser_tree.configure(yscrollcommand=vsb_browser.set)
 
         # Make the container grid expandable
-        browser_tree_container.grid_rowconfigure(0, weight=1)
-        browser_tree_container.grid_columnconfigure(0, weight=1)
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
 
         # --- Middle: Buttons ---
         mid_frame = ttk.Frame(main)
@@ -389,7 +389,7 @@ class AudioPlayerApp(tk.Tk):
         ttk.Button(mid_frame, text="Browse Song", command=self.open_file_browse).pack(pady=2)
         ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=5)
         ttk.Button(mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=5)
-        ttk.Checkbutton(mid_frame, text="Play song on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)        
+        ttk.Checkbutton(mid_frame, text="Play song on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)
 
         # --- Bottom controls ---
         bottom_frame = ttk.Frame(self, padding=(5,5))
