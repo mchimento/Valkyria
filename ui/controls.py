@@ -18,11 +18,10 @@ class ControlsBar(ttk.Frame):
         self.playlist = playlist
         self.playlist_tree = self.playlist.tree if self.playlist else None
 
-        # ---------------- BUTTONS ----------------
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
 
-        ttk.Button(left, text="Play", command=lambda: self.play(from_user=True)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(left, text="Play", command=lambda: self._on_play(from_user=True)).pack(side=tk.LEFT, padx=4)
         ttk.Button(left, text="Pause", command=self._on_pause).pack(side=tk.LEFT, padx=4)
         ttk.Button(left, text="Prev", command=self._on_prev).pack(side=tk.LEFT, padx=4)
         ttk.Button(left, text="Stop", command=self._on_stop).pack(side=tk.LEFT, padx=4)
@@ -47,18 +46,16 @@ class ControlsBar(ttk.Frame):
         self._update_id = None
         self._schedule_time_update()
 
-        # ---------------- KEYBOARD SHORTCUTS (Suggestion #2) ----------------
-        master.bind("<space>", lambda e: self._toggle_pause_play())
+        # ---------------- KEYBOARD SHORTCUTS ----------------
+        master.bind("<Return>", lambda e: self._on_play(True))
+        master.bind("<space>", lambda e: self._on_pause())
         master.bind("<Left>", lambda e: self._on_prev())
         master.bind("<Right>", lambda e: self._on_next())
         master.bind("<s>", lambda e: self._on_stop())
         master.bind("<plus>", lambda e: self._volume_step(+5))
         master.bind("<minus>", lambda e: self._volume_step(-5))
 
-    # -------------------------------------------------------------------------
-    # PLAY LOGIC + AUTO-SCROLL SUPPORT (Suggestion #3)
-    # -------------------------------------------------------------------------
-    def play(self, from_user=False):
+    def _on_play(self, from_user=False):
         if from_user and self.playlist_tree:
             selected = self.playlist_tree.selection()
             if selected:
@@ -84,16 +81,6 @@ class ControlsBar(ttk.Frame):
                 pass
 
         self._send_status("play")
-
-    def _toggle_pause_play(self):
-        """Space toggles pause/play"""
-        try:
-            if self.player.is_playing():
-                self._on_pause()
-            else:
-                self.play(from_user=True)
-        except Exception:
-            self.play(from_user=True)
 
     def _on_pause(self):
         self.pause()
@@ -122,14 +109,14 @@ class ControlsBar(ttk.Frame):
             return
         if self.state.current_index - 1 >= 0:
             self.state.current_index -= 1
-            self.play(from_user=False)
+            self._on_play(from_user=False)
 
     def next(self):
         if self.state.current_index is None:
             return
         if self.state.current_index + 1 < len(self.state.playlist):
             self.state.current_index += 1
-            self.play(from_user=False)
+            self._on_play(from_user=False)
 
     # ---------------- VOLUME STEPS FOR + / - KEYS ----------------
     def _volume_step(self, delta):

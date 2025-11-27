@@ -365,7 +365,7 @@ class MainWindow:
             self.state.current_index = idx
             self.refresh_all()
             # fade_out behavior not implemented; just play
-            self.controls.play()
+            self.controls._on_play()
             self._restore_status()
 
     def _on_playlist_select(self, index):
