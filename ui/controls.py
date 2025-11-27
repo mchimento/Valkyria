@@ -21,11 +21,27 @@ class ControlsBar(ttk.Frame):
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
 
-        ttk.Button(left, text="Play", command=lambda: self._on_play(from_user=True)).pack(side=tk.LEFT, padx=4)
-        ttk.Button(left, text="Pause", command=self._on_pause).pack(side=tk.LEFT, padx=4)
-        ttk.Button(left, text="Prev", command=self._on_prev).pack(side=tk.LEFT, padx=4)
-        ttk.Button(left, text="Stop", command=self._on_stop).pack(side=tk.LEFT, padx=4)
-        ttk.Button(left, text="Next", command=self._on_next).pack(side=tk.LEFT, padx=4)
+        btn_play = ttk.Button(left, text="Play", command=lambda: self._on_play(from_user=True))
+        btn_play.pack(side=tk.LEFT, padx=4)
+
+        btn_pause = ttk.Button(left, text="Pause", command=self._on_pause)
+        btn_pause.pack(side=tk.LEFT, padx=4)
+
+        btn_prev = ttk.Button(left, text="Prev", command=self._on_prev)
+        btn_prev.pack(side=tk.LEFT, padx=4)
+
+        btn_stop = ttk.Button(left, text="Stop", command=self._on_stop)
+        btn_stop.pack(side=tk.LEFT, padx=4)
+
+        btn_next = ttk.Button(left, text="Next", command=self._on_next)
+        btn_next.pack(side=tk.LEFT, padx=4)
+
+        if self.tooltip_manager:
+            self.tooltip_manager.attach(btn_play, lambda: "Play")
+            self.tooltip_manager.attach(btn_pause, lambda: "Pause")
+            self.tooltip_manager.attach(btn_prev, lambda: "Previous Track")
+            self.tooltip_manager.attach(btn_stop, lambda: "Stop")
+            self.tooltip_manager.attach(btn_next, lambda: "Next Track")
 
         # ---------------- TIME LABEL ----------------
         middle = ttk.Frame(self)
