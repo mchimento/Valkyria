@@ -5,6 +5,7 @@ This module composes the smaller UI components (PlaylistView, BrowserView, Contr
 and wires them to the AppState, ThemeManager, AudioPlayer and Settings.
 """
 
+import logging
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -19,6 +20,8 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 
 from mutagen import File as MutagenFile
+
+logger = logging.getLogger(__name__)
 
 class MainWindow:
     def __init__(self, state, theme, player, settings):
@@ -274,22 +277,24 @@ class MainWindow:
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
 
     def _on_quit(self):
+        logger.info("Shutting down Tango Studio")
         # Save geometry
         try:
             self.settings.window_geometry = self.root.geometry()
             self.settings.save()
         except Exception:
-            pass
+            logger.error("Failed to save window geometry on exit", exc_info=True)
         # Stop player
         try:
             self.player.stop()
         except Exception:
-            pass
+            logger.error("Failed to stop player on exit", exc_info=True)
         # Destroy window
         try:
             self.root.destroy()
         except Exception:
-            pass
+            logger.error("Failed to destroy window on exit", exc_info=True)
+        logger.info("Tango Studio shut down complete")
 
     # ---------- Playlist operations (menu) ----------
     def shuffle_playlist(self):

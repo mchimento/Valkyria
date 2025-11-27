@@ -4,12 +4,22 @@ VLC Audio backend wrapper.
 Provides a simple, stable API to play/pause/stop and emits callbacks when a track ends.
 """
 
+import logging
 import threading
 import vlc
 from typing import Optional, Callable
 
+logger = logging.getLogger(__name__)
+
+
 class AudioPlayer:
-    def __init__(self, on_track_end: Optional[Callable[[], None]] = None):
+    def __init__(self, on_track_end: Optional[Callable[[], None]] = None) -> None:
+        """
+        Initialize the audio player.
+
+        Args:
+            on_track_end: Optional callback function to be called when a track ends.
+        """
         # Create a single VLC instance and media_player
         self.instance = vlc.Instance()
         self.player = self.instance.media_player_new()
@@ -22,55 +32,95 @@ class AudioPlayer:
         # small lock for thread-safety
         self._lock = threading.RLock()
 
-    def _on_end(self, event):
-        # called by vlc in its internal thread
+        logger.info("AudioPlayer initialized")
+
+    def _on_end(self, event) -> None:
+        """Called by VLC in its internal thread when media ends."""
         if callable(self.on_track_end):
             try:
                 self.on_track_end()
             except Exception:
-                pass
+                logger.error("Error in track end callback", exc_info=True)
 
-    def play(self, path: str):
+    def play(self, path: str) -> None:
+        """
+        Play an audio file.
+
+        Args:
+            path: Path to the audio file to play.
+        """
         with self._lock:
-            media = self.instance.media_new(path)
-            self.player.set_media(media)
-            self.player.play()
+            try:
+                media = self.instance.media_new(path)
+                self.player.set_media(media)
+                self.player.play()
+            except Exception:
+                logger.error(f"Failed to play: {path}", exc_info=True)
 
-    def pause(self):
+    def pause(self) -> None:
+        """Pause or resume playback."""
         with self._lock:
             try:
                 self.player.pause()
             except Exception:
-                pass
+                logger.error("Failed to pause playback", exc_info=True)
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stop playback."""
         with self._lock:
             try:
                 self.player.stop()
             except Exception:
-                pass
+                logger.error("Failed to stop playback", exc_info=True)
 
-    def set_volume(self, val: int):
+    def set_volume(self, val: int) -> None:
+        """
+        Set the playback volume.
+
+        Args:
+            val: Volume level (0-100).
+        """
         with self._lock:
             try:
                 self.player.audio_set_volume(int(val))
             except Exception:
-                pass
+                logger.error(f"Failed to set volume to {val}", exc_info=True)
 
     def is_playing(self) -> bool:
+        """
+        Check if audio is currently playing.
+
+        Returns:
+            True if playing, False otherwise.
+        """
         try:
             return bool(self.player.is_playing())
         except Exception:
+            logger.error("Failed to check playback status", exc_info=True)
             return False
 
     def get_time(self) -> int:
+        """
+        Get current playback position in milliseconds.
+
+        Returns:
+            Current position in milliseconds, or 0 if unavailable.
+        """
         try:
             return int(self.player.get_time() or 0)
         except Exception:
+            logger.error("Failed to get playback time", exc_info=True)
             return 0
 
     def get_length(self) -> int:
+        """
+        Get total track length in milliseconds.
+
+        Returns:
+            Track length in milliseconds, or 0 if unavailable.
+        """
         try:
             return int(self.player.get_length() or 0)
         except Exception:
+            logger.error("Failed to get track length", exc_info=True)
             return 0

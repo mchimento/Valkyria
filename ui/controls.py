@@ -2,12 +2,17 @@
 Control bar: Play / Pause / Stop / Prev / Next and Volume + time label
 """
 
+import logging
 import tkinter as tk
 from tkinter import ttk
+from typing import Optional, Callable
+
+logger = logging.getLogger(__name__)
+
 
 class ControlsBar(ttk.Frame):
     def __init__(self, master, player, state, theme, playlist=None,
-                 tooltip_manager=None, status_callback=None):
+                 tooltip_manager=None, status_callback: Optional[Callable] = None) -> None:
         super().__init__(master)
 
         self.player = player
