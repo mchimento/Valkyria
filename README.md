@@ -34,7 +34,7 @@ pip install python-vlc
 1. Run the Python script:
 
 ```bash
-python audio_reproducer.py
+python main.py
 ```
 
 2. Use the File menu to open files, multiple files, playlists, or folders.
@@ -51,7 +51,11 @@ python audio_reproducer.py
 
 ## File Structure
 
-- `audio_reproducer.py`: Main Python script for the audio player.
+- `main.py`: Entry point for the application.
+- `app/`: Core application logic and state management.
+- `ui/`: User interface components (windows, views, controls).
+- `audio/`: Audio playback handling.
+- `themes/`: Theme definitions and management.
 - `README.md`: Documentation for the tool.
 
 ## Notes
