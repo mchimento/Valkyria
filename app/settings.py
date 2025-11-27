@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class Settings:
-    CONFIG_PATH = Path.home() / ".tango_studio_config.json"
+    CONFIG_PATH = Path.home() / ".config.json"
 
     def __init__(self) -> None:
         self.theme: str = "light"
