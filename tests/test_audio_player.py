@@ -98,6 +98,99 @@ class TestAudioPlayer(unittest.TestCase):
 
         callback.assert_called_once()
 
+    @patch('audio.audio_player.vlc.Instance')
+    def test_get_time(self, mock_vlc_instance):
+        """Test that get_time method returns current playback position."""
+        mock_instance = MagicMock()
+        mock_player = MagicMock()
+
+        mock_vlc_instance.return_value = mock_instance
+        mock_instance.media_player_new.return_value = mock_player
+        mock_player.get_time.return_value = 5000  # 5 seconds in milliseconds
+
+        player = AudioPlayer()
+        time = player.get_time()
+
+        self.assertEqual(time, 5000)
+        mock_player.get_time.assert_called_once()
+
+    @patch('audio.audio_player.vlc.Instance')
+    def test_get_time_with_none(self, mock_vlc_instance):
+        """Test that get_time handles None return value."""
+        mock_instance = MagicMock()
+        mock_player = MagicMock()
+
+        mock_vlc_instance.return_value = mock_instance
+        mock_instance.media_player_new.return_value = mock_player
+        mock_player.get_time.return_value = None
+
+        player = AudioPlayer()
+        time = player.get_time()
+
+        self.assertEqual(time, 0)
+
+    @patch('audio.audio_player.vlc.Instance')
+    def test_get_length(self, mock_vlc_instance):
+        """Test that get_length method returns track length."""
+        mock_instance = MagicMock()
+        mock_player = MagicMock()
+
+        mock_vlc_instance.return_value = mock_instance
+        mock_instance.media_player_new.return_value = mock_player
+        mock_player.get_length.return_value = 180000  # 3 minutes in milliseconds
+
+        player = AudioPlayer()
+        length = player.get_length()
+
+        self.assertEqual(length, 180000)
+        mock_player.get_length.assert_called_once()
+
+    @patch('audio.audio_player.vlc.Instance')
+    def test_get_length_with_none(self, mock_vlc_instance):
+        """Test that get_length handles None return value."""
+        mock_instance = MagicMock()
+        mock_player = MagicMock()
+
+        mock_vlc_instance.return_value = mock_instance
+        mock_instance.media_player_new.return_value = mock_player
+        mock_player.get_length.return_value = None
+
+        player = AudioPlayer()
+        length = player.get_length()
+
+        self.assertEqual(length, 0)
+
+    @patch('audio.audio_player.vlc.Instance')
+    def test_is_playing_true(self, mock_vlc_instance):
+        """Test that is_playing returns True when playing."""
+        mock_instance = MagicMock()
+        mock_player = MagicMock()
+
+        mock_vlc_instance.return_value = mock_instance
+        mock_instance.media_player_new.return_value = mock_player
+        mock_player.is_playing.return_value = 1  # VLC returns 1 for True
+
+        player = AudioPlayer()
+        is_playing = player.is_playing()
+
+        self.assertTrue(is_playing)
+        mock_player.is_playing.assert_called_once()
+
+    @patch('audio.audio_player.vlc.Instance')
+    def test_is_playing_false(self, mock_vlc_instance):
+        """Test that is_playing returns False when not playing."""
+        mock_instance = MagicMock()
+        mock_player = MagicMock()
+
+        mock_vlc_instance.return_value = mock_instance
+        mock_instance.media_player_new.return_value = mock_player
+        mock_player.is_playing.return_value = 0  # VLC returns 0 for False
+
+        player = AudioPlayer()
+        is_playing = player.is_playing()
+
+        self.assertFalse(is_playing)
+
 
 if __name__ == '__main__':
     unittest.main()
