@@ -172,7 +172,7 @@ class MainWindow:
                 self.status_var.set("Paused")
                 self.meta_var.set("")
         elif event_type == "stop":
-            self.status_var.set("Stopped")
+            self._set_temporary_status(f"Stopped")
             self.meta_var.set("")
         elif event_type in ("prev", "next"):
             self._restore_status()

@@ -6,59 +6,97 @@ import tkinter as tk
 from tkinter import ttk
 
 class ControlsBar(ttk.Frame):
-    def __init__(self, master, player, state, theme, playlist=None, tooltip_manager=None, status_callback=None):
+    def __init__(self, master, player, state, theme, playlist=None,
+                 tooltip_manager=None, status_callback=None):
         super().__init__(master)
+
         self.player = player
         self.state = state
         self.theme = theme
         self.tooltip_manager = tooltip_manager
         self.status_callback = status_callback
         self.playlist = playlist
-        self.playlist_tree = self.playlist.tree
+        self.playlist_tree = self.playlist.tree if self.playlist else None
 
+        # ---------------- BUTTONS ----------------
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
 
-        ttk.Button(left, text="Play", command=self._on_play).pack(side=tk.LEFT, padx=4)
-        ttk.Button(left, text="Pause", command=self.pause).pack(side=tk.LEFT, padx=4)
+        ttk.Button(left, text="Play", command=lambda: self.play(from_user=True)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(left, text="Pause", command=self._on_pause).pack(side=tk.LEFT, padx=4)
         ttk.Button(left, text="Prev", command=self._on_prev).pack(side=tk.LEFT, padx=4)
         ttk.Button(left, text="Stop", command=self._on_stop).pack(side=tk.LEFT, padx=4)
         ttk.Button(left, text="Next", command=self._on_next).pack(side=tk.LEFT, padx=4)
 
+        # ---------------- TIME LABEL ----------------
         middle = ttk.Frame(self)
         middle.pack(side=tk.LEFT, padx=12)
         self.time_var = tk.StringVar(value="00:00 / 00:00")
         ttk.Label(middle, textvariable=self.time_var).pack()
 
+        # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, padx=6)
         ttk.Label(right, text="Volume:").pack(side=tk.LEFT)
-        self.volume = ttk.Scale(right, from_=0, to=100, orient="horizontal", command=self._on_volume_change)
+        self.volume = ttk.Scale(right, from_=0, to=100, orient="horizontal",
+                                command=self._on_volume_change)
         self.volume.set(80)
         self.volume.pack(side=tk.LEFT)
 
-        if tooltip_manager:
-            tooltip_manager.attach(self, lambda: "Playback controls")
-
+        # time updater
         self._update_id = None
         self._schedule_time_update()
 
-    def _on_play(self):
-        if self.playlist_tree:
+        # ---------------- KEYBOARD SHORTCUTS (Suggestion #2) ----------------
+        master.bind("<space>", lambda e: self._toggle_pause_play())
+        master.bind("<Left>", lambda e: self._on_prev())
+        master.bind("<Right>", lambda e: self._on_next())
+        master.bind("<s>", lambda e: self._on_stop())
+        master.bind("<plus>", lambda e: self._volume_step(+5))
+        master.bind("<minus>", lambda e: self._volume_step(-5))
+
+    # -------------------------------------------------------------------------
+    # PLAY LOGIC + AUTO-SCROLL SUPPORT (Suggestion #3)
+    # -------------------------------------------------------------------------
+    def play(self, from_user=False):
+        if from_user and self.playlist_tree:
             selected = self.playlist_tree.selection()
             if selected:
                 self.state.current_index = self.playlist_tree.index(selected[0])
             elif self.state.playlist and self.state.current_index is None:
-                self.state.current_index = 0  # fallback to first song
-        elif self.state.current_index is None and self.state.playlist:
+                self.state.current_index = 0
+
+        # default to first song
+        if self.state.current_index is None and self.state.playlist:
             self.state.current_index = 0
 
-        self.play()
-        self.playlist._highlight_current()
+        # play
+        if self.state.current_index is not None:
+            path = self.state.playlist[self.state.current_index]
+            self.player.play(path)
+
+        # highlight & auto-scroll (Suggestion #3)
+        if self.playlist:
+            self.playlist._highlight_current()
+            try:
+                self.playlist_tree.see(self.state.current_index)
+            except Exception:
+                pass
+
         self._send_status("play")
 
-    def pause(self):
-        self.player.pause()
+    def _toggle_pause_play(self):
+        """Space toggles pause/play"""
+        try:
+            if self.player.is_playing():
+                self._on_pause()
+            else:
+                self.play(from_user=True)
+        except Exception:
+            self.play(from_user=True)
+
+    def _on_pause(self):
+        self.pause()
         self._send_status("pause")
 
     def _on_stop(self):
@@ -73,18 +111,8 @@ class ControlsBar(ttk.Frame):
         self.next()
         self._send_status("next")
 
-    def _on_volume_change(self, val):
-        try:
-            self.player.set_volume(int(float(val)))
-        except Exception:
-            pass
-
-    def play(self):
-        if self.state.current_index is None and self.state.playlist:
-            self.state.current_index = 0
-        if self.state.current_index is not None:
-            path = self.state.playlist[self.state.current_index]
-            self.player.play(path)
+    def pause(self):
+        self.player.pause()
 
     def stop(self):
         self.player.stop()
@@ -94,17 +122,31 @@ class ControlsBar(ttk.Frame):
             return
         if self.state.current_index - 1 >= 0:
             self.state.current_index -= 1
-            self.play()
-        self.playlist._highlight_current()
+            self.play(from_user=False)
 
     def next(self):
         if self.state.current_index is None:
             return
         if self.state.current_index + 1 < len(self.state.playlist):
             self.state.current_index += 1
-            self.play()
-        self.playlist._highlight_current()
+            self.play(from_user=False)
 
+    # ---------------- VOLUME STEPS FOR + / - KEYS ----------------
+    def _volume_step(self, delta):
+        new = max(0, min(100, self.volume.get() + delta))
+        self.volume.set(new)
+        try:
+            self.player.set_volume(int(new))
+        except Exception:
+            pass
+
+    def _on_volume_change(self, val):
+        try:
+            self.player.set_volume(int(float(val)))
+        except Exception:
+            pass
+
+    # ---------------- TIME UPDATE ----------------
     def _schedule_time_update(self):
         try:
             length_ms = self.player.get_length()
@@ -117,8 +159,10 @@ class ControlsBar(ttk.Frame):
                 self.time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d} / {len_s//60:02d}:{len_s%60:02d}")
         except Exception:
             self.time_var.set("00:00 / 00:00")
+
         self._update_id = self.after(500, self._schedule_time_update)
 
+    # ---------------- CLEANUP ----------------
     def destroy(self):
         if self._update_id:
             try:
@@ -127,6 +171,7 @@ class ControlsBar(ttk.Frame):
                 pass
         super().destroy()
 
+    # ---------------- STATUS CALLBACK ----------------
     def _send_status(self, event_type):
-        if self.status_callback:
+        if callable(self.status_callback):
             self.status_callback(event_type)

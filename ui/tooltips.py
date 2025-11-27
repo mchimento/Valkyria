@@ -1,11 +1,3 @@
-"""
-Simple tooltip manager.
-
-Usage:
-    tm = TooltipManager(root, palette)
-    tm.attach(widget, lambda: "tooltip text")
-"""
-
 import tkinter as tk
 from typing import Callable
 
