@@ -9,6 +9,8 @@ from typing import Dict, Any
 import tkinter as tk
 from ui.styles import apply_base_styles
 
+from app.paths import get_resource_path
+
 logger = logging.getLogger(__name__)
 
 class ThemeManager:
@@ -31,12 +33,12 @@ class ThemeManager:
         Uses hardcoded defaults if theme file cannot be loaded.
         """
         name = self.settings.theme or "light"
-        path = Path(f"themes/{name}.json")
 
-        if not path.is_file():
-            logger.warning(f"Theme file not found: {path}, falling back to light theme")
-            name = "light"
-            path = Path("themes/light.json")
+        # Use resource path to find themes
+        path = get_resource_path(f"themes/{name}.json")
+
+        if not path.exists():
+            path = get_resource_path("themes/light.json")
 
         try:
             with open(path, "r", encoding="utf-8") as f:

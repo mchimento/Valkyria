@@ -1,13 +1,22 @@
 import unittest
 import json
 import tempfile
+import logging
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, PropertyMock
 from app.settings import Settings
 
 
 class TestSettings(unittest.TestCase):
     """Unit tests for the Settings class."""
+
+    def setUp(self):
+        # Suppress logging during tests to avoid cluttering output with expected errors
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
 
     def test_initialization_defaults(self):
         """Test that Settings initializes with correct default values."""
@@ -31,7 +40,8 @@ class TestSettings(unittest.TestCase):
             temp_path = f.name
 
         try:
-            with patch.object(Settings, 'CONFIG_PATH', Path(temp_path)):
+            with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+                mock_config_path.return_value = Path(temp_path)
                 settings = Settings()
 
                 self.assertEqual(settings.theme, "dark")
@@ -41,7 +51,8 @@ class TestSettings(unittest.TestCase):
 
     def test_load_with_missing_config(self):
         """Test that Settings.load() handles missing config file gracefully."""
-        with patch.object(Settings, 'CONFIG_PATH', Path('/nonexistent/path/config.json')):
+        with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+            mock_config_path.return_value = Path('/nonexistent/path/config.json')
             settings = Settings()
 
             # Should use defaults when file doesn't exist
@@ -55,7 +66,8 @@ class TestSettings(unittest.TestCase):
             temp_path = f.name
 
         try:
-            with patch.object(Settings, 'CONFIG_PATH', Path(temp_path)):
+            with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+                mock_config_path.return_value = Path(temp_path)
                 settings = Settings()
 
                 # Should use defaults when JSON is invalid
@@ -73,7 +85,8 @@ class TestSettings(unittest.TestCase):
             temp_path = f.name
 
         try:
-            with patch.object(Settings, 'CONFIG_PATH', Path(temp_path)):
+            with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+                mock_config_path.return_value = Path(temp_path)
                 settings = Settings()
 
                 self.assertEqual(settings.theme, "dark")
@@ -86,7 +99,8 @@ class TestSettings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "test_config.json"
 
-            with patch.object(Settings, 'CONFIG_PATH', temp_path):
+            with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+                mock_config_path.return_value = temp_path
                 settings = Settings()
                 settings.theme = "dark"
                 settings.window_geometry = "1024x768"
@@ -104,7 +118,8 @@ class TestSettings(unittest.TestCase):
 
     def test_save_handles_write_errors(self):
         """Test that Settings.save() handles write errors gracefully."""
-        with patch.object(Settings, 'CONFIG_PATH', Path('/invalid/path/config.json')):
+        with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+            mock_config_path.return_value = Path('/invalid/path/config.json')
             settings = Settings()
             settings.theme = "dark"
 
@@ -119,7 +134,8 @@ class TestSettings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / "test_config.json"
 
-            with patch.object(Settings, 'CONFIG_PATH', temp_path):
+            with patch('app.settings.Settings.config_path', new_callable=PropertyMock) as mock_config_path:
+                mock_config_path.return_value = temp_path
                 # Save settings
                 settings1 = Settings()
                 settings1.theme = "dark"

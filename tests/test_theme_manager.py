@@ -1,6 +1,7 @@
 import unittest
 import json
 import tempfile
+import logging
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import tkinter as tk
@@ -15,6 +16,12 @@ class TestThemeManager(unittest.TestCase):
         """Set up test fixtures."""
         self.mock_settings = Mock(spec=Settings)
         self.mock_settings.theme = "light"
+        # Suppress logging
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
 
     def test_initialization_loads_theme(self):
         """Test that ThemeManager initializes and loads theme correctly."""
@@ -37,8 +44,8 @@ class TestThemeManager(unittest.TestCase):
             with open(theme_path, 'w', encoding='utf-8') as f:
                 json.dump(theme_data, f)
 
-            with patch('themes.theme_manager.Path') as mock_path:
-                mock_path.return_value.parent = Path(temp_dir)
+            with patch('themes.theme_manager.get_resource_path') as mock_get_path:
+                mock_get_path.return_value = theme_path
 
                 theme_manager = ThemeManager(self.mock_settings)
 
@@ -57,8 +64,9 @@ class TestThemeManager(unittest.TestCase):
             with open(light_path, 'w', encoding='utf-8') as f:
                 json.dump(light_theme, f)
 
-            with patch('themes.theme_manager.Path') as mock_path:
-                mock_path.return_value.parent = Path(temp_dir)
+            with patch('themes.theme_manager.get_resource_path') as mock_get_path:
+                # First call returns nonexistent path, second call returns fallback path
+                mock_get_path.side_effect = [Path("nonexistent"), light_path]
 
                 theme_manager = ThemeManager(self.mock_settings)
 
@@ -72,8 +80,8 @@ class TestThemeManager(unittest.TestCase):
             with open(theme_path, 'w', encoding='utf-8') as f:
                 f.write("{invalid json")
 
-            with patch('themes.theme_manager.Path') as mock_path:
-                mock_path.return_value.parent = Path(temp_dir)
+            with patch('themes.theme_manager.get_resource_path') as mock_get_path:
+                mock_get_path.return_value = theme_path
 
                 theme_manager = ThemeManager(self.mock_settings)
 
@@ -140,7 +148,9 @@ class TestThemeManager(unittest.TestCase):
         self.mock_settings.theme = "dark"
 
         # Reload should update palette (even if file doesn't exist, it will use defaults)
-        theme_manager.reload()
+        with patch('themes.theme_manager.get_resource_path') as mock_get_path:
+             mock_get_path.return_value = Path("nonexistent")
+             theme_manager.reload()
 
         # Palette should still be valid
         self.assertIsInstance(theme_manager.palette, dict)

@@ -1,24 +1,28 @@
 import logging
 import sys
-from pathlib import Path
+from app.paths import get_user_data_path
 
 def setup_logging():
     """
     Configure logging for the application.
-    Logs to a file in the current working directory (no console output).
+    Logs to a file in the user data directory (no console output).
     """
     # Create a custom logger
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    # File logging - write to current working directory
+    # File logging - write to user data directory
     try:
-        log_file = Path('tango_studio.log')
+        log_dir = get_user_data_path()
+        log_file = log_dir / 'tango_studio.log'
         f_handler = logging.FileHandler(log_file, encoding='utf-8')
         f_handler.setLevel(logging.INFO)
         f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         f_handler.setFormatter(f_format)
         logger.addHandler(f_handler)
+
+        # Log the location for debugging purposes
+        logging.info(f"Logging initialized at {log_file}")
     except Exception:
         # If we can't write to the log file, fall back to console
         c_handler = logging.StreamHandler(sys.stdout)
@@ -26,5 +30,6 @@ def setup_logging():
         c_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         c_handler.setFormatter(c_format)
         logger.addHandler(c_handler)
+        logging.warning("Failed to setup file logging, falling back to console", exc_info=True)
 
-    logging.info("Logging setup complete - writing to file")
+    logging.info("Logging setup complete")
