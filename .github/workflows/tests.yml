@@ -31,6 +31,11 @@ jobs:
           brew install vlc
         fi
       shell: bash
+      if: runner.os != 'Windows'
+
+    - name: Install VLC (Windows)
+      run: choco install vlc -y
+      if: runner.os == 'Windows'
 
     - name: Install dependencies
       run: |

@@ -6,6 +6,24 @@ Provides a simple, stable API to play/pause/stop and emits callbacks when a trac
 
 import logging
 import threading
+import os
+import sys
+from pathlib import Path
+
+# Add project root to DLL search path for libvlc.dll
+# This allows VLC to find libvlc.dll in the project root directory
+if sys.platform == 'win32':
+    # Get the project root (parent of audio/ directory)
+    project_root = Path(__file__).parent.parent
+    # Add to DLL search path (Python 3.8+)
+    if hasattr(os, 'add_dll_directory'):
+        try:
+            os.add_dll_directory(str(project_root))
+        except (OSError, FileNotFoundError):
+            pass
+    # Also add to PATH as fallback for older Python versions
+    os.environ['PATH'] = str(project_root) + os.pathsep + os.environ.get('PATH', '')
+
 import vlc
 from typing import Optional, Callable
 
