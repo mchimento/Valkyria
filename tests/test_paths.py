@@ -31,7 +31,12 @@ class TestPaths(unittest.TestCase):
     def test_get_user_data_path(self):
         """Test user data path generation."""
         path = get_user_data_path()
-        self.assertEqual(path.name, "TangoStudio")
+        # Check for platform-specific directory name
+        import platform
+        if platform.system() == "Windows":
+            self.assertEqual(path.name, "TangoStudio")
+        else:
+            self.assertEqual(path.name, ".tango-studio")
         # It should be an absolute path
         self.assertTrue(path.is_absolute())
 
