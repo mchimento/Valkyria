@@ -1,6 +1,6 @@
 # Tango Studio
 
-A simple audio player built with Python, using Tkinter for the GUI and VLC for playback. Supports playlist management and browsing local audio files.
+A simple audio player which supports playlist management and browsing local audio files.
 
 ## Features
 
@@ -70,5 +70,5 @@ python main.py
 
 ## License
 
-This project is open-source and free to use for educational or personal projects.
+See the [LICENSE](LICENSE) file for details.
 
