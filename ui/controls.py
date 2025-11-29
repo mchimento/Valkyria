@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ControlsBar(ttk.Frame):
     def __init__(self, master, player, state, theme, playlist=None,
-                 tooltip_manager=None, status_callback: Optional[Callable] = None) -> None:
+                 tooltip_manager=None, status_callback: Optional[Callable] = None, settings=None) -> None:
         super().__init__(master)
 
         self.player = player
@@ -20,6 +20,7 @@ class ControlsBar(ttk.Frame):
         self.theme = theme
         self.tooltip_manager = tooltip_manager
         self.status_callback = status_callback
+        self.settings = settings
         self.playlist = playlist
         self.playlist_tree = self.playlist.tree if self.playlist else None
 
@@ -57,11 +58,13 @@ class ControlsBar(ttk.Frame):
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, padx=6)
-        self.volume_var = tk.StringVar(value="Volume: 80%")
+        # Get initial volume from settings or default to 80
+        initial_volume = self.settings.volume if self.settings else 80
+        self.volume_var = tk.StringVar(value=f"Volume: {initial_volume}%")
         ttk.Label(right, textvariable=self.volume_var).pack(side=tk.TOP)
         self.volume = ttk.Scale(right, from_=0, to=100, orient="horizontal",
                                 command=self._on_volume_change)
-        self.volume.set(80)
+        self.volume.set(initial_volume)
         self.volume.pack(side=tk.TOP)
 
         # time updater
@@ -157,6 +160,13 @@ class ControlsBar(ttk.Frame):
     def _on_volume_change(self, val):
         volume_int = int(float(val))
         self.volume_var.set(f"Volume: {volume_int}%")
+        # Save volume to settings
+        if self.settings:
+            self.settings.volume = volume_int
+            try:
+                self.settings.save()
+            except Exception:
+                pass
         try:
             self.player.set_volume(volume_int)
         except Exception:

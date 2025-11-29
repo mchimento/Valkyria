@@ -174,7 +174,8 @@ class MainWindow:
             self.theme,
             self.playlist_view,
             tooltip_manager=self.tooltip_manager,
-            status_callback=self._controls_status_event
+            status_callback=self._controls_status_event,
+            settings=self.settings
         )
         self.controls.configure(padding=(0, 0, 0, 15))
         self.controls.pack(side=tk.BOTTOM, fill=tk.X)

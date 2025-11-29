@@ -14,6 +14,7 @@ class Settings:
     def __init__(self) -> None:
         self.theme: str = "light"
         self.window_geometry: Optional[str] = None
+        self.volume: int = 80  # Default volume level
         self.load()
 
     @property
@@ -29,13 +30,18 @@ class Settings:
                     data = json.load(f)
                 self.theme = data.get("theme", self.theme)
                 self.window_geometry = data.get("window_geometry", self.window_geometry)
+                self.volume = data.get("volume", self.volume)
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
 
     def save(self) -> None:
         """Save settings to the config file."""
         try:
-            data = {"theme": self.theme, "window_geometry": self.window_geometry}
+            data = {
+                "theme": self.theme,
+                "window_geometry": self.window_geometry,
+                "volume": self.volume
+            }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except Exception:
