@@ -32,7 +32,7 @@ class ControlsBar(ttk.Frame):
         left.pack(side=tk.LEFT, padx=6)
 
         # Create a larger font for the button symbols
-        symbol_font = ("Segoe UI", 14, "bold")
+        symbol_font = ("Segoe UI Symbol", 14, "bold")
 
         # Get button colors from theme palette
         palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
@@ -60,7 +60,7 @@ class ControlsBar(ttk.Frame):
         self.control_buttons.append(btn_play)
 
         btn_pause = ttk.Button(left, text="⏸", command=self._on_pause,
-                              style='Control.TButton', width=3)
+                              style='Pause.Control.TButton', width=3)
         btn_pause.pack(side=tk.LEFT, padx=4, pady=2)
         self.control_buttons.append(btn_pause)
 
