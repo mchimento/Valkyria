@@ -64,6 +64,8 @@ class MainWindow:
 
         # Keep UI in sync initially
         self.refresh_all()
+        # Initialize Track Information menu state based on current player status
+        self._update_track_info_state_from_player()
 
         # Ensure player stopped on exit and save geometry
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
@@ -239,19 +241,27 @@ class MainWindow:
         if event_type == "play":
             self._restore_status()
             self._update_menu_state()
+            # Track info should be available while playing
+            self._set_track_info_enabled(True)
         elif event_type == "pause":
             if self.status_var.get().startswith("Pause:"):
                 self._restore_status()
             else:
                 self._restore_status(prefix="Pause")
             self._update_menu_state()
+            # Track info should remain available while paused
+            self._set_track_info_enabled(True)
         elif event_type == "stop":
             if self.status_var.get():
                 self.status_var.set("")
             self.meta_var.set("")
             self._update_menu_state()
+            # Disable Track Information when nothing is playing/paused
+            self._set_track_info_enabled(False)
         elif event_type in ("prev", "next"):
             self._restore_status()
+            # Do not change Track Information availability on prev/next;
+            # just keep playlist/menu state in sync.
             self._update_menu_state()
         elif event_type == "browsed_files" or event_type == "browsed_folder":
             self._set_temporary_status(f"Added {count} file(s) to Songs list")
@@ -285,11 +295,24 @@ class MainWindow:
         playlist_menu_state = tk.NORMAL if has_songs else tk.DISABLED
         menubar.entryconfig(self.playlist_menu_index, state=playlist_menu_state)
 
-        # Track info enabled if playing or paused
-        is_playing = self.player.is_playing()
-        is_paused = self.player.is_paused()
-        track_info_state = tk.NORMAL if (is_playing or is_paused) else tk.DISABLED
-        self.toolsmenu.entryconfig(self.track_info_index, state=track_info_state)
+    def _update_track_info_state_from_player(self):
+        """Set Track Information menu state based on current player status."""
+        try:
+            is_playing = self.player.is_playing()
+            is_paused = self.player.is_paused()
+            state = tk.NORMAL if (is_playing or is_paused) else tk.DISABLED
+            self.toolsmenu.entryconfig(self.track_info_index, state=state)
+        except Exception:
+            # Fail silently; menu state is not critical
+            pass
+
+    def _set_track_info_enabled(self, enabled: bool):
+        """Enable or disable the Track Information menu item explicitly."""
+        try:
+            state = tk.NORMAL if enabled else tk.DISABLED
+            self.toolsmenu.entryconfig(self.track_info_index, state=state)
+        except Exception:
+            pass
 
     # ---------- Checkbutton ----------
     def on_change(self, *args):
