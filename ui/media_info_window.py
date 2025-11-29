@@ -10,8 +10,9 @@ from ui.utils import center_window
 
 
 class MediaInfoWindow:
-    def __init__(self, parent, file_path):
+    def __init__(self, parent, file_path, theme_manager=None):
         self.file_path = file_path
+        self.theme_manager = theme_manager
 
         # Create window
         self.window = tk.Toplevel(parent)
@@ -137,6 +138,14 @@ class MediaInfoWindow:
 
         # Create scrollable text widget
         text = tk.Text(container, wrap=tk.WORD, height=20, width=70)
+
+        # Apply theme if available
+        if self.theme_manager:
+            palette = self.theme_manager.palette
+            bg = palette.get("bg", "#ffffff")
+            fg = palette.get("fg", "#000000")
+            text.configure(bg=bg, fg=fg, insertbackground=fg)
+
         scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=text.yview)
         text.configure(yscrollcommand=scrollbar.set)
 
@@ -179,6 +188,14 @@ class MediaInfoWindow:
 
         # Create scrollable text widget
         text = tk.Text(container, wrap=tk.WORD, height=20, width=70)
+
+        # Apply theme if available
+        if self.theme_manager:
+            palette = self.theme_manager.palette
+            bg = palette.get("bg", "#ffffff")
+            fg = palette.get("fg", "#000000")
+            text.configure(bg=bg, fg=fg, insertbackground=fg)
+
         scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=text.yview)
         text.configure(yscrollcommand=scrollbar.set)
 

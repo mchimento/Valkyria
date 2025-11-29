@@ -348,7 +348,7 @@ class MainWindow:
             return
 
         current_track = self.state.playlist[self.state.current_index]
-        MediaInfoWindow(self.root, current_track)
+        MediaInfoWindow(self.root, current_track, theme_manager=self.theme)
 
     def open_about(self):
         # Create custom dialog to avoid Windows system sound
