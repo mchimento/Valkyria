@@ -96,6 +96,14 @@ class MainWindow:
         self.toolsmenu = tk.Menu(menubar, tearoff=0)
         self.toolsmenu.add_command(label="Track Information", command=self.open_media_info, underline=0)
         self.toolsmenu.add_separator()
+
+        # Audio Device submenu
+        self.audio_device_var = tk.StringVar()
+        self.audio_device_menu = tk.Menu(self.toolsmenu, tearoff=0)
+        self._build_audio_device_menu()
+        self.toolsmenu.add_cascade(label="Audio Device", menu=self.audio_device_menu, underline=0)
+
+        self.toolsmenu.add_separator()
         self.toolsmenu.add_command(label="Preferences", command=self.open_preferences, underline=0)
         menubar.add_cascade(label="Tools", menu=self.toolsmenu, underline=0)
 
@@ -230,9 +238,10 @@ class MainWindow:
         self.filemenu.entryconfig(self.save_playlist_index, state=state)
         self.filemenu.entryconfig(self.save_playlist_as_index, state=state)
 
-        # Track info enabled only if playing
+        # Track info enabled if playing or paused
         is_playing = self.player.is_playing()
-        track_info_state = tk.NORMAL if is_playing else tk.DISABLED
+        is_paused = self.player.is_paused()
+        track_info_state = tk.NORMAL if (is_playing or is_paused) else tk.DISABLED
         self.toolsmenu.entryconfig(self.track_info_index, state=track_info_state)
 
     # ---------- Checkbutton ----------
@@ -304,6 +313,47 @@ class MainWindow:
             self._set_temporary_status("Playlist saved")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save playlist: {e}", parent=self.root)
+
+    def _build_audio_device_menu(self):
+        """Populate the Audio Device submenu with available devices."""
+        # Clear existing items
+        self.audio_device_menu.delete(0, tk.END)
+
+        try:
+            devices = self.player.get_audio_devices()
+
+            if not devices:
+                self.audio_device_menu.add_command(label="No devices found", state=tk.DISABLED)
+                return
+
+            # Set default device as first item
+            default_device_id, default_device_name = devices[0] if devices else ('default', 'Default Audio Device')
+            self.audio_device_var.set(default_device_id)
+
+            # Add each device as a menu item
+            for i, (device_id, device_name) in enumerate(devices):
+                # Mark the first device as system default
+                label = device_name if i > 0 else f"{device_name} (system default)"
+                self.audio_device_menu.add_radiobutton(
+                    label=label,
+                    variable=self.audio_device_var,
+                    value=device_id,
+                    command=lambda dev_id=device_id: self.set_audio_device(dev_id)
+                )
+        except Exception as e:
+            logger.error(f"Failed to build audio device menu: {e}")
+            self.audio_device_menu.add_command(label="Error loading devices", state=tk.DISABLED)
+
+    def set_audio_device(self, device_id: str):
+        """Set the audio output device."""
+        try:
+            self.player.set_audio_device(device_id)
+            device_name = [name for did, name in self.player.get_audio_devices() if did == device_id]
+            device_name = device_name[0] if device_name else device_id
+            self._set_temporary_status(f"Audio device set to: {device_name}")
+        except Exception as e:
+            logger.error(f"Failed to set audio device: {e}")
+            messagebox.showerror("Error", f"Failed to set audio device: {e}", parent=self.root)
 
     def open_preferences(self):
         original_theme = self.settings.theme

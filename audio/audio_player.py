@@ -170,3 +170,79 @@ class AudioPlayer:
         except Exception:
             logger.error("Failed to get track length", exc_info=True)
             return 0
+
+    def get_audio_devices(self) -> list:
+        """
+        Get available audio output devices.
+
+        Returns:
+            List of tuples (device_id, device_name). device_id is the actual VLC device identifier (GUID or similar).
+            The default device has device_id = '__DEFAULT__'.
+        """
+        try:
+            devices = []
+
+            # Get audio output devices from VLC
+            aout = self.player.audio_output_device_enum()
+
+            if aout:
+                device = aout
+                is_first = True
+                while device:
+                    try:
+                        content = device.contents
+                        # Get device description (friendly name)
+                        desc = getattr(content, 'description', None)
+                        # Get device ID (GUID or identifier)
+                        dev_id = getattr(content, 'device', None)
+
+                        if desc:
+                            if isinstance(desc, bytes):
+                                desc = desc.decode('utf-8', errors='ignore')
+
+                            if isinstance(dev_id, bytes):
+                                dev_id = dev_id.decode('utf-8', errors='ignore')
+
+                            # First device with empty ID is the default
+                            if is_first and not dev_id:
+                                device_key = '__DEFAULT__'
+                                is_first = False
+                            else:
+                                device_key = dev_id if dev_id else desc
+
+                            devices.append((device_key, str(desc)))
+
+                        # Move to next device
+                        device = getattr(content, 'next', None)
+                    except Exception:
+                        break
+
+            # If no devices found, return default option
+            if not devices:
+                devices.append(('__DEFAULT__', 'Default Audio Device'))
+
+            return devices
+        except Exception as e:
+            logger.error(f"Failed to get audio devices: {e}")
+            return [('__DEFAULT__', 'Default Audio Device')]
+
+    def set_audio_device(self, device_id: str) -> None:
+        """
+        Set the audio output device.
+
+        Args:
+            device_id: Device ID (GUID or identifier from VLC) or '__DEFAULT__' for system default.
+        """
+        try:
+            if device_id == '__DEFAULT__':
+                # Reset to default by setting empty device ID
+                self.player.audio_output_device_set(None, '')
+            else:
+                # Set using the actual device ID (GUID)
+                # Note: audio_output_device_set requires two parameters: (module, device_id)
+                # We pass None as the module to use the current audio output module
+                self.player.audio_output_device_set(None, device_id)
+
+            logger.info(f"Audio device set to: {device_id}")
+        except Exception as e:
+            logger.error(f"Failed to set audio device to {device_id}: {e}")
