@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
+from ui.utils import center_window
 
 class PreferencesWindow(tk.Toplevel):
     """
@@ -23,6 +24,8 @@ class PreferencesWindow(tk.Toplevel):
         self.geometry("150x150")
         self.resizable(False, False)
         self.transient(master)
+
+        center_window(self, master)
 
         ttk.Label(self, text="Theme").pack(pady=(12, 6))
 

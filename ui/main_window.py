@@ -1,6 +1,4 @@
 """
-Main Window — full wiring of menus, playlist, browser and control buttons.
-
 This module composes the smaller UI components (PlaylistView, BrowserView, ControlsBar)
 and wires them to the AppState, ThemeManager, AudioPlayer and Settings.
 """
@@ -18,6 +16,8 @@ from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
 from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
+from ui.media_info_window import MediaInfoWindow
+from ui.utils import center_window
 
 from mutagen import File as MutagenFile
 
@@ -92,9 +92,15 @@ class MainWindow:
         menubar.add_cascade(label="Playlist", menu=playlist_menu, underline=0)
 
         # Tools menu
-        toolsmenu = tk.Menu(menubar, tearoff=0)
-        toolsmenu.add_command(label="Preferences", command=self.open_preferences, underline=0)
-        menubar.add_cascade(label="Tools", menu=toolsmenu, underline=0)
+        # Tools menu
+        self.toolsmenu = tk.Menu(menubar, tearoff=0)
+        self.toolsmenu.add_command(label="Track Information", command=self.open_media_info, underline=0)
+        self.toolsmenu.add_separator()
+        self.toolsmenu.add_command(label="Preferences", command=self.open_preferences, underline=0)
+        menubar.add_cascade(label="Tools", menu=self.toolsmenu, underline=0)
+
+        # Store index for track info menu item
+        self.track_info_index = 0
 
         # Help menu
         helpmenu = tk.Menu(menubar, tearoff=0)
@@ -184,17 +190,21 @@ class MainWindow:
     def _controls_status_event(self, event_type, count=0):
         if event_type == "play":
             self._restore_status()
+            self._update_menu_state()
         elif event_type == "pause":
             if self.status_var.get().startswith("Pause:"):
                 self._restore_status()
             else:
                 self._restore_status(prefix="Pause")
+            self._update_menu_state()
         elif event_type == "stop":
             if self.status_var.get():
-                self._set_temporary_status(f"Stopped")
+                self.status_var.set("")
             self.meta_var.set("")
+            self._update_menu_state()
         elif event_type in ("prev", "next"):
             self._restore_status()
+            self._update_menu_state()
         elif event_type == "browsed_files" or event_type == "browsed_folder":
             self._set_temporary_status(f"Added {count} file(s) to Songs list")
         elif event_type == "added_to_playlist":
@@ -219,6 +229,11 @@ class MainWindow:
         state = tk.NORMAL if has_songs else tk.DISABLED
         self.filemenu.entryconfig(self.save_playlist_index, state=state)
         self.filemenu.entryconfig(self.save_playlist_as_index, state=state)
+
+        # Track info enabled only if playing
+        is_playing = self.player.is_playing()
+        track_info_state = tk.NORMAL if is_playing else tk.DISABLED
+        self.toolsmenu.entryconfig(self.track_info_index, state=track_info_state)
 
     # ---------- Checkbutton ----------
     def on_change(self, *args):
@@ -309,6 +324,32 @@ class MainWindow:
 
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
 
+    def open_media_info(self):
+        """Open media information dialog for the currently selected track."""
+        if self.state.current_index is None or not self.state.playlist:
+            # Create custom silent dialog instead of messagebox
+            info_window = tk.Toplevel(self.root)
+            info_window.title("Media Information")
+            info_window.geometry("300x100")
+            info_window.resizable(False, False)
+            info_window.transient(self.root)
+            info_window.grab_set()
+
+            content_frame = ttk.Frame(info_window, padding=20)
+            content_frame.pack(fill=tk.BOTH, expand=True)
+
+            ttk.Label(content_frame, text="No track is playing.").pack(pady=10)
+            ttk.Button(content_frame, text="OK", command=info_window.destroy).pack()
+
+            info_window.bind("<Return>", lambda e: info_window.destroy())
+            info_window.bind("<Escape>", lambda e: info_window.destroy())
+
+            center_window(info_window, self.root)
+            return
+
+        current_track = self.state.playlist[self.state.current_index]
+        MediaInfoWindow(self.root, current_track)
+
     def open_about(self):
         # Create custom dialog to avoid Windows system sound
         about_window = tk.Toplevel(self.root)
@@ -360,6 +401,8 @@ class MainWindow:
         # Bind Enter and Escape to close
         about_window.bind("<Return>", lambda e: about_window.destroy())
         about_window.bind("<Escape>", lambda e: about_window.destroy())
+
+        center_window(about_window, self.root)
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")
