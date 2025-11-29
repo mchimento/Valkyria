@@ -12,7 +12,8 @@ class AppState:
     dragged_index: Optional[int] = None
     play_on_double: bool = True
     current_playlist_path: Optional[str] = None
-    
+    repeat_mode: str = 'none'  # 'none', 'one', 'all'
+
     # Track current theme (default to light; will be overridden by apply_theme)
     _current_theme: str = 'light'
 

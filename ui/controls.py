@@ -39,41 +39,45 @@ class ControlsBar(ttk.Frame):
         btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+        
+        # Create custom style for control buttons
+        style = ttk.Style()
+        style.configure('Control.TButton',
+                       font=symbol_font,
+                       padding=0,
+                       width=3,
+                       borderwidth=2,
+                       relief='raised',
+                       background=btn_bg,
+                       foreground=btn_fg)
+        style.map('Control.TButton',
+                 background=[('active', btn_hover), ('pressed', btn_hover)],
+                 relief=[('pressed', 'sunken'), ('!pressed', 'raised')])
 
-        btn_play = tk.Button(left, text="▶", command=lambda: self._on_play(from_user=True),
-                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
-                             bg=btn_bg, fg=btn_fg)
-        btn_play.pack(side=tk.LEFT, padx=4)
+        btn_play = ttk.Button(left, text="▶", command=lambda: self._on_play(from_user=True),
+                             style='Control.TButton', width=3)
+        btn_play.pack(side=tk.LEFT, padx=4, pady=2)
         self.control_buttons.append(btn_play)
-        self._add_button_hover(btn_play, btn_bg, btn_fg, btn_hover)
 
-        btn_pause = tk.Button(left, text="⏸", command=self._on_pause,
-                              width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
-                              bg=btn_bg, fg=btn_fg)
-        btn_pause.pack(side=tk.LEFT, padx=4)
+        btn_pause = ttk.Button(left, text="⏸", command=self._on_pause,
+                              style='Control.TButton', width=3)
+        btn_pause.pack(side=tk.LEFT, padx=4, pady=2)
         self.control_buttons.append(btn_pause)
-        self._add_button_hover(btn_pause, btn_bg, btn_fg, btn_hover)
 
-        btn_prev = tk.Button(left, text="⏮", command=self._on_prev,
-                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
-                             bg=btn_bg, fg=btn_fg)
-        btn_prev.pack(side=tk.LEFT, padx=4)
+        btn_prev = ttk.Button(left, text="⏮", command=self._on_prev,
+                             style='Control.TButton', width=3)
+        btn_prev.pack(side=tk.LEFT, padx=4, pady=2)
         self.control_buttons.append(btn_prev)
-        self._add_button_hover(btn_prev, btn_bg, btn_fg, btn_hover)
 
-        btn_stop = tk.Button(left, text="⏹", command=self._on_stop,
-                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
-                             bg=btn_bg, fg=btn_fg)
-        btn_stop.pack(side=tk.LEFT, padx=4)
+        btn_stop = ttk.Button(left, text="⏹", command=self._on_stop,
+                             style='Control.TButton', width=3)
+        btn_stop.pack(side=tk.LEFT, padx=4, pady=2)
         self.control_buttons.append(btn_stop)
-        self._add_button_hover(btn_stop, btn_bg, btn_fg, btn_hover)
 
-        btn_next = tk.Button(left, text="⏭", command=self._on_next,
-                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
-                             bg=btn_bg, fg=btn_fg)
-        btn_next.pack(side=tk.LEFT, padx=4)
+        btn_next = ttk.Button(left, text="⏭", command=self._on_next,
+                             style='Control.TButton', width=3)
+        btn_next.pack(side=tk.LEFT, padx=4, pady=2)
         self.control_buttons.append(btn_next)
-        self._add_button_hover(btn_next, btn_bg, btn_fg, btn_hover)
 
         if self.tooltip_manager:
             self.tooltip_manager.attach(btn_play, lambda: "Play (Enter)")
@@ -86,7 +90,12 @@ class ControlsBar(ttk.Frame):
         middle = ttk.Frame(self)
         middle.pack(side=tk.LEFT, padx=12)
         self.time_var = tk.StringVar(value="00:00 / 00:00")
-        ttk.Label(middle, textvariable=self.time_var).pack()
+        ttk.Label(middle, textvariable=self.time_var).pack(side=tk.LEFT)
+
+        # Play on double-click checkbutton
+        self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
+        self.play_on_double_var.trace_add('write', lambda *args: self._on_play_on_double_change())
+        ttk.Checkbutton(middle, text="Play on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(side=tk.LEFT, padx=(12, 0))
 
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
@@ -313,6 +322,10 @@ class ControlsBar(ttk.Frame):
                 'normal_fg': btn_fg,
                 'hover_bg': btn_hover
             }
+
+    def _on_play_on_double_change(self):
+        """Handle play_on_double_click setting change."""
+        self.state.play_on_double = self.play_on_double_var.get()
 
     def destroy(self):
         if self._update_id:

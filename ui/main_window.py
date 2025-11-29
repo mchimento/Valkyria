@@ -86,12 +86,49 @@ class MainWindow:
 
         # Playlist menu
         playlist_menu = tk.Menu(menubar, tearoff=0)
-        playlist_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
-        playlist_menu.add_separator()
-        playlist_menu.add_command(label="Clear Playlist", command=self.clear_playlist, underline=0)
+
+        # Playlist Operations submenu
+        operations_menu = tk.Menu(playlist_menu, tearoff=0)
+        operations_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
+        operations_menu.add_command(label="Sort by Name", command=self.sort_playlist_by_name, underline=8)
+        operations_menu.add_separator()
+        operations_menu.add_command(label="Move Up", command=self.move_selected_up, underline=5)
+        operations_menu.add_command(label="Move Down", command=self.move_selected_down, underline=5)
+        operations_menu.add_separator()
+        operations_menu.add_command(label="Remove Selected", command=self.remove_selected_from_playlist, underline=0)
+        operations_menu.add_command(label="Remove All", command=self.clear_playlist, underline=7)
+
+        playlist_menu.add_cascade(label="Operations", menu=operations_menu, underline=0)
+
+        # Repeat Mode submenu
+        self.repeat_mode_var = tk.StringVar(value="none")
+        repeat_menu = tk.Menu(playlist_menu, tearoff=0)
+        repeat_menu.add_radiobutton(label="No Repeat", variable=self.repeat_mode_var, value="none",
+                                    command=lambda: self._set_repeat_mode("none"), underline=0)
+        repeat_menu.add_radiobutton(label="Repeat One", variable=self.repeat_mode_var, value="one",
+                                    command=lambda: self._set_repeat_mode("one"), underline=7)
+        repeat_menu.add_radiobutton(label="Repeat All", variable=self.repeat_mode_var, value="all",
+                                    command=lambda: self._set_repeat_mode("all"), underline=7)
+        playlist_menu.add_cascade(label="Repeat Mode", menu=repeat_menu, underline=0)
+
+        # Store for enable/disable based on playlist state
+        self.playlist_menu_index = menubar.index("end") + 1
         menubar.add_cascade(label="Playlist", menu=playlist_menu, underline=0)
 
-        # Tools menu
+        # View menu
+        view_menu = tk.Menu(menubar, tearoff=0)
+        self.show_playlist_var = tk.BooleanVar(value=True)
+        self.show_browser_var = tk.BooleanVar(value=True)
+        view_menu.add_checkbutton(label="Show Playlist", variable=self.show_playlist_var,
+                                  command=self.toggle_playlist_visibility, underline=5)
+        view_menu.add_checkbutton(label="Show Browser", variable=self.show_browser_var,
+                                  command=self.toggle_browser_visibility, underline=5)
+        view_menu.add_separator()
+        self.always_on_top_var = tk.BooleanVar(value=False)
+        view_menu.add_checkbutton(label="Always on Top", variable=self.always_on_top_var,
+                                  command=self.toggle_always_on_top, underline=0)
+        menubar.add_cascade(label="View", menu=view_menu, underline=0)
+
         # Tools menu
         self.toolsmenu = tk.Menu(menubar, tearoff=0)
         self.toolsmenu.add_command(label="Track Information", command=self.open_media_info, underline=0)
@@ -140,17 +177,13 @@ class MainWindow:
         self.browser_view.pack(fill=tk.BOTH, expand=True)
 
         # Middle: Buttons column
-        mid_frame = ttk.Frame(main, style="TFrame")
-        mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
+        self.mid_frame = ttk.Frame(main, style="TFrame")
+        self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
 
-        ttk.Button(mid_frame, text="Browse Folder", command=self.browser_view.browse_folder).pack(pady=6)
-        ttk.Button(mid_frame, text="Browse Song", command=self.browser_view.browse_files).pack(pady=6)
-        ttk.Button(mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=8)
-        ttk.Button(mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=8)
-
-        self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
-        self.play_on_double_var.trace_add('write', self.on_change)
-        ttk.Checkbutton(mid_frame, text="Play song on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(pady=5)
+        ttk.Button(self.mid_frame, text="Browse Folder", command=self.browser_view.browse_folder).pack(pady=6)
+        ttk.Button(self.mid_frame, text="Browse Song", command=self.browser_view.browse_files).pack(pady=6)
+        ttk.Button(self.mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=8)
+        ttk.Button(self.mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=8)
 
         # Status bar
         self.status_frame = ttk.Frame(self.root, style="StatusBar.TFrame")
@@ -235,8 +268,15 @@ class MainWindow:
         """Enable/disable menu items based on playlist state."""
         has_songs = len(self.state.playlist) > 0
         state = tk.NORMAL if has_songs else tk.DISABLED
+
+        # Save/Load playlist items in Media menu
         self.filemenu.entryconfig(self.save_playlist_index, state=state)
         self.filemenu.entryconfig(self.save_playlist_as_index, state=state)
+
+        # Disable entire Playlist menu when empty
+        menubar = self.root.nametowidget(self.root.cget('menu'))
+        playlist_menu_state = tk.NORMAL if has_songs else tk.DISABLED
+        menubar.entryconfig(self.playlist_menu_index, state=playlist_menu_state)
 
         # Track info enabled if playing or paused
         is_playing = self.player.is_playing()
@@ -496,6 +536,110 @@ class MainWindow:
             self.state.current_index = None
             self.refresh_all()
 
+    # ---------- Repeat Mode ----------
+    def _set_repeat_mode(self, mode):
+        """Set the repeat mode (none, one, all)."""
+        self.state.repeat_mode = mode
+        self._set_temporary_status(f"Repeat: {mode.title()}")
+
+    # ---------- Playlist Operations ----------
+    def remove_selected_from_playlist(self):
+        """Remove selected song from playlist."""
+        if not self.playlist_view or not self.playlist_view.tree:
+            return
+        selected = self.playlist_view.tree.selection()
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select a song to remove.", parent=self.root)
+            return
+
+        for item in selected:
+            idx = self.playlist_view.tree.index(item)
+            if 0 <= idx < len(self.state.playlist):
+                if self.state.current_index == idx:
+                    self.state.current_index = None
+                del self.state.playlist[idx]
+
+        self.refresh_all()
+        self._set_temporary_status(f"Removed {len(selected)} song(s)")
+
+    def move_selected_up(self):
+        """Move selected song up in playlist."""
+        if not self.playlist_view or not self.playlist_view.tree:
+            return
+        selected = self.playlist_view.tree.selection()
+        if not selected or len(selected) != 1:
+            messagebox.showwarning("Selection Error", "Please select exactly one song to move.", parent=self.root)
+            return
+
+        idx = self.playlist_view.tree.index(selected[0])
+        if idx > 0 and idx < len(self.state.playlist):
+            self.state.playlist[idx], self.state.playlist[idx-1] = self.state.playlist[idx-1], self.state.playlist[idx]
+            if self.state.current_index == idx:
+                self.state.current_index = idx - 1
+            elif self.state.current_index == idx - 1:
+                self.state.current_index = idx
+            self.refresh_all()
+
+    def move_selected_down(self):
+        """Move selected song down in playlist."""
+        if not self.playlist_view or not self.playlist_view.tree:
+            return
+        selected = self.playlist_view.tree.selection()
+        if not selected or len(selected) != 1:
+            messagebox.showwarning("Selection Error", "Please select exactly one song to move.", parent=self.root)
+            return
+
+        idx = self.playlist_view.tree.index(selected[0])
+        if idx >= 0 and idx < len(self.state.playlist) - 1:
+            self.state.playlist[idx], self.state.playlist[idx+1] = self.state.playlist[idx+1], self.state.playlist[idx]
+            if self.state.current_index == idx:
+                self.state.current_index = idx + 1
+            elif self.state.current_index == idx + 1:
+                self.state.current_index = idx
+            self.refresh_all()
+
+    def sort_playlist_by_name(self):
+        """Sort playlist by filename."""
+        if not self.state.playlist:
+            messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
+            return
+
+        current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
+        self.state.playlist.sort(key=lambda x: os.path.basename(x).lower())
+
+        if current_path:
+            try:
+                self.state.current_index = self.state.playlist.index(current_path)
+            except ValueError:
+                self.state.current_index = None
+
+        self.refresh_all()
+        self._set_temporary_status("Playlist sorted by name")
+
+    # ---------- Search/Filter ----------
+    # Removed
+
+    # ---------- View Menu ----------
+    def toggle_playlist_visibility(self):
+        """Toggle playlist visibility."""
+        if self.show_playlist_var.get():
+            self.playlist_view.pack(fill=tk.BOTH, expand=True)
+        else:
+            self.playlist_view.pack_forget()
+
+    def toggle_browser_visibility(self):
+        """Toggle browser visibility and mid_frame buttons."""
+        if self.show_browser_var.get():
+            self.browser_view.pack(fill=tk.BOTH, expand=True)
+            self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
+        else:
+            self.browser_view.pack_forget()
+            self.mid_frame.pack_forget()
+
+    def toggle_always_on_top(self):
+        """Toggle always on top window attribute."""
+        self.root.attributes('-topmost', self.always_on_top_var.get())
+
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
     def add_selected_to_playlist(self):
         self.browser_view.add_selected_to_playlist()
@@ -585,20 +729,45 @@ class MainWindow:
 
     def handle_track_end(self):
         """
-        Default behavior: advance to next track if available, otherwise set status.
+        Handle end-of-track based on repeat mode:
+        - 'none': Stop at end of playlist
+        - 'one': Replay current track once, then reset to 'none'
+        - 'all': Loop to beginning of playlist
         """
-        if self.state.current_index is None:
+        if self.state.current_index is None or not self.state.playlist:
             return
-        if self.state.current_index + 1 < len(self.state.playlist):
-            self.state.current_index += 1
+
+        repeat_mode = getattr(self.state, 'repeat_mode', 'none')
+
+        if repeat_mode == 'one':
+            # Replay current track once, then reset to 'none'
             self.refresh_all()
             self.controls.play()
-        else:
-            # end of playlist: stop player
-            try:
-                self.player.stop()
-            except Exception:
-                pass
+            # Reset repeat mode to 'none' after replaying
+            self.state.repeat_mode = 'none'
+            self.repeat_mode_var.set('none')
+            self._set_temporary_status("Repeat: None")
+        elif repeat_mode == 'all':
+            # Loop to beginning
+            if self.state.current_index + 1 < len(self.state.playlist):
+                self.state.current_index += 1
+            else:
+                # End of playlist, loop back to start
+                self.state.current_index = 0
+            self.refresh_all()
+            self.controls.play()
+        else:  # 'none'
+            # Default: advance to next track
+            if self.state.current_index + 1 < len(self.state.playlist):
+                self.state.current_index += 1
+                self.refresh_all()
+                self.controls.play()
+            else:
+                # end of playlist: stop player
+                try:
+                    self.player.stop()
+                except Exception:
+                    pass
 
     # ---------- Status bar helpers ----------
     def _set_temporary_status(self, message, duration=3000):
