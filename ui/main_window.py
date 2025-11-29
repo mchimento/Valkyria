@@ -68,28 +68,43 @@ class MainWindow:
     def _build_menu(self):
         menubar = tk.Menu(self.root)
         # File menu
-        filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Open File...", command=self.open_file)
-        filemenu.add_command(label="Open Folder...", command=self.open_folder)
-        filemenu.add_command(label="Open Playlist (M3U/M3U8)...", command=self.open_playlist)
-        filemenu.add_separator()
-        filemenu.add_command(label="Save Playlist", command=self.save_playlist)
-        filemenu.add_command(label="Save Playlist As...", command=self.save_playlist_as)
-        filemenu.add_separator()
-        filemenu.add_command(label="Preferences", command=self.open_preferences)
-        filemenu.add_separator()
-        filemenu.add_command(label="Quit", command=self._on_quit)
-        menubar.add_cascade(label="Media", menu=filemenu)
+        self.filemenu = tk.Menu(menubar, tearoff=0)
+        self.filemenu.add_command(label="Open File...", command=self.open_file, underline=0)
+        self.filemenu.add_command(label="Open Multiple Files...", command=self.open_files, underline=5)
+        self.filemenu.add_command(label="Open Folder...", command=self.open_folder, underline=5)
+        self.filemenu.add_command(label="Open Playlist (M3U/M3U8)...", command=self.open_playlist, underline=5)
+        self.filemenu.add_separator()
+        self.filemenu.add_command(label="Save Playlist", command=self.save_playlist, underline=0)
+        self.filemenu.add_command(label="Save Playlist As...", command=self.save_playlist_as, underline=14)
+        self.filemenu.add_separator()
+        self.filemenu.add_command(label="Quit", command=self._on_quit, underline=0)
+        menubar.add_cascade(label="Media", menu=self.filemenu, underline=0)
+
+        # Store indices for save menu items (to enable/disable them)
+        self.save_playlist_index = 5  # Index of "Save Playlist" in filemenu
+        self.save_playlist_as_index = 6  # Index of "Save Playlist As..." in filemenu
 
         # Playlist menu
         playlist_menu = tk.Menu(menubar, tearoff=0)
-        playlist_menu.add_command(label="Shuffle", command=self.shuffle_playlist)
-        playlist_menu.add_command(label="Sort Alphabetically", command=self.sort_playlist)
+        playlist_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
         playlist_menu.add_separator()
-        playlist_menu.add_command(label="Clear Playlist", command=self.clear_playlist)
-        menubar.add_cascade(label="Playlist", menu=playlist_menu)
+        playlist_menu.add_command(label="Clear Playlist", command=self.clear_playlist, underline=0)
+        menubar.add_cascade(label="Playlist", menu=playlist_menu, underline=0)
+
+        # Tools menu
+        toolsmenu = tk.Menu(menubar, tearoff=0)
+        toolsmenu.add_command(label="Preferences", command=self.open_preferences, underline=0)
+        menubar.add_cascade(label="Tools", menu=toolsmenu, underline=0)
+
+        # Help menu
+        helpmenu = tk.Menu(menubar, tearoff=0)
+        helpmenu.add_command(label="About", command=self.open_about, underline=0)
+        menubar.add_cascade(label="Help", menu=helpmenu, underline=0)
 
         self.root.config(menu=menubar)
+
+        # Initialize menu state
+        self._update_menu_state()
 
     def _build_layout(self):
         # Main frame
@@ -100,7 +115,7 @@ class MainWindow:
         left_frame = ttk.Frame(main, style="TFrame")
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,6))
 
-        self.playlist_view = PlaylistView(left_frame, self.state, tooltip_manager=self.tooltip_manager, select_callback=self._on_playlist_select)
+        self.playlist_view = PlaylistView(left_frame, self.state, tooltip_manager=self.tooltip_manager, select_callback=self._on_playlist_select, change_callback=self._update_menu_state)
         self.playlist_view.pack(fill=tk.BOTH, expand=True)
 
         # Right: Browser view
@@ -195,6 +210,14 @@ class MainWindow:
     # ---------- Refresh helpers ----------
     def refresh_all(self):
         self.playlist_view.refresh()
+        self._update_menu_state()
+
+    def _update_menu_state(self):
+        """Enable/disable menu items based on playlist state."""
+        has_songs = len(self.state.playlist) > 0
+        state = tk.NORMAL if has_songs else tk.DISABLED
+        self.filemenu.entryconfig(self.save_playlist_index, state=state)
+        self.filemenu.entryconfig(self.save_playlist_as_index, state=state)
 
     # ---------- Checkbutton ----------
     def on_change(self, *args):
@@ -202,7 +225,16 @@ class MainWindow:
 
     # ---------- Menu / File actions ----------
     def open_file(self):
-        paths = filedialog.askopenfilenames(parent=self.root, title="Open Files",
+        path = filedialog.askopenfilename(parent=self.root, title="Open File",
+                                         filetypes=[("Audio files", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("All files", "*.*")])
+        if not path:
+            return
+        self.state.playlist = [path]
+        self.refresh_all()
+        self._restore_status()
+
+    def open_files(self):
+        paths = filedialog.askopenfilenames(parent=self.root, title="Open Multiple Files",
                                             filetypes=[("Audio files", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("All files", "*.*")])
         if not paths:
             return
@@ -276,6 +308,58 @@ class MainWindow:
 
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
 
+    def open_about(self):
+        # Create custom dialog to avoid Windows system sound
+        about_window = tk.Toplevel(self.root)
+        about_window.title("About")
+        about_window.geometry("400x200")
+        about_window.resizable(False, False)
+
+        # Center the window
+        about_window.transient(self.root)
+        about_window.grab_set()
+
+        # Content frame
+        content_frame = ttk.Frame(about_window, padding=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        title_label = ttk.Label(
+            content_frame,
+            text="Tango Studio",
+            font=("TkDefaultFont", 16, "bold")
+        )
+        title_label.pack(pady=(0, 10))
+
+        # Description
+        desc_label = ttk.Label(
+            content_frame,
+            text="A modern audio player built with Python and Tkinter.",
+            justify=tk.CENTER
+        )
+        desc_label.pack(pady=5)
+
+        # Version
+        version_label = ttk.Label(
+            content_frame,
+            text="Version 1.0",
+            justify=tk.CENTER
+        )
+        version_label.pack(pady=5)
+
+        # OK button
+        ok_button = ttk.Button(
+            content_frame,
+            text="OK",
+            command=about_window.destroy
+        )
+        ok_button.pack(pady=(20, 0))
+        ok_button.focus_set()
+
+        # Bind Enter and Escape to close
+        about_window.bind("<Return>", lambda e: about_window.destroy())
+        about_window.bind("<Escape>", lambda e: about_window.destroy())
+
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")
         # Save geometry
@@ -306,18 +390,6 @@ class MainWindow:
                 self.state.current_index = self.state.playlist.index(current_path)
             except ValueError:
                 self.state.current_index = None
-        self.refresh_all()
-
-    def sort_playlist(self):
-        current = None
-        if self.state.current_index is not None and 0 <= self.state.current_index < len(self.state.playlist):
-            current = self.state.playlist[self.state.current_index]
-        self.state.playlist.sort(key=lambda p: os.path.basename(p).lower())
-        # restore current index if possible
-        if current and current in self.state.playlist:
-            self.state.current_index = self.state.playlist.index(current)
-        else:
-            self.state.current_index = None
         self.refresh_all()
 
     def clear_playlist(self):

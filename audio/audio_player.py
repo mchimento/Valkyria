@@ -53,7 +53,8 @@ class AudioPlayer:
             on_track_end: Optional callback function to be called when a track ends.
         """
         # Create a single VLC instance and media_player
-        self.instance = vlc.Instance()
+        # Use --quiet to suppress VLC's startup sound and messages
+        self.instance = vlc.Instance('--quiet', '--no-video')
         self.player = self.instance.media_player_new()
         self.on_track_end = on_track_end
 

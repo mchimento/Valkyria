@@ -4,10 +4,11 @@ import os
 
 
 class PlaylistView(ttk.Frame):
-    def __init__(self, master, state, tooltip_manager=None, select_callback=None):
+    def __init__(self, master, state, tooltip_manager=None, select_callback=None, change_callback=None):
         super().__init__(master)
         self.state = state
         self.select_callback = select_callback
+        self.change_callback = change_callback
         self.tooltip_manager = tooltip_manager
 
         tree_frame = ttk.Frame(self)
@@ -57,7 +58,7 @@ class PlaylistView(ttk.Frame):
             for i in selected_indices:
                 if i < len(children):
                     self.tree.selection_add(children[i])
-        
+
         # Restore the yellow highlight for the currently playing song
         if self.state.current_index is not None:
             self._highlight_current()
@@ -102,6 +103,10 @@ class PlaylistView(ttk.Frame):
                 self.state.current_index -= shift
 
         self.refresh()
+
+        # Notify main window that playlist changed
+        if callable(self.change_callback):
+            self.change_callback()
 
     # ---------- Drag & Drop ----------
     def _on_button_press(self, event):
