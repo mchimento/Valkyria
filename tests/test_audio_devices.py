@@ -165,7 +165,7 @@ class TestAudioDevices(unittest.TestCase):
         player = AudioPlayer()
         # Should not raise, but log error
         player.set_audio_device('{0.0.0}.{invalid-guid}')
-        
+
         mock_player.audio_output_device_set.assert_called_once()
 
     @patch('audio.audio_player.vlc.Instance')

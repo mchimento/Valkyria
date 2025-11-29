@@ -1,11 +1,15 @@
 """Tests for UI menu functionality related to Track Information and Audio Devices."""
 import unittest
 import logging
+import os
 from unittest.mock import Mock, MagicMock, patch
 import tkinter as tk
 
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
+
+# Skip UI tests if running in headless environment (CI/CD)
+HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
 
 
 class TestMainWindowMenus(unittest.TestCase):
@@ -21,6 +25,7 @@ class TestMainWindowMenus(unittest.TestCase):
         """Re-enable logging after tests."""
         logging.disable(logging.NOTSET)
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -35,7 +40,7 @@ class TestMainWindowMenus(unittest.TestCase):
 
         self.mock_theme = MagicMock()
         self.mock_theme.palette = {}
-        
+
         self.mock_player = MagicMock()
         self.mock_player.is_playing.return_value = False
         self.mock_player.is_paused.return_value = False
@@ -51,10 +56,12 @@ class TestMainWindowMenus(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests."""
         try:
-            self.root.destroy()
-        except:
+            if hasattr(self, 'root'):
+                self.root.destroy()
+        except Exception:
             pass
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -66,14 +73,21 @@ class TestMainWindowMenus(unittest.TestCase):
         self.mock_player.is_playing.return_value = False
         self.mock_player.is_paused.return_value = False
 
-        with patch('ui.main_window.tk.Tk', return_value=tk.Tk()):
+        try:
+            root = tk.Tk()
+            self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
-            self.root = main_window.root
 
             # Check track info menu state
             state = main_window.toolsmenu.entryconfig(main_window.track_info_index)['state']
             self.assertEqual(state[4], tk.DISABLED)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -85,14 +99,21 @@ class TestMainWindowMenus(unittest.TestCase):
         self.mock_player.is_playing.return_value = True
         self.mock_player.is_paused.return_value = False
 
-        with patch('ui.main_window.tk.Tk', return_value=tk.Tk()):
+        try:
+            root = tk.Tk()
+            self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
-            self.root = main_window.root
 
             # Check track info menu state
             state = main_window.toolsmenu.entryconfig(main_window.track_info_index)['state']
             self.assertEqual(state[4], tk.NORMAL)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -104,14 +125,21 @@ class TestMainWindowMenus(unittest.TestCase):
         self.mock_player.is_playing.return_value = False
         self.mock_player.is_paused.return_value = True
 
-        with patch('ui.main_window.tk.Tk', return_value=tk.Tk()):
+        try:
+            root = tk.Tk()
+            self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
-            self.root = main_window.root
 
             # Check track info menu state
             state = main_window.toolsmenu.entryconfig(main_window.track_info_index)['state']
             self.assertEqual(state[4], tk.NORMAL)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -120,16 +148,23 @@ class TestMainWindowMenus(unittest.TestCase):
         """Test Audio Device submenu is properly populated with devices."""
         from ui.main_window import MainWindow
 
-        with patch('ui.main_window.tk.Tk', return_value=tk.Tk()):
+        try:
+            root = tk.Tk()
+            self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
-            self.root = main_window.root
 
             # Check that audio device menu has items
             menu_items = main_window.audio_device_menu.index('end')
             self.assertIsNotNone(menu_items)
             # Should have at least 2 items (default + device1)
             self.assertGreaterEqual(menu_items, 1)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -138,15 +173,21 @@ class TestMainWindowMenus(unittest.TestCase):
         """Test setting audio device updates player."""
         from ui.main_window import MainWindow
 
-        with patch('ui.main_window.tk.Tk', return_value=tk.Tk()):
+        try:
+            root = tk.Tk()
+            self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
-            self.root = main_window.root
 
             device_id = '{0.0.0}.{device1}'
             main_window.set_audio_device(device_id)
 
             # Verify player's set_audio_device was called
             self.mock_player.set_audio_device.assert_called_with(device_id)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
 
 if __name__ == '__main__':
