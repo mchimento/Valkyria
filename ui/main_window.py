@@ -142,7 +142,7 @@ class MainWindow:
         )
         self.meta_label.pack(side=tk.BOTTOM, anchor="w", padx=4, pady=(4, 2))
 
-        self.status_var = tk.StringVar(value="Ready")
+        self.status_var = tk.StringVar(value="")
         self.status_label = ttk.Label(
             self.status_frame,
             textvariable=self.status_var,
@@ -169,13 +169,13 @@ class MainWindow:
         if event_type == "play":
             self._restore_status()
         elif event_type == "pause":
-            if self.status_var.get() == "Paused":
+            if self.status_var.get().startswith("Pause:"):
                 self._restore_status()
             else:
-                self.status_var.set("Paused")
-                self.meta_var.set("")
+                self._restore_status(prefix="Pause")
         elif event_type == "stop":
-            self._set_temporary_status(f"Stopped")
+            if self.status_var.get():
+                self._set_temporary_status(f"Stopped")
             self.meta_var.set("")
         elif event_type in ("prev", "next"):
             self._restore_status()
@@ -442,7 +442,7 @@ class MainWindow:
         # Restore after timeout
         self._status_restore_job = self.root.after(duration, self._restore_status)
 
-    def _restore_status(self):
+    def _restore_status(self, prefix="Playing"):
         """
         Restore playing status and populate metadata line.
 
@@ -451,7 +451,7 @@ class MainWindow:
         """
         idx = self.state.current_index
         if idx is None or idx >= len(self.state.playlist):
-            self.status_var.set("Ready")
+            self.status_var.set("")
             self.meta_var.set("")
             return
 
@@ -472,9 +472,9 @@ class MainWindow:
         fmt = meta.get("format")
 
         if artist:
-            self.status_var.set(f"Playing: {title} — {artist}")
+            self.status_var.set(f"{prefix}: {title} — {artist}")
         else:
-            self.status_var.set(f"Playing: {title}")
+            self.status_var.set(f"{prefix}: {title}")
 
         # Build metadata line parts
         parts = []

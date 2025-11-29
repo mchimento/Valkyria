@@ -131,6 +131,19 @@ class AudioPlayer:
             logger.error("Failed to check playback status", exc_info=True)
             return False
 
+    def is_paused(self) -> bool:
+        """
+        Check if audio is currently paused.
+
+        Returns:
+            True if paused, False otherwise.
+        """
+        try:
+            return self.player.get_state() == vlc.State.Paused
+        except Exception:
+            logger.error("Failed to check pause status", exc_info=True)
+            return False
+
     def get_time(self) -> int:
         """
         Get current playback position in milliseconds.

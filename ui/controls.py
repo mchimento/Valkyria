@@ -104,8 +104,9 @@ class ControlsBar(ttk.Frame):
         self._send_status("play")
 
     def _on_pause(self):
-        self.pause()
-        self._send_status("pause")
+        if self.player.is_playing() or self.player.is_paused():
+            self.pause()
+            self._send_status("pause")
 
     def _on_stop(self):
         self.stop()
@@ -118,6 +119,9 @@ class ControlsBar(ttk.Frame):
     def _on_next(self):
         self.next()
         self._send_status("next")
+
+    def play(self):
+        self._on_play(from_user=False)
 
     def pause(self):
         self.player.pause()
