@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('themes/light.json', 'themes'), ('themes/dark.json', 'themes')],
+    datas=[('themes/light.json', 'themes'), ('themes/dark.json', 'themes'), ('plugins', 'plugins')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

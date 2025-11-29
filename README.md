@@ -22,7 +22,7 @@ A simple audio player built with Python, using Tkinter for the GUI and VLC for p
 
 1. Install Python 3.8 or later.
 2. Install VLC media player:
-   - **Windows**: Download from [videolan.org](https://www.videolan.org/vlc/) or use `choco install vlc`
+   - **Windows**: No action required (VLC is bundled with the application).
    - **macOS**: `brew install vlc`
    - **Linux**: `sudo apt-get install vlc` (Ubuntu/Debian) or equivalent for your distribution
 3. Install Python dependencies:
@@ -50,7 +50,7 @@ python main.py
 - Python 3.8+
 - [python-vlc](https://pypi.org/project/python-vlc/) - Python bindings for VLC
 - [mutagen](https://pypi.org/project/mutagen/) - Audio metadata reader
-- VLC media player (must be installed separately)
+- VLC media player (bundled on Windows, must be installed separately on macOS/Linux)
 
 ## File Structure
 
@@ -58,6 +58,7 @@ python main.py
 - `app/`: Core application logic and state management.
 - `ui/`: User interface components (windows, views, controls).
 - `audio/`: Audio playback handling.
+- `plugins/`: Bundled VLC plugins (Windows only).
 - `themes/`: Theme definitions and management.
 - `README.md`: Documentation for the tool.
 

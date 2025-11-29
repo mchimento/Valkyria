@@ -33,10 +33,6 @@ jobs:
       shell: bash
       if: runner.os != 'Windows'
 
-    - name: Install VLC (Windows)
-      run: choco install vlc -y
-      if: runner.os == 'Windows'
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip

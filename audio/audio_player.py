@@ -14,15 +14,29 @@ from pathlib import Path
 # This allows VLC to find libvlc.dll in the project root directory
 if sys.platform == 'win32':
     # Get the project root (parent of audio/ directory)
-    project_root = Path(__file__).parent.parent
+    if getattr(sys, 'frozen', False):
+        project_root = Path(sys._MEIPASS)
+    else:
+        project_root = Path(__file__).parent.parent
+    # Path to the bundled plugins directory
+    plugins_dir = project_root / 'plugins'
+
     # Add to DLL search path (Python 3.8+)
     if hasattr(os, 'add_dll_directory'):
         try:
-            os.add_dll_directory(str(project_root))
+            # We need to add the plugins directory itself where libvlc.dll resides
+            os.add_dll_directory(str(plugins_dir))
         except (OSError, FileNotFoundError):
             pass
-    # Also add to PATH as fallback for older Python versions
-    os.environ['PATH'] = str(project_root) + os.pathsep + os.environ.get('PATH', '')
+
+    # Also add to PATH as fallback for older Python versions and for other dependencies
+    os.environ['PATH'] = str(plugins_dir) + os.pathsep + os.environ.get('PATH', '')
+
+    # Explicitly set the library path for python-vlc
+    os.environ['PYTHON_VLC_LIB_PATH'] = str(plugins_dir / 'libvlc.dll')
+
+    # Set VLC_PLUGIN_PATH to plugins_dir, where libvlc will find the 'plugins' subdirectory
+    os.environ['VLC_PLUGIN_PATH'] = str(plugins_dir)
 
 import vlc
 from typing import Optional, Callable
