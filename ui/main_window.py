@@ -369,6 +369,10 @@ class MainWindow:
             self.palette = self.theme.palette
             self.tooltip_manager.palette = self.palette
 
+            # Update controls bar button colors
+            if hasattr(self, 'controls') and hasattr(self.controls, 'update_theme'):
+                self.controls.update_theme()
+
             # Refresh playlist highlight and UI
             self.refresh_all()
 

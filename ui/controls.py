@@ -24,30 +24,63 @@ class ControlsBar(ttk.Frame):
         self.playlist = playlist
         self.playlist_tree = self.playlist.tree if self.playlist else None
 
+        # Store button references for theme updates and hover behavior
+        self.control_buttons = []
+        self._button_colors = {}  # Store original and hover colors for each button
+
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
 
-        btn_play = ttk.Button(left, text="Play", command=lambda: self._on_play(from_user=True))
+        # Create a larger font for the button symbols
+        symbol_font = ("Segoe UI", 14, "bold")
+
+        # Get button colors from theme palette
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+
+        btn_play = tk.Button(left, text="▶", command=lambda: self._on_play(from_user=True),
+                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
+                             bg=btn_bg, fg=btn_fg)
         btn_play.pack(side=tk.LEFT, padx=4)
+        self.control_buttons.append(btn_play)
+        self._add_button_hover(btn_play, btn_bg, btn_fg, btn_hover)
 
-        btn_pause = ttk.Button(left, text="Pause", command=self._on_pause)
+        btn_pause = tk.Button(left, text="⏸", command=self._on_pause,
+                              width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
+                              bg=btn_bg, fg=btn_fg)
         btn_pause.pack(side=tk.LEFT, padx=4)
+        self.control_buttons.append(btn_pause)
+        self._add_button_hover(btn_pause, btn_bg, btn_fg, btn_hover)
 
-        btn_prev = ttk.Button(left, text="Prev", command=self._on_prev)
+        btn_prev = tk.Button(left, text="⏮", command=self._on_prev,
+                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
+                             bg=btn_bg, fg=btn_fg)
         btn_prev.pack(side=tk.LEFT, padx=4)
+        self.control_buttons.append(btn_prev)
+        self._add_button_hover(btn_prev, btn_bg, btn_fg, btn_hover)
 
-        btn_stop = ttk.Button(left, text="Stop", command=self._on_stop)
+        btn_stop = tk.Button(left, text="⏹", command=self._on_stop,
+                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
+                             bg=btn_bg, fg=btn_fg)
         btn_stop.pack(side=tk.LEFT, padx=4)
+        self.control_buttons.append(btn_stop)
+        self._add_button_hover(btn_stop, btn_bg, btn_fg, btn_hover)
 
-        btn_next = ttk.Button(left, text="Next", command=self._on_next)
+        btn_next = tk.Button(left, text="⏭", command=self._on_next,
+                             width=3, height=1, font=symbol_font, relief=tk.RAISED, bd=1,
+                             bg=btn_bg, fg=btn_fg)
         btn_next.pack(side=tk.LEFT, padx=4)
+        self.control_buttons.append(btn_next)
+        self._add_button_hover(btn_next, btn_bg, btn_fg, btn_hover)
 
         if self.tooltip_manager:
-            self.tooltip_manager.attach(btn_play, lambda: "Play")
-            self.tooltip_manager.attach(btn_pause, lambda: "Pause")
-            self.tooltip_manager.attach(btn_prev, lambda: "Previous Track")
-            self.tooltip_manager.attach(btn_stop, lambda: "Stop")
-            self.tooltip_manager.attach(btn_next, lambda: "Next Track")
+            self.tooltip_manager.attach(btn_play, lambda: "Play (Enter)")
+            self.tooltip_manager.attach(btn_pause, lambda: "Pause/Resume (Space)")
+            self.tooltip_manager.attach(btn_prev, lambda: "Previous Track (←)")
+            self.tooltip_manager.attach(btn_stop, lambda: "Stop (S)")
+            self.tooltip_manager.attach(btn_next, lambda: "Next Track (→)")
 
         # ---------------- TIME LABEL ----------------
         middle = ttk.Frame(self)
@@ -102,6 +135,28 @@ class ControlsBar(ttk.Frame):
         master.bind("<m>", lambda e: self._on_mute_toggle())
         master.bind("<plus>", lambda e: self._volume_step(+5))
         master.bind("<minus>", lambda e: self._volume_step(-5))
+
+    def _add_button_hover(self, button, normal_bg, normal_fg, hover_bg):
+        """Add hover effect to a tk.Button."""
+        self._button_colors[id(button)] = {
+            'normal_bg': normal_bg,
+            'normal_fg': normal_fg,
+            'hover_bg': hover_bg
+        }
+        button.bind("<Enter>", lambda e: self._on_button_enter(button))
+        button.bind("<Leave>", lambda e: self._on_button_leave(button))
+
+    def _on_button_enter(self, button):
+        """Handle mouse entering button."""
+        colors = self._button_colors.get(id(button))
+        if colors:
+            button.configure(bg=colors['hover_bg'])
+
+    def _on_button_leave(self, button):
+        """Handle mouse leaving button."""
+        colors = self._button_colors.get(id(button))
+        if colors:
+            button.configure(bg=colors['normal_bg'])
 
     def _on_play(self, from_user=False):
         if from_user and self.playlist_tree:
@@ -243,6 +298,22 @@ class ControlsBar(ttk.Frame):
         self._update_id = self.after(500, self._schedule_time_update)
 
     # ---------------- CLEANUP ----------------
+    def update_theme(self):
+        """Update button colors when theme changes."""
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+
+        for btn in self.control_buttons:
+            btn.configure(bg=btn_bg, fg=btn_fg)
+            # Update stored colors for hover effects
+            self._button_colors[id(btn)] = {
+                'normal_bg': btn_bg,
+                'normal_fg': btn_fg,
+                'hover_bg': btn_hover
+            }
+
     def destroy(self):
         if self._update_id:
             try:
