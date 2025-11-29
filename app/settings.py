@@ -16,6 +16,8 @@ class Settings:
         self.window_geometry: Optional[str] = None
         self.volume: int = 80  # Default volume level
         self.mute: bool = False  # Mute state
+        self.show_playlist: bool = True  # Show playlist panel
+        self.show_browser: bool = True  # Show browser panel
         self.load()
 
     @property
@@ -33,6 +35,8 @@ class Settings:
                 self.window_geometry = data.get("window_geometry", self.window_geometry)
                 self.volume = data.get("volume", self.volume)
                 self.mute = data.get("mute", self.mute)
+                self.show_playlist = data.get("show_playlist", self.show_playlist)
+                self.show_browser = data.get("show_browser", self.show_browser)
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
 
@@ -43,7 +47,9 @@ class Settings:
                 "theme": self.theme,
                 "window_geometry": self.window_geometry,
                 "volume": self.volume,
-                "mute": self.mute
+                "mute": self.mute,
+                "show_playlist": self.show_playlist,
+                "show_browser": self.show_browser
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)

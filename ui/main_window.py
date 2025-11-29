@@ -52,6 +52,10 @@ class MainWindow:
         self._build_menu()
         self._build_layout()
 
+        # Apply initial visibility from settings for playlist and browser
+        self.toggle_playlist_visibility()
+        self.toggle_browser_visibility()
+
         # Bind custom events from subcomponents
         self.root.bind("<<BrowserAddSelected>>", self._on_browser_add_selected)
         self.root.bind("<<PlaylistDouble>>", self._on_playlist_double)
@@ -117,8 +121,11 @@ class MainWindow:
 
         # View menu
         view_menu = tk.Menu(menubar, tearoff=0)
-        self.show_playlist_var = tk.BooleanVar(value=True)
-        self.show_browser_var = tk.BooleanVar(value=True)
+        # Initialize from settings so the state persists across runs, coercing to bool
+        show_playlist_initial = bool(getattr(self.settings, "show_playlist", True))
+        show_browser_initial = bool(getattr(self.settings, "show_browser", True))
+        self.show_playlist_var = tk.BooleanVar(value=show_playlist_initial)
+        self.show_browser_var = tk.BooleanVar(value=show_browser_initial)
         view_menu.add_checkbutton(label="Show Playlist", variable=self.show_playlist_var,
                                   command=self.toggle_playlist_visibility, underline=5)
         view_menu.add_checkbutton(label="Show Browser", variable=self.show_browser_var,
@@ -159,25 +166,25 @@ class MainWindow:
 
     def _build_layout(self):
         # Main frame
-        main = ttk.Frame(self.root, padding=6, style="TFrame")
-        main.pack(fill=tk.BOTH, expand=True)
+        self.main_frame = ttk.Frame(self.root, padding=6, style="TFrame")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Left: Playlist view
-        left_frame = ttk.Frame(main, style="TFrame")
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,6))
+        self.left_frame = ttk.Frame(self.main_frame, style="TFrame")
+        self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,6))
 
-        self.playlist_view = PlaylistView(left_frame, self.state, tooltip_manager=self.tooltip_manager, select_callback=self._on_playlist_select, change_callback=self._update_menu_state)
+        self.playlist_view = PlaylistView(self.left_frame, self.state, tooltip_manager=self.tooltip_manager, select_callback=self._on_playlist_select, change_callback=self._update_menu_state)
         self.playlist_view.pack(fill=tk.BOTH, expand=True)
 
         # Right: Browser view
-        right_frame = ttk.Frame(main, style="TFrame")
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
+        self.right_frame = ttk.Frame(self.main_frame, style="TFrame")
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
 
-        self.browser_view = BrowserView(right_frame, self.state, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
+        self.browser_view = BrowserView(self.right_frame, self.state, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
         self.browser_view.pack(fill=tk.BOTH, expand=True)
 
         # Middle: Buttons column
-        self.mid_frame = ttk.Frame(main, style="TFrame")
+        self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
 
         ttk.Button(self.mid_frame, text="Browse Folder", command=self.browser_view.browse_folder).pack(pady=6)
@@ -626,15 +633,33 @@ class MainWindow:
             self.playlist_view.pack(fill=tk.BOTH, expand=True)
         else:
             self.playlist_view.pack_forget()
+        # Persist setting
+        if hasattr(self, "settings"):
+            try:
+                self.settings.show_playlist = self.show_playlist_var.get()
+                self.settings.save()
+            except Exception:
+                pass
 
     def toggle_browser_visibility(self):
         """Toggle browser visibility and mid_frame buttons."""
         if self.show_browser_var.get():
+            # Restore right frame and middle buttons
+            self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
             self.browser_view.pack(fill=tk.BOTH, expand=True)
             self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
         else:
+            # Hide browser area entirely so playlist uses full width
             self.browser_view.pack_forget()
+            self.right_frame.pack_forget()
             self.mid_frame.pack_forget()
+        # Persist setting
+        if hasattr(self, "settings"):
+            try:
+                self.settings.show_browser = self.show_browser_var.get()
+                self.settings.save()
+            except Exception:
+                pass
 
     def toggle_always_on_top(self):
         """Toggle always on top window attribute."""
