@@ -15,6 +15,7 @@ class Settings:
         self.theme: str = "light"
         self.window_geometry: Optional[str] = None
         self.volume: int = 80  # Default volume level
+        self.mute: bool = False  # Mute state
         self.load()
 
     @property
@@ -31,6 +32,7 @@ class Settings:
                 self.theme = data.get("theme", self.theme)
                 self.window_geometry = data.get("window_geometry", self.window_geometry)
                 self.volume = data.get("volume", self.volume)
+                self.mute = data.get("mute", self.mute)
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
 
@@ -40,7 +42,8 @@ class Settings:
             data = {
                 "theme": self.theme,
                 "window_geometry": self.window_geometry,
-                "volume": self.volume
+                "volume": self.volume,
+                "mute": self.mute
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)

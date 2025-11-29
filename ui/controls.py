@@ -58,14 +58,36 @@ class ControlsBar(ttk.Frame):
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, padx=6)
-        # Get initial volume from settings or default to 80
+
+        # Get initial volume and mute state from settings
         initial_volume = self.settings.volume if self.settings else 80
+        initial_mute = self.settings.mute if self.settings else False
+
+        # Volume label variable (must be created before slider that uses it)
         self.volume_var = tk.StringVar(value=f"Volume: {initial_volume}%")
-        ttk.Label(right, textvariable=self.volume_var).pack(side=tk.TOP)
-        self.volume = ttk.Scale(right, from_=0, to=100, orient="horizontal",
+
+        # Volume label positioned above the volume slider
+        volume_label = ttk.Label(right, textvariable=self.volume_var)
+        volume_label.pack(side=tk.TOP, padx=(45, 0))
+
+        # Mute button and volume slider in a horizontal frame
+        volume_control_frame = ttk.Frame(right)
+        volume_control_frame.pack(side=tk.TOP)
+
+        # Mute button on the left
+        self.mute_var = tk.BooleanVar(value=initial_mute)
+        self.btn_mute = ttk.Button(volume_control_frame, text=self._get_mute_label(initial_mute),
+                                    command=self._on_mute_toggle, width=3)
+        self.btn_mute.pack(side=tk.LEFT, padx=2)
+
+        if self.tooltip_manager:
+            self.tooltip_manager.attach(self.btn_mute, lambda: self._get_mute_tooltip(initial_mute))
+
+        # Volume slider on the right
+        self.volume = ttk.Scale(volume_control_frame, from_=0, to=100, orient="horizontal",
                                 command=self._on_volume_change)
         self.volume.set(initial_volume)
-        self.volume.pack(side=tk.TOP)
+        self.volume.pack(side=tk.LEFT, padx=5)
 
         # time updater
         self._update_id = None
@@ -77,6 +99,7 @@ class ControlsBar(ttk.Frame):
         master.bind("<Left>", lambda e: self._on_prev())
         master.bind("<Right>", lambda e: self._on_next())
         master.bind("<s>", lambda e: self._on_stop())
+        master.bind("<m>", lambda e: self._on_mute_toggle())
         master.bind("<plus>", lambda e: self._volume_step(+5))
         master.bind("<minus>", lambda e: self._volume_step(-5))
 
@@ -132,6 +155,37 @@ class ControlsBar(ttk.Frame):
 
     def stop(self):
         self.player.stop()
+
+    def _get_mute_label(self, is_muted: bool) -> str:
+        """Get the mute button symbol based on mute state."""
+        return "🔇" if is_muted else "🔊"
+
+    def _get_mute_tooltip(self, is_muted: bool) -> str:
+        """Get the mute button tooltip based on mute state."""
+        return "Muted (M)" if is_muted else "Mute (M)"
+
+    def _on_mute_toggle(self):
+        """Toggle mute state."""
+        current_state = self.player.get_mute_state()
+        new_state = not current_state
+
+        # Update player
+        self.player.set_mute(new_state)
+
+        # Update button label (symbol only)
+        self.btn_mute.config(text=self._get_mute_label(new_state))
+
+        # Update tooltip
+        if self.tooltip_manager:
+            self.tooltip_manager.attach(self.btn_mute, lambda: self._get_mute_tooltip(new_state))
+
+        # Save to settings
+        if self.settings:
+            self.settings.mute = new_state
+            try:
+                self.settings.save()
+            except Exception:
+                pass
 
     def prev(self):
         if self.state.current_index is None:

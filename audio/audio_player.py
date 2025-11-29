@@ -119,6 +119,33 @@ class AudioPlayer:
             except Exception:
                 logger.error(f"Failed to set volume to {val}", exc_info=True)
 
+    def get_mute_state(self) -> bool:
+        """
+        Check if audio is currently muted.
+
+        Returns:
+            True if muted, False otherwise.
+        """
+        try:
+            return bool(self.player.audio_get_mute())
+        except Exception:
+            logger.error("Failed to check mute status", exc_info=True)
+            return False
+
+    def set_mute(self, mute: bool) -> None:
+        """
+        Set mute state.
+
+        Args:
+            mute: True to mute, False to unmute.
+        """
+        with self._lock:
+            try:
+                self.player.audio_set_mute(int(mute))
+                logger.info(f"Mute set to: {mute}")
+            except Exception:
+                logger.error(f"Failed to set mute to {mute}", exc_info=True)
+
     def is_playing(self) -> bool:
         """
         Check if audio is currently playing.

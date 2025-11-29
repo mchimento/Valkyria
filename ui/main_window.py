@@ -426,7 +426,7 @@ class MainWindow:
         # Description
         desc_label = ttk.Label(
             content_frame,
-            text="A modern audio player built with Python and Tkinter.",
+            text="A modern audio player.",
             justify=tk.CENTER
         )
         desc_label.pack(pady=5)
