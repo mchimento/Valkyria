@@ -57,11 +57,12 @@ class ControlsBar(ttk.Frame):
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, padx=6)
-        ttk.Label(right, text="Volume:").pack(side=tk.LEFT)
+        self.volume_var = tk.StringVar(value="Volume: 80%")
+        ttk.Label(right, textvariable=self.volume_var).pack(side=tk.TOP)
         self.volume = ttk.Scale(right, from_=0, to=100, orient="horizontal",
                                 command=self._on_volume_change)
         self.volume.set(80)
-        self.volume.pack(side=tk.LEFT)
+        self.volume.pack(side=tk.TOP)
 
         # time updater
         self._update_id = None
@@ -147,14 +148,17 @@ class ControlsBar(ttk.Frame):
     def _volume_step(self, delta):
         new = max(0, min(100, self.volume.get() + delta))
         self.volume.set(new)
+        self.volume_var.set(f"Volume: {int(new)}%")
         try:
             self.player.set_volume(int(new))
         except Exception:
             pass
 
     def _on_volume_change(self, val):
+        volume_int = int(float(val))
+        self.volume_var.set(f"Volume: {volume_int}%")
         try:
-            self.player.set_volume(int(float(val)))
+            self.player.set_volume(volume_int)
         except Exception:
             pass
 
