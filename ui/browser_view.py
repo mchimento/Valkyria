@@ -45,6 +45,9 @@ class BrowserView(ttk.Frame):
         # ---------- Drag & Drop ----------
         self.playlist_view = None
         self.drag_data = None
+        self.drag_start_pos = None
+        self.suppress_selection = False
+
         self.tree.bind("<ButtonPress-1>", self._on_drag_start)
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
@@ -57,44 +60,73 @@ class BrowserView(ttk.Frame):
         if not item:
             return
 
-        # If the item is not selected, select it (and clear others)
-        if item not in self.tree.selection():
-            self.tree.selection_set(item)
+        self.drag_start_pos = (event.x, event.y)
+        self.drag_data = None
+        self.suppress_selection = False
 
-        # Prepare drag data
-        sels = self.tree.selection()
-        paths = []
-        for s in sels:
-            idx = self.tree.index(s)
-            if 0 <= idx < len(self.state.browser_files):
-                paths.append(self.state.browser_files[idx])
+        # If clicking on an already selected item, we might be starting a drag of multiple items.
+        # We want to prevent the default behavior (which would deselect others) until we know if it's a drag or click.
+        if item in self.tree.selection():
+            self.suppress_selection = True
+            # Return 'break' to prevent Treeview's default selection handler from running now
+            return "break"
 
-        if paths:
-            self.drag_data = {"files": paths}
-            self.winfo_toplevel().configure(cursor="fleur")
+        # If not selected, let default handler run (it will select this item)
+        pass
 
     def _on_drag_motion(self, event):
+        if not self.drag_start_pos:
+            return
+
+        # Check threshold
+        if not self.drag_data:
+            dx = abs(event.x - self.drag_start_pos[0])
+            dy = abs(event.y - self.drag_start_pos[1])
+            if dx < 5 and dy < 5:
+                return
+
+            # Threshold exceeded, start drag
+            # If we suppressed selection, the selection is still intact (multiple items).
+            # If we didn't, the selection is just this item (or whatever default behavior did).
+
+            sels = self.tree.selection()
+            paths = []
+            for s in sels:
+                idx = self.tree.index(s)
+                if 0 <= idx < len(self.state.browser_files):
+                    paths.append(self.state.browser_files[idx])
+
+            if paths:
+                self.drag_data = {"files": paths}
+                self.winfo_toplevel().configure(cursor="fleur")
+
         if not self.drag_data or not self.playlist_view:
             return
 
         # Check if cursor is over the playlist view
-        # We need global coordinates
         x_root, y_root = event.x_root, event.y_root
-
-        # Pass to playlist view to handle visual feedback
         self.playlist_view.handle_external_drag_motion(x_root, y_root, self.drag_data)
 
     def _on_drag_release(self, event):
         self.winfo_toplevel().configure(cursor="")
-        if not self.drag_data:
-            return
+        self.drag_start_pos = None
 
-        if self.playlist_view:
-            x_root, y_root = event.x_root, event.y_root
-            self.playlist_view.handle_external_drop(x_root, y_root, self.drag_data)
-            self.playlist_view.handle_external_drag_leave()
-
-        self.drag_data = None
+        if self.drag_data:
+            # Drag happened
+            if self.playlist_view:
+                x_root, y_root = event.x_root, event.y_root
+                self.playlist_view.handle_external_drop(x_root, y_root, self.drag_data)
+                self.playlist_view.handle_external_drag_leave()
+            self.drag_data = None
+        else:
+            # No drag happened (it was a click)
+            if self.suppress_selection:
+                # We blocked the default selection, so we must manually select the clicked item now
+                # This mimics the behavior: Click on selected group -> Select only clicked item
+                item = self.tree.identify_row(event.y)
+                if item:
+                    self.tree.selection_set(item)
+                    self.tree.focus(item)
 
 
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
