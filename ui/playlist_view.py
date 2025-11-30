@@ -3,6 +3,8 @@ from tkinter import ttk
 import os
 
 
+from ui.utils import get_display_title
+
 class PlaylistView(ttk.Frame):
     def __init__(self, master, state, tooltip_manager=None, select_callback=None, change_callback=None):
         super().__init__(master)
@@ -50,7 +52,7 @@ class PlaylistView(ttk.Frame):
 
         self.tree.delete(*self.tree.get_children())
         for f in self.state.playlist:
-            self.tree.insert('', tk.END, values=(os.path.basename(f), f))
+            self.tree.insert('', tk.END, values=(get_display_title(f), f))
 
         # Restore selection
         if preserve_selection:

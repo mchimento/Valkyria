@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
 
+from ui.utils import get_display_title
+
 class BrowserView(ttk.Frame):
     def __init__(self, master, state, tooltip_manager=None, status_callback=None):
         super().__init__(master)
@@ -56,7 +58,7 @@ class BrowserView(ttk.Frame):
                 if f.lower().endswith(exts):
                     full = os.path.join(root, f)
                     self.state.browser_files.append(full)
-                    self.tree.insert("", "end", values=(f,))
+                    self.tree.insert("", "end", values=(get_display_title(full),))
         if self.state.browser_files:
             self._send_status("browsed_folder", len(self.state.browser_files))
 
@@ -73,7 +75,7 @@ class BrowserView(ttk.Frame):
             if p not in self.state.browser_files:
                 self.state.browser_files.append(p)
                 # insert into browser tree view display directly
-                self.tree.insert("", "end", values=(os.path.basename(p),))
+                self.tree.insert("", "end", values=(get_display_title(p),))
         if self.state.browser_files:
             self._send_status("browsed_files", len(self.state.browser_files))
 
