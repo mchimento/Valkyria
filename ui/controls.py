@@ -24,27 +24,23 @@ class ControlsBar(ttk.Frame):
         self.playlist = playlist
         self.playlist_tree = self.playlist.tree if self.playlist else None
 
-        # Store button references for theme updates and hover behavior
-        self.control_buttons = []
-        self._button_colors = {}  # Store original and hover colors for each button
-
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
 
         # Create a larger font for the button symbols
-        symbol_font = ("Segoe UI Symbol", 14, "bold")
+        symbol_font = ("Segoe UI Symbol", 18, "bold")
 
         # Get button colors from theme palette
         palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
         btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
-        
+
         # Create custom style for control buttons
         style = ttk.Style()
         style.configure('Control.TButton',
                        font=symbol_font,
-                       padding=0,
+                       padding=(2, 2, 2, 6),
                        width=3,
                        borderwidth=2,
                        relief='raised',
@@ -57,27 +53,22 @@ class ControlsBar(ttk.Frame):
         btn_play = ttk.Button(left, text="▶", command=lambda: self._on_play(from_user=True),
                              style='Control.TButton', width=3)
         btn_play.pack(side=tk.LEFT, padx=4, pady=2)
-        self.control_buttons.append(btn_play)
 
         btn_pause = ttk.Button(left, text="⏸", command=self._on_pause,
                               style='Pause.Control.TButton', width=3)
         btn_pause.pack(side=tk.LEFT, padx=4, pady=2)
-        self.control_buttons.append(btn_pause)
 
         btn_prev = ttk.Button(left, text="⏮", command=self._on_prev,
                              style='Control.TButton', width=3)
         btn_prev.pack(side=tk.LEFT, padx=4, pady=2)
-        self.control_buttons.append(btn_prev)
 
         btn_stop = ttk.Button(left, text="⏹", command=self._on_stop,
                              style='Control.TButton', width=3)
         btn_stop.pack(side=tk.LEFT, padx=4, pady=2)
-        self.control_buttons.append(btn_stop)
 
         btn_next = ttk.Button(left, text="⏭", command=self._on_next,
                              style='Control.TButton', width=3)
         btn_next.pack(side=tk.LEFT, padx=4, pady=2)
-        self.control_buttons.append(btn_next)
 
         if self.tooltip_manager:
             self.tooltip_manager.attach(btn_play, lambda: "Play (Enter)")
@@ -145,27 +136,7 @@ class ControlsBar(ttk.Frame):
         master.bind("<plus>", lambda e: self._volume_step(+5))
         master.bind("<minus>", lambda e: self._volume_step(-5))
 
-    def _add_button_hover(self, button, normal_bg, normal_fg, hover_bg):
-        """Add hover effect to a tk.Button."""
-        self._button_colors[id(button)] = {
-            'normal_bg': normal_bg,
-            'normal_fg': normal_fg,
-            'hover_bg': hover_bg
-        }
-        button.bind("<Enter>", lambda e: self._on_button_enter(button))
-        button.bind("<Leave>", lambda e: self._on_button_leave(button))
 
-    def _on_button_enter(self, button):
-        """Handle mouse entering button."""
-        colors = self._button_colors.get(id(button))
-        if colors:
-            button.configure(bg=colors['hover_bg'])
-
-    def _on_button_leave(self, button):
-        """Handle mouse leaving button."""
-        colors = self._button_colors.get(id(button))
-        if colors:
-            button.configure(bg=colors['normal_bg'])
 
     def _on_play(self, from_user=False):
         if from_user and self.playlist_tree:
@@ -314,14 +285,12 @@ class ControlsBar(ttk.Frame):
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
-        for btn in self.control_buttons:
-            btn.configure(bg=btn_bg, fg=btn_fg)
-            # Update stored colors for hover effects
-            self._button_colors[id(btn)] = {
-                'normal_bg': btn_bg,
-                'normal_fg': btn_fg,
-                'hover_bg': btn_hover
-            }
+        style = ttk.Style()
+        style.configure('Control.TButton',
+                       background=btn_bg,
+                       foreground=btn_fg)
+        style.map('Control.TButton',
+                 background=[('active', btn_hover), ('pressed', btn_hover)])
 
     def _on_play_on_double_change(self):
         """Handle play_on_double_click setting change."""
