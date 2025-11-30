@@ -4,14 +4,19 @@ import os
 
 
 from ui.utils import get_display_title
+from ui.playlist_context_menu import PlaylistContextMenu
 
 class PlaylistView(ttk.Frame):
-    def __init__(self, master, state, tooltip_manager=None, select_callback=None, change_callback=None):
+    def __init__(self, master, state, tooltip_manager=None, select_callback=None, change_callback=None,
+                 play_callback=None, metadata_callback=None, remove_callback=None):
         super().__init__(master)
         self.state = state
         self.select_callback = select_callback
         self.change_callback = change_callback
         self.tooltip_manager = tooltip_manager
+        self.play_callback = play_callback
+        self.metadata_callback = metadata_callback
+        self.remove_callback = remove_callback
 
         tree_frame = ttk.Frame(self)
         tree_frame.pack(fill="both", expand=True)
@@ -36,12 +41,21 @@ class PlaylistView(ttk.Frame):
         # Connect scrollbars to Treeview
         vsb.config(command=self.tree.yview)
 
+        # ---------- Context Menu ----------
+        self.context_menu = PlaylistContextMenu(
+            self.tree,
+            play_callback=self._on_context_play,
+            metadata_callback=self._on_context_metadata,
+            remove_callback=self._on_context_remove
+        )
+
         # ---------- Bindings ----------
         self.tree.bind("<Double-1>", self._on_double)
         self.tree.bind("<ButtonPress-1>", self._on_button_press)
         self.tree.bind("<B1-Motion>", self._on_mouse_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_button_release)
         self.tree.bind('<Delete>', self.remove_selected_from_playlist)
+        self.tree.bind("<Button-3>", self._on_right_click)  # Right-click for context menu
 
     # ---------- Refresh ----------
     def refresh(self, preserve_selection=False):
@@ -109,6 +123,41 @@ class PlaylistView(ttk.Frame):
         # Notify main window that playlist changed
         if callable(self.change_callback):
             self.change_callback()
+
+    # ---------- Context Menu ----------
+    def _on_right_click(self, event):
+        """Handle right-click to show context menu."""
+        # Identify which row was clicked
+        item = self.tree.identify_row(event.y)
+        if not item:
+            return
+
+        # Select the clicked item visually
+        self.tree.selection_set(item)
+
+        # Store the index for context menu operations (don't change current_index)
+        self.context_menu_index = self.tree.index(item)
+
+        # Show the context menu
+        self.context_menu.show(event)
+
+    def _on_context_play(self):
+        """Handle Play Song from context menu."""
+        if callable(self.play_callback):
+            # Pass the index of the song to play
+            self.play_callback(self.context_menu_index)
+
+    def _on_context_metadata(self):
+        """Handle Show Metadata from context menu."""
+        if callable(self.metadata_callback):
+            # Pass the index of the song to show metadata for
+            self.metadata_callback(self.context_menu_index)
+
+    def _on_context_remove(self):
+        """Handle Remove from Playlist from context menu."""
+        if callable(self.remove_callback):
+            # Pass the index of the song to remove
+            self.remove_callback(self.context_menu_index)
 
     # ---------- Drag & Drop ----------
     def _on_button_press(self, event):

@@ -96,7 +96,8 @@ class MainWindow:
         # Sort submenu
         sort_menu = tk.Menu(playlist_menu, tearoff=0)
         sort_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
-        sort_menu.add_command(label="Sort by Name", command=self.sort_playlist_by_name, underline=8)
+        sort_menu.add_command(label="Sort by Title", command=self.sort_playlist_by_title, underline=8)
+        sort_menu.add_command(label="Sort by Artist", command=self.sort_playlist_by_artist, underline=8)
         playlist_menu.add_cascade(label="Sort", menu=sort_menu, underline=0)
 
         # Playlist Operations submenu
@@ -177,7 +178,16 @@ class MainWindow:
         self.left_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,6))
 
-        self.playlist_view = PlaylistView(self.left_frame, self.state, tooltip_manager=self.tooltip_manager, select_callback=self._on_playlist_select, change_callback=self._update_menu_state)
+        self.playlist_view = PlaylistView(
+            self.left_frame,
+            self.state,
+            tooltip_manager=self.tooltip_manager,
+            select_callback=self._on_playlist_select,
+            change_callback=self._update_menu_state,
+            play_callback=self._on_context_play_song,
+            metadata_callback=self._on_context_show_metadata,
+            remove_callback=self._on_context_remove_song
+        )
         self.playlist_view.pack(fill=tk.BOTH, expand=True)
 
         # Right: Browser view
@@ -630,7 +640,7 @@ class MainWindow:
                 self.state.current_index = idx
             self.refresh_all()
 
-    def sort_playlist_by_name(self):
+    def sort_playlist_by_title(self):
         """Sort playlist by title (from metadata) or filename."""
         if not self.state.playlist:
             messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
@@ -649,6 +659,35 @@ class MainWindow:
 
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by title")
+
+    def sort_playlist_by_artist(self):
+        """Sort playlist by artist (from metadata) or filename."""
+        if not self.state.playlist:
+            messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
+            return
+
+        def get_artist(file_path):
+            """Get artist from metadata or return empty string."""
+            try:
+                audio = MutagenFile(file_path, easy=True)
+                if audio and audio.tags:
+                    artist = audio.get('artist', [''])[0]
+                    return artist.lower() if artist else ''
+            except Exception:
+                pass
+            return ''
+
+        current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
+        self.state.playlist.sort(key=get_artist)
+
+        if current_path:
+            try:
+                self.state.current_index = self.state.playlist.index(current_path)
+            except ValueError:
+                self.state.current_index = None
+
+        self.refresh_all()
+        self._set_temporary_status("Playlist sorted by artist")
 
     # ---------- Search/Filter ----------
     # Removed
@@ -750,6 +789,44 @@ class MainWindow:
         if 0 <= index < len(self.state.playlist):
             self.state.current_index = index
             # Highlight will be refreshed by playlist_view.refresh when needed
+
+    # ---------- Context Menu Callbacks ----------
+    def _on_context_play_song(self, index):
+        """Play the song at the given index from context menu."""
+        if index is None or not self.state.playlist:
+            return
+        if 0 <= index < len(self.state.playlist):
+            self.state.current_index = index
+            self.refresh_all()
+            self.controls._on_play()
+            self._restore_status()
+
+    def _on_context_show_metadata(self, index):
+        """Show metadata window for the song at the given index from context menu."""
+        if index is None or not self.state.playlist:
+            return
+        if 0 <= index < len(self.state.playlist):
+            track = self.state.playlist[index]
+            MediaInfoWindow(self.root, track, theme_manager=self.theme)
+
+    def _on_context_remove_song(self, index):
+        """Remove the song at the given index from playlist via context menu."""
+        if index is None or not self.state.playlist:
+            return
+        if 0 <= index < len(self.state.playlist):
+            # If this is the currently playing song, stop it
+            if self.state.current_index == index:
+                was_playing = self.player.is_playing()
+                if was_playing:
+                    self.player.stop()
+                self.state.current_index = None
+            elif self.state.current_index is not None and index < self.state.current_index:
+                # Adjust current_index if we're removing a song before it
+                self.state.current_index -= 1
+            del self.state.playlist[index]
+            self.refresh_all()
+            self._set_temporary_status("Removed song from playlist")
+
 
 
     # ---------- Helper to load folder into playlist (open_folder) ----------

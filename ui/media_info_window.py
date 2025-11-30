@@ -16,7 +16,7 @@ class MediaInfoWindow:
 
         # Create window
         self.window = tk.Toplevel(parent)
-        self.window.title("Media Information")
+        self.window.title("Track Information")
         self.window.geometry("600x500")
         self.window.resizable(True, True)
         self.window.transient(parent)
