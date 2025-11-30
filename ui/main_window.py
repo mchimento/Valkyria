@@ -93,17 +93,19 @@ class MainWindow:
         # Playlist menu
         playlist_menu = tk.Menu(menubar, tearoff=0)
 
+        # Sort submenu
+        sort_menu = tk.Menu(playlist_menu, tearoff=0)
+        sort_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
+        sort_menu.add_command(label="Sort by Name", command=self.sort_playlist_by_name, underline=8)
+        playlist_menu.add_cascade(label="Sort", menu=sort_menu, underline=0)
+
         # Playlist Operations submenu
         operations_menu = tk.Menu(playlist_menu, tearoff=0)
-        operations_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
-        operations_menu.add_command(label="Sort by Name", command=self.sort_playlist_by_name, underline=8)
-        operations_menu.add_separator()
         operations_menu.add_command(label="Move Up", command=self.move_selected_up, underline=5)
         operations_menu.add_command(label="Move Down", command=self.move_selected_down, underline=5)
         operations_menu.add_separator()
         operations_menu.add_command(label="Remove Selected", command=self.remove_selected_from_playlist, underline=0)
         operations_menu.add_command(label="Remove All", command=self.clear_playlist, underline=7)
-
         playlist_menu.add_cascade(label="Operations", menu=operations_menu, underline=0)
 
         # Repeat Mode submenu
@@ -629,13 +631,15 @@ class MainWindow:
             self.refresh_all()
 
     def sort_playlist_by_name(self):
-        """Sort playlist by filename."""
+        """Sort playlist by title (from metadata) or filename."""
         if not self.state.playlist:
             messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
             return
 
+        from ui.utils import get_display_title
+
         current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
-        self.state.playlist.sort(key=lambda x: os.path.basename(x).lower())
+        self.state.playlist.sort(key=lambda x: get_display_title(x).lower())
 
         if current_path:
             try:
@@ -644,7 +648,7 @@ class MainWindow:
                 self.state.current_index = None
 
         self.refresh_all()
-        self._set_temporary_status("Playlist sorted by name")
+        self._set_temporary_status("Playlist sorted by title")
 
     # ---------- Search/Filter ----------
     # Removed
