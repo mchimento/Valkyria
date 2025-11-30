@@ -72,9 +72,9 @@ def write_m3u(path: str, entries: List[str]) -> None:
     """
     try:
         with open(path, "w", encoding="utf-8") as f:
-            f.write("#EXTM3U\\n")
+            f.write("#EXTM3U\n")
             for e in entries:
-                f.write(f"#EXTINF:-1,{Path(e).name}\\n{e}\\n")
+                f.write(f"#EXTINF:-1,{Path(e).name}\n{e}\n")
         logger.info(f"Wrote M3U playlist: {path} ({len(entries)} items)")
     except Exception as e:
         logger.error(f"Failed to write M3U file {path}: {e}", exc_info=True)
