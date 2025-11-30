@@ -42,6 +42,61 @@ class BrowserView(ttk.Frame):
         if tooltip_manager:
             tooltip_manager.attach(self.tree, lambda: "Browse and select songs")
 
+        # ---------- Drag & Drop ----------
+        self.playlist_view = None
+        self.drag_data = None
+        self.tree.bind("<ButtonPress-1>", self._on_drag_start)
+        self.tree.bind("<B1-Motion>", self._on_drag_motion)
+        self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
+
+    def set_playlist_view(self, playlist_view):
+        self.playlist_view = playlist_view
+
+    def _on_drag_start(self, event):
+        item = self.tree.identify_row(event.y)
+        if not item:
+            return
+
+        # If the item is not selected, select it (and clear others)
+        if item not in self.tree.selection():
+            self.tree.selection_set(item)
+
+        # Prepare drag data
+        sels = self.tree.selection()
+        paths = []
+        for s in sels:
+            idx = self.tree.index(s)
+            if 0 <= idx < len(self.state.browser_files):
+                paths.append(self.state.browser_files[idx])
+
+        if paths:
+            self.drag_data = {"files": paths}
+            self.winfo_toplevel().configure(cursor="fleur")
+
+    def _on_drag_motion(self, event):
+        if not self.drag_data or not self.playlist_view:
+            return
+
+        # Check if cursor is over the playlist view
+        # We need global coordinates
+        x_root, y_root = event.x_root, event.y_root
+
+        # Pass to playlist view to handle visual feedback
+        self.playlist_view.handle_external_drag_motion(x_root, y_root, self.drag_data)
+
+    def _on_drag_release(self, event):
+        self.winfo_toplevel().configure(cursor="")
+        if not self.drag_data:
+            return
+
+        if self.playlist_view:
+            x_root, y_root = event.x_root, event.y_root
+            self.playlist_view.handle_external_drop(x_root, y_root, self.drag_data)
+            self.playlist_view.handle_external_drag_leave()
+
+        self.drag_data = None
+
+
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
     def browse_folder(self):
         folder = filedialog.askdirectory()

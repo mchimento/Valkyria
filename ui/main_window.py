@@ -197,6 +197,9 @@ class MainWindow:
         self.browser_view = BrowserView(self.right_frame, self.state, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
         self.browser_view.pack(fill=tk.BOTH, expand=True)
 
+        # Link browser view to playlist view for drag and drop
+        self.browser_view.set_playlist_view(self.playlist_view)
+
         # Middle: Buttons column
         self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
@@ -689,9 +692,6 @@ class MainWindow:
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by artist")
 
-    # ---------- Search/Filter ----------
-    # Removed
-
     # ---------- View Menu ----------
     def toggle_playlist_visibility(self):
         """Toggle playlist visibility."""
@@ -788,7 +788,6 @@ class MainWindow:
             return
         if 0 <= index < len(self.state.playlist):
             self.state.current_index = index
-            # Highlight will be refreshed by playlist_view.refresh when needed
 
     # ---------- Context Menu Callbacks ----------
     def _on_context_play_song(self, index):
