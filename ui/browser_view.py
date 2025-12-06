@@ -39,14 +39,14 @@ class BrowserView(ttk.Frame):
         # ---------- Bindings ----------
         self.tree.bind('<Delete>', self.remove_selected_from_browser)
 
-        if tooltip_manager:
-            tooltip_manager.attach(self.tree, lambda: "Browse and select songs")
-
         # ---------- Drag & Drop ----------
         self.playlist_view = None
         self.drag_data = None
         self.drag_start_pos = None
         self.suppress_selection = False
+
+        # Track index for internal live reordering
+        self.internal_drag_index = None
 
         self.tree.bind("<ButtonPress-1>", self._on_drag_start)
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
@@ -55,79 +55,22 @@ class BrowserView(ttk.Frame):
     def set_playlist_view(self, playlist_view):
         self.playlist_view = playlist_view
 
-    def _on_drag_start(self, event):
-        item = self.tree.identify_row(event.y)
-        if not item:
-            return
+    # ---------- Refresh ----------
+    def refresh(self, preserve_selection=False):
+        selected_indices = []
+        if preserve_selection:
+            selected_indices = [self.tree.index(item) for item in self.tree.selection()]
 
-        self.drag_start_pos = (event.x, event.y)
-        self.drag_data = None
-        self.suppress_selection = False
+        self.tree.delete(*self.tree.get_children())
+        for f in self.state.browser_files:
+            self.tree.insert("", "end", values=(get_display_title(f),))
 
-        # If clicking on an already selected item, we might be starting a drag of multiple items.
-        # We want to prevent the default behavior (which would deselect others) until we know if it's a drag or click.
-        if item in self.tree.selection():
-            self.suppress_selection = True
-            # Return 'break' to prevent Treeview's default selection handler from running now
-            return "break"
-
-        # If not selected, let default handler run (it will select this item)
-        pass
-
-    def _on_drag_motion(self, event):
-        if not self.drag_start_pos:
-            return
-
-        # Check threshold
-        if not self.drag_data:
-            dx = abs(event.x - self.drag_start_pos[0])
-            dy = abs(event.y - self.drag_start_pos[1])
-            if dx < 5 and dy < 5:
-                return
-
-            # Threshold exceeded, start drag
-            # If we suppressed selection, the selection is still intact (multiple items).
-            # If we didn't, the selection is just this item (or whatever default behavior did).
-
-            sels = self.tree.selection()
-            paths = []
-            for s in sels:
-                idx = self.tree.index(s)
-                if 0 <= idx < len(self.state.browser_files):
-                    paths.append(self.state.browser_files[idx])
-
-            if paths:
-                self.drag_data = {"files": paths}
-                self.winfo_toplevel().configure(cursor="fleur")
-
-        if not self.drag_data or not self.playlist_view:
-            return
-
-        # Check if cursor is over the playlist view
-        x_root, y_root = event.x_root, event.y_root
-        self.playlist_view.handle_external_drag_motion(x_root, y_root, self.drag_data)
-
-    def _on_drag_release(self, event):
-        self.winfo_toplevel().configure(cursor="")
-        self.drag_start_pos = None
-
-        if self.drag_data:
-            # Drag happened
-            if self.playlist_view:
-                x_root, y_root = event.x_root, event.y_root
-                self.playlist_view.handle_external_drop(x_root, y_root, self.drag_data)
-                self.playlist_view.handle_external_drag_leave()
-            self.drag_data = None
-        else:
-            # No drag happened (it was a click)
-            if self.suppress_selection:
-                # We blocked the default selection, so we must manually select the clicked item now
-                # This mimics the behavior: Click on selected group -> Select only clicked item
-                item = self.tree.identify_row(event.y)
-                if item:
-                    self.tree.selection_set(item)
-                    self.tree.focus(item)
-
+        # Restore selection
+        if preserve_selection:
+            children = self.tree.get_children()
+            for i in selected_indices:
+                if i < len(children):
+                    self.tree.selection_add(children[i])
 
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
     def browse_folder(self):
@@ -138,14 +81,15 @@ class BrowserView(ttk.Frame):
         exts = self.state.exts
 
         self.state.browser_files.clear()
-        self.tree.delete(*self.tree.get_children())
 
         for root, _, files in os.walk(folder):
             for f in files:
                 if f.lower().endswith(exts):
                     full = os.path.join(root, f)
                     self.state.browser_files.append(full)
-                    self.tree.insert("", "end", values=(get_display_title(full),))
+
+        self.refresh()
+
         if self.state.browser_files:
             self._send_status("browsed_folder", len(self.state.browser_files))
 
@@ -159,12 +103,130 @@ class BrowserView(ttk.Frame):
 
         for p in paths:
             p = os.path.abspath(p)
-            if p not in self.state.browser_files:
-                self.state.browser_files.append(p)
-                # insert into browser tree view display directly
-                self.tree.insert("", "end", values=(get_display_title(p),))
+            self.state.browser_files.append(p)
+
+        self.refresh()
+
         if self.state.browser_files:
             self._send_status("browsed_files", len(self.state.browser_files))
+
+    # ---------- Drag & Drop ----------
+    def _on_drag_start(self, event):
+        item = self.tree.identify_row(event.y)
+        if not item:
+            return
+
+        self.drag_start_pos = (event.x, event.y)
+        self.drag_data = None
+        self.suppress_selection = False
+        self.internal_drag_index = None
+
+        # Determine if we are dragging a single item (eligible for internal live reorder)
+        # Note: We rely on _on_drag_motion to initialize internal_drag_index
+
+        if item in self.tree.selection():
+            self.suppress_selection = True
+            return "break"
+        pass
+
+    def _on_drag_motion(self, event):
+        if not self.drag_start_pos:
+            return
+
+        # Check threshold if not already dragging
+        if not self.drag_data:
+            dx = abs(event.x - self.drag_start_pos[0])
+            dy = abs(event.y - self.drag_start_pos[1])
+            if dx < 5 and dy < 5:
+                # Still within threshold, treat as potential click
+                return
+
+            # Start drag
+            sels = self.tree.selection()
+
+            if len(sels) == 1:
+                # We can do internal reorder
+                self.internal_drag_index = self.tree.index(sels[0])
+            else:
+                self.internal_drag_index = None
+
+            paths = []
+            for s in sels:
+                idx = self.tree.index(s)
+                if 0 <= idx < len(self.state.browser_files):
+                    paths.append(self.state.browser_files[idx])
+
+            if paths:
+                self.drag_data = {"files": paths}
+                self.winfo_toplevel().configure(cursor="fleur")
+
+        if not self.drag_data:
+            return
+
+        x_root, y_root = event.x_root, event.y_root
+
+        # 1. External drag to Playlist (delegation)
+        if self.playlist_view:
+             self.playlist_view.handle_external_drag_motion(x_root, y_root, self.drag_data)
+
+        # 2. Internal Live Reorder (if single item)
+        if self.internal_drag_index is not None:
+            # Check if over BrowserView
+            tree_x = self.tree.winfo_rootx()
+            tree_y = self.tree.winfo_rooty()
+            tree_w = self.tree.winfo_width()
+            tree_h = self.tree.winfo_height()
+
+            if (tree_x <= x_root <= tree_x + tree_w and tree_y <= y_root <= tree_y + tree_h):
+                 target_row = self.tree.identify_row(event.y)
+                 if target_row:
+                      target_index = self.tree.index(target_row)
+                      if target_index != self.internal_drag_index:
+                           # Valid swap
+                           if 0 <= target_index < len(self.state.browser_files) and 0 <= self.internal_drag_index < len(self.state.browser_files):
+                                self.state.browser_files.insert(target_index, self.state.browser_files.pop(self.internal_drag_index))
+
+                                # Do NOT preserve selection index, but re-assert it on the new item
+                                self.refresh(preserve_selection=False)
+                                self.internal_drag_index = target_index
+
+                                # Move selection highlight to follow dragged item
+                                children = self.tree.get_children()
+                                if target_index < len(children):
+                                     self.tree.selection_set(children[target_index])
+                                     self.tree.see(children[target_index])
+
+    def _on_drag_release(self, event):
+        self.winfo_toplevel().configure(cursor="")
+        self.drag_start_pos = None
+
+        if self.drag_data:
+            x_root, y_root = event.x_root, event.y_root
+
+            # 1. Check if dropped on playlist
+            if self.playlist_view:
+                 # Check bounds internally in handle_external_drop
+                 self.playlist_view.handle_external_drop(x_root, y_root, self.drag_data)
+
+            # Internal reorder (live) happened during motion, no finalization needed.
+
+            self.drag_data = None
+            self.internal_drag_index = None
+
+            # NOW allow playlist to clean up (reset drop index)
+            if self.playlist_view:
+                 self.playlist_view.handle_external_drag_leave()
+
+        else:
+            # Click (No drag threshold exceeded)
+            if self.playlist_view:
+                 self.playlist_view.handle_external_drag_leave()
+
+            if self.suppress_selection:
+                item = self.tree.identify_row(event.y)
+                if item:
+                    self.tree.selection_set(item)
+                    self.tree.focus(item)
 
     def add_selected_to_playlist(self):
         # Read selection from browser view
