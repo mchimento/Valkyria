@@ -50,19 +50,19 @@ class ControlsBar(ttk.Frame):
                  background=[('active', btn_hover), ('pressed', btn_hover)],
                  relief=[('pressed', 'sunken'), ('!pressed', 'raised')])
 
-        btn_play = ttk.Button(left, text="▶", command=lambda: self._on_play(from_user=True),
+        btn_play = ttk.Button(left, text="⏵", command=lambda: self._on_play(from_user=True),
                              style='Control.TButton', width=3)
         btn_play.pack(side=tk.LEFT, padx=4, pady=2)
 
         btn_pause = ttk.Button(left, text="⏸", command=self._on_pause,
-                              style='Pause.Control.TButton', width=3)
+                              style='Control.TButton', width=3)
         btn_pause.pack(side=tk.LEFT, padx=4, pady=2)
 
         btn_prev = ttk.Button(left, text="⏮", command=self._on_prev,
                              style='Control.TButton', width=3)
         btn_prev.pack(side=tk.LEFT, padx=4, pady=2)
 
-        btn_stop = ttk.Button(left, text="⏹", command=self._on_stop,
+        btn_stop = ttk.Button(left, text="◼", command=self._on_stop,
                              style='Control.TButton', width=3)
         btn_stop.pack(side=tk.LEFT, padx=4, pady=2)
 
