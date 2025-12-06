@@ -181,6 +181,7 @@ class MainWindow:
         self.playlist_view = PlaylistView(
             self.left_frame,
             self.state,
+            self.theme,
             tooltip_manager=self.tooltip_manager,
             select_callback=self._on_playlist_select,
             change_callback=self._update_menu_state,
@@ -459,6 +460,7 @@ class MainWindow:
                 self.controls.update_theme()
 
             # Refresh playlist highlight and UI
+            self.playlist_view.update_theme()
             self.refresh_all()
 
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)

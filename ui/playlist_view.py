@@ -1,3 +1,4 @@
+
 import tkinter as tk
 from tkinter import ttk
 import os
@@ -7,10 +8,11 @@ from ui.utils import get_display_title
 from ui.playlist_context_menu import PlaylistContextMenu
 
 class PlaylistView(ttk.Frame):
-    def __init__(self, master, state, tooltip_manager=None, select_callback=None, change_callback=None,
+    def __init__(self, master, state, theme, tooltip_manager=None, select_callback=None, change_callback=None,
                  play_callback=None, metadata_callback=None, remove_callback=None):
         super().__init__(master)
         self.state = state
+        self.theme = theme
         self.select_callback = select_callback
         self.change_callback = change_callback
         self.tooltip_manager = tooltip_manager
@@ -35,60 +37,7 @@ class PlaylistView(ttk.Frame):
         )
         self.tree.heading("Playlist", text="Playlist")
         self.tree.column('Playlist', width=350, minwidth=100, stretch=True)
-        self.tree.tag_configure('current', background="#FFF59D")
-        self.tree.pack(fill="both", expand=True)
-
-        # Connect scrollbars to Treeview
-        vsb.config(command=self.tree.yview)
-
-        # ---------- Context Menu ----------
-        self.context_menu = PlaylistContextMenu(
-            self.tree,
-            play_callback=self._on_context_play,
-            metadata_callback=self._on_context_metadata,
-            remove_callback=self._on_context_remove
-        )
-
-        # ---------- Bindings ----------
-        self.tree.bind("<Double-1>", self._on_double)
-import tkinter as tk
-from tkinter import ttk
-import os
-
-
-from ui.utils import get_display_title
-from ui.playlist_context_menu import PlaylistContextMenu
-
-class PlaylistView(ttk.Frame):
-    def __init__(self, master, state, tooltip_manager=None, select_callback=None, change_callback=None,
-                 play_callback=None, metadata_callback=None, remove_callback=None):
-        super().__init__(master)
-        self.state = state
-        self.select_callback = select_callback
-        self.change_callback = change_callback
-        self.tooltip_manager = tooltip_manager
-        self.play_callback = play_callback
-        self.metadata_callback = metadata_callback
-        self.remove_callback = remove_callback
-
-        tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill="both", expand=True)
-
-        # Vertical scrollbar
-        vsb = ttk.Scrollbar(tree_frame, orient="vertical")
-        vsb.pack(side="right", fill="y")
-
-        # Treeview
-        self.tree = ttk.Treeview(
-            tree_frame,
-            columns=("Playlist",),
-            show="headings",
-            selectmode="browse",
-            yscrollcommand=vsb.set
-        )
-        self.tree.heading("Playlist", text="Playlist")
-        self.tree.column('Playlist', width=350, minwidth=100, stretch=True)
-        self.tree.tag_configure('current', background="#FFF59D")
+        self.update_theme()
         self.tree.pack(fill="both", expand=True)
 
         # Connect scrollbars to Treeview
@@ -114,12 +63,18 @@ class PlaylistView(ttk.Frame):
         self.drop_indicator = tk.Frame(self.tree, background="red", height=2)
         self.drop_target_index = None
 
+    def update_theme(self):
+        """Update theme-dependent styles."""
+        highlight_color = self.theme.palette.get("highlight", "#FFF59D")
+        self.tree.tag_configure('current', background=highlight_color)
+
     # ---------- Refresh ----------
     def refresh(self, preserve_selection=False):
+
+
         selected_indices = []
         if preserve_selection:
-            selected_items = self.tree.selection()
-            selected_indices = [self.tree.index(i) for i in selected_items]
+            selected_indices = [self.tree.index(item) for item in self.tree.selection()]
 
         self.tree.delete(*self.tree.get_children())
         for f in self.state.playlist:
