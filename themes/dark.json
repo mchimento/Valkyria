@@ -13,5 +13,6 @@
   "button_hover": "#985EFF",
   "status_bg": "#1F1F1F",
   "status_fg": "#FFFFFF",
-  "status_meta_fg": "#E0E0E0"
+  "status_meta_fg": "#E0E0E0",
+  "striped_bg": "#2A2A2B"
 }

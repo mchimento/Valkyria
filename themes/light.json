@@ -13,5 +13,6 @@
   "button_hover": "#106EBE",
   "status_bg": "#FFFFFF",
   "status_fg": "#202020",
-  "status_meta_fg": "#202020"
+  "status_meta_fg": "#202020",
+  "striped_bg": "#FAFAFA"
 }

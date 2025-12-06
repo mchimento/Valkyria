@@ -195,7 +195,7 @@ class MainWindow:
         self.right_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
 
-        self.browser_view = BrowserView(self.right_frame, self.state, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
+        self.browser_view = BrowserView(self.right_frame, self.state, self.theme, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
         self.browser_view.pack(fill=tk.BOTH, expand=True)
 
         # Link browser view to playlist view for drag and drop
@@ -205,10 +205,10 @@ class MainWindow:
         self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
 
-        ttk.Button(self.mid_frame, text="Browse Folder", command=self.browser_view.browse_folder).pack(pady=6)
-        ttk.Button(self.mid_frame, text="Browse Song", command=self.browser_view.browse_files).pack(pady=6)
-        ttk.Button(self.mid_frame, text="<- Add", command=self.add_selected_to_playlist).pack(pady=8)
-        ttk.Button(self.mid_frame, text="<- Add below", command=self.add_selected_below_playlist).pack(pady=8)
+        ttk.Button(self.mid_frame, text="📂 Folder", command=self.browser_view.browse_folder).pack(pady=6)
+        ttk.Button(self.mid_frame, text="🎵 File", command=self.browser_view.browse_files).pack(pady=6)
+        ttk.Button(self.mid_frame, text="➕ Add", command=self.add_selected_to_playlist).pack(pady=8)
+        ttk.Button(self.mid_frame, text="⬇ Add Below", command=self.add_selected_below_playlist).pack(pady=8)
 
         # Status bar
         self.status_frame = ttk.Frame(self.root, style="StatusBar.TFrame")

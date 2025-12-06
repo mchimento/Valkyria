@@ -68,6 +68,9 @@ class PlaylistView(ttk.Frame):
         highlight_color = self.theme.palette.get("highlight", "#FFF59D")
         self.tree.tag_configure('current', background=highlight_color)
 
+        if "striped_bg" in self.theme.palette:
+            self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+
     # ---------- Refresh ----------
     def refresh(self, preserve_selection=False):
 
@@ -77,8 +80,9 @@ class PlaylistView(ttk.Frame):
             selected_indices = [self.tree.index(item) for item in self.tree.selection()]
 
         self.tree.delete(*self.tree.get_children())
-        for f in self.state.playlist:
-            self.tree.insert('', tk.END, values=(get_display_title(f), f))
+        for i, f in enumerate(self.state.playlist):
+            tags = ("striped",) if i % 2 == 1 else ()
+            self.tree.insert('', tk.END, values=(get_display_title(f), f), tags=tags)
 
         # Restore selection
         if preserve_selection:
@@ -92,12 +96,24 @@ class PlaylistView(ttk.Frame):
             self._highlight_current()
 
     def _highlight_current(self):
-        for iid in self.tree.get_children():
-            self.tree.item(iid, tags=())
+        # Reset tags for all items to handle striping correctly
         idx = self.state.current_index
-        if idx is not None and 0 <= idx < len(self.state.playlist):
-            child = self.tree.get_children()[idx]
-            self.tree.item(child, tags=("current",))
+        for i, iid in enumerate(self.tree.get_children()):
+            tags = ["striped"] if i % 2 == 1 else []
+
+            vals = self.tree.item(iid, 'values')
+            if vals and len(vals) >= 2:
+                 path = vals[1]
+                 base_title = get_display_title(path)
+
+                 if idx is not None and i == idx:
+                      new_title = f"▶ {base_title}"
+                      tags.append("current")
+                      self.tree.item(iid, values=(new_title, path))
+                 else:
+                      self.tree.item(iid, values=(base_title, path))
+
+            self.tree.item(iid, tags=tuple(tags))
 
     # ---------- Events ----------
     def _on_double(self, event):

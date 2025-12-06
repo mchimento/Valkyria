@@ -5,9 +5,10 @@ import os
 from ui.utils import get_display_title
 
 class BrowserView(ttk.Frame):
-    def __init__(self, master, state, tooltip_manager=None, status_callback=None):
+    def __init__(self, master, state, theme, tooltip_manager=None, status_callback=None):
         super().__init__(master)
         self.state = state
+        self.theme = theme
         self.tooltip_manager = tooltip_manager
         self.status_callback = status_callback
 
@@ -27,6 +28,10 @@ class BrowserView(ttk.Frame):
         )
         self.tree.column('name', width=350, minwidth=100, stretch=True)
         self.tree.heading("name", text="Songs")
+
+        if "striped_bg" in self.theme.palette:
+            self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+
         self.tree.pack(fill=tk.BOTH, expand=True)
 
         # Connect scrollbars to Treeview
@@ -62,8 +67,9 @@ class BrowserView(ttk.Frame):
             selected_indices = [self.tree.index(item) for item in self.tree.selection()]
 
         self.tree.delete(*self.tree.get_children())
-        for f in self.state.browser_files:
-            self.tree.insert("", "end", values=(get_display_title(f),))
+        for i, f in enumerate(self.state.browser_files):
+            tags = ("striped",) if i % 2 == 1 else ()
+            self.tree.insert("", "end", values=(get_display_title(f),), tags=tags)
 
         # Restore selection
         if preserve_selection:
