@@ -1,17 +1,17 @@
 {
-  "bg": "#121212",
-  "fg": "#E0E0E0",
-  "accent": "#7C4DFF",
-  "accent_hover": "#651FFF",
-  "tree_bg": "#1E1E1E",
-  "tree_header": "#121212",
-  "tooltip_bg": "#333333",
+  "bg": "#1E1E1E",
+  "fg": "#CCCCCB",
+  "accent": "#BB86FC",
+  "accent_hover": "#985EFF",
+  "tree_bg": "#252526",
+  "tree_header": "#1E1E1E",
+  "tooltip_bg": "#2D2D2D",
   "highlight": "#EB5B00",
   "ui_font": "Segoe UI",
-  "button_fg_color": "#FFFFFF",
-  "button_bg_color": "#7C4DFF",
-  "button_hover": "#651FFF",
+  "button_fg_color": "#1E1E1E",
+  "button_bg_color": "#BB86FC",
+  "button_hover": "#985EFF",
   "status_bg": "#1F1F1F",
   "status_fg": "#FFFFFF",
-  "status_meta_fg": "#B0B0B0"
+  "status_meta_fg": "#E0E0E0"
 }

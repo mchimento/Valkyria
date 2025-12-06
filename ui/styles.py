@@ -31,7 +31,7 @@ def apply_base_styles(root: tk.Tk, palette: Dict[str, Any]) -> None:
     style.configure("TLabel", background=palette["bg"], foreground=palette["fg"], font=(palette.get("ui_font", "Segoe UI"), 10))
     style.configure(
         "TButton",
-        padding=6,
+        padding=10,
         background=palette.get("button_bg_color", palette["accent"]),
         foreground=palette.get("button_fg_color", "#ffffff"),
         font=("Segoe UI", 10)
@@ -48,7 +48,7 @@ def apply_base_styles(root: tk.Tk, palette: Dict[str, Any]) -> None:
                     foreground=palette["fg"],
                     fieldbackground=palette["tree_bg"],
                     font=(palette.get("ui_font", "Segoe UI"), 10),
-                    rowheight=25)
+                    rowheight=30)
     style.configure("Treeview.Heading",
                     background=palette.get("tree_header", palette["bg"]),
                     foreground=palette["fg"],
