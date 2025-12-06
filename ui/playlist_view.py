@@ -95,23 +95,46 @@ class PlaylistView(ttk.Frame):
         if self.state.current_index is not None:
             self._highlight_current()
 
+    def _restripe_tree(self):
+        """Re-apply striped tags to all items (fast, no I/O)."""
+        for i, iid in enumerate(self.tree.get_children()):
+            tags = ["striped"] if i % 2 == 1 else []
+            # Preserve 'current' tag if it exists (though _highlight_current handles that better)
+            # Actually _highlight_current is the authority on 'current', so _restripe just does background
+            # But we must be careful not to clobber 'current' if we use this independently.
+            current_tags = list(self.tree.item(iid, "tags"))
+            if "current" in current_tags:
+                tags.append("current")
+            self.tree.item(iid, tags=tuple(tags))
+
     def _highlight_current(self):
         # Reset tags for all items to handle striping correctly
         idx = self.state.current_index
-        for i, iid in enumerate(self.tree.get_children()):
+        children = self.tree.get_children()
+
+        for i, iid in enumerate(children):
             tags = ["striped"] if i % 2 == 1 else []
 
             vals = self.tree.item(iid, 'values')
             if vals and len(vals) >= 2:
+                 current_display = vals[0]
                  path = vals[1]
-                 base_title = get_display_title(path)
+
+                 # Optimization: Don't re-read from disk. Strip existing prefix.
+                 base_title = current_display
+                 if base_title.startswith("▶ "):
+                     base_title = base_title[2:]
 
                  if idx is not None and i == idx:
                       new_title = f"▶ {base_title}"
                       tags.append("current")
-                      self.tree.item(iid, values=(new_title, path))
+                      # Only update if changed to avoid unnecessary redraws
+                      if current_display != new_title:
+                          self.tree.item(iid, values=(new_title, path))
                  else:
-                      self.tree.item(iid, values=(base_title, path))
+                      # Restore clean title if needed
+                      if current_display != base_title:
+                          self.tree.item(iid, values=(base_title, path))
 
             self.tree.item(iid, tags=tuple(tags))
 
@@ -205,7 +228,12 @@ class PlaylistView(ttk.Frame):
         if target_index == self.state.dragged_index:
             return
 
-        # Swap playlist entries
+        # Visual update: Move item in tree
+        # This is strictly visual/internal treeview logic, much faster than refresh
+        dragged_item = self.tree.get_children()[self.state.dragged_index]
+        self.tree.move(dragged_item, '', target_index)
+
+        # Data update: Swap playlist entries
         self.state.playlist.insert(target_index, self.state.playlist.pop(self.state.dragged_index))
 
         # Adjust current index if a song is playing and dragged song is current
@@ -217,20 +245,20 @@ class PlaylistView(ttk.Frame):
             elif target_index <= self.state.current_index < self.state.dragged_index:
                 self.state.current_index += 1
 
-        # Update tree and preserve selection
-        self.refresh(preserve_selection=True)
+        # Re-apply stripes (fast, O(N) visual only)
+        # We don't call refresh() here to avoid I/O
+        self._restripe_tree()
 
-        # Move selection highlight to follow dragged item
-        children = self.tree.get_children()
-        if target_index < len(children):
-            self.tree.selection_set(children[target_index])
-            self.tree.see(children[target_index])
-
-        # Highlight current song if there is one playing
-        if self.state.current_index is not None:
-            self._highlight_current()
-
+        # Update dragged index for next motion
         self.state.dragged_index = target_index
+
+        # Keep selection on the dragged item
+        self.tree.selection_set(dragged_item)
+        self.tree.see(dragged_item)
+
+        # Highlight current song if there is one playing (just updates text/tags, no I/O)
+        if self.state.current_index is not None:
+             self._highlight_current()
 
     def _on_button_release(self, event):
         self.state.dragged_index = None

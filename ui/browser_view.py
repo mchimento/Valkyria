@@ -57,6 +57,11 @@ class BrowserView(ttk.Frame):
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
 
+    def update_theme(self):
+        """Update theme-dependent styles."""
+        if "striped_bg" in self.theme.palette:
+            self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+
     def set_playlist_view(self, playlist_view):
         self.playlist_view = playlist_view
 
@@ -124,16 +129,7 @@ class BrowserView(ttk.Frame):
 
         self.drag_start_pos = (event.x, event.y)
         self.drag_data = None
-        self.suppress_selection = False
         self.internal_drag_index = None
-
-        # Determine if we are dragging a single item (eligible for internal live reorder)
-        # Note: We rely on _on_drag_motion to initialize internal_drag_index
-
-        if item in self.tree.selection():
-            self.suppress_selection = True
-            return "break"
-        pass
 
     def _on_drag_motion(self, event):
         if not self.drag_start_pos:
@@ -190,17 +186,21 @@ class BrowserView(ttk.Frame):
                       if target_index != self.internal_drag_index:
                            # Valid swap
                            if 0 <= target_index < len(self.state.browser_files) and 0 <= self.internal_drag_index < len(self.state.browser_files):
+                                # Visual update: Move item
+                                dragged_item = self.tree.get_children()[self.internal_drag_index]
+                                self.tree.move(dragged_item, '', target_index)
+
+                                # Data update: Swap files
                                 self.state.browser_files.insert(target_index, self.state.browser_files.pop(self.internal_drag_index))
 
-                                # Do NOT preserve selection index, but re-assert it on the new item
-                                self.refresh(preserve_selection=False)
+                                # Re-apply stripes (visual only)
+                                self._restripe_tree()
+
                                 self.internal_drag_index = target_index
 
                                 # Move selection highlight to follow dragged item
-                                children = self.tree.get_children()
-                                if target_index < len(children):
-                                     self.tree.selection_set(children[target_index])
-                                     self.tree.see(children[target_index])
+                                self.tree.selection_set(dragged_item)
+                                self.tree.see(dragged_item)
 
     def _on_drag_release(self, event):
         self.winfo_toplevel().configure(cursor="")
@@ -227,12 +227,6 @@ class BrowserView(ttk.Frame):
             # Click (No drag threshold exceeded)
             if self.playlist_view:
                  self.playlist_view.handle_external_drag_leave()
-
-            if self.suppress_selection:
-                item = self.tree.identify_row(event.y)
-                if item:
-                    self.tree.selection_set(item)
-                    self.tree.focus(item)
 
     def add_selected_to_playlist(self):
         # Read selection from browser view
@@ -281,3 +275,10 @@ class BrowserView(ttk.Frame):
     def _send_status(self, event_type, count=0):
         if self.status_callback:
             self.status_callback(event_type, count)
+
+    def _restripe_tree(self):
+        """Re-apply striped tags to all items (fast, no I/O)."""
+        if "striped_bg" in self.theme.palette:
+            for i, iid in enumerate(self.tree.get_children()):
+                tags = ["striped"] if i % 2 == 1 else []
+                self.tree.item(iid, tags=tuple(tags))

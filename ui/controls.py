@@ -5,6 +5,7 @@ Control bar: Play / Pause / Stop / Prev / Next and Volume + time label
 import logging
 import tkinter as tk
 from tkinter import ttk
+import customtkinter as ctk
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -36,46 +37,41 @@ class ControlsBar(ttk.Frame):
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
-        # Create custom style for control buttons
-        style = ttk.Style()
-        style.configure('Control.TButton',
-                       font=symbol_font,
-                       padding=(2, 2, 2, 6),
-                       width=3,
-                       borderwidth=2,
-                       relief='raised',
-                       background=btn_bg,
-                       foreground=btn_fg)
-        style.map('Control.TButton',
-                 background=[('active', btn_hover), ('pressed', btn_hover)],
-                 relief=[('pressed', 'sunken'), ('!pressed', 'raised')])
+        # Common button config
+        btn_width = 40
+        btn_height = 40
 
-        btn_play = ttk.Button(left, text="⏵", command=lambda: self._on_play(from_user=True),
-                             style='Control.TButton', width=3)
-        btn_play.pack(side=tk.LEFT, padx=4, pady=2)
+        self.btn_play = ctk.CTkButton(left, text="⏵", command=lambda: self._on_play(from_user=True),
+                             font=symbol_font, width=btn_width, height=btn_height,
+                             fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_play.pack(side=tk.LEFT, padx=4, pady=2)
 
-        btn_pause = ttk.Button(left, text="⏸", command=self._on_pause,
-                              style='Control.TButton', width=3)
-        btn_pause.pack(side=tk.LEFT, padx=4, pady=2)
+        self.btn_pause = ctk.CTkButton(left, text="⏸", command=self._on_pause,
+                              font=symbol_font, width=btn_width, height=btn_height,
+                              fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_pause.pack(side=tk.LEFT, padx=4, pady=2)
 
-        btn_prev = ttk.Button(left, text="⏮", command=self._on_prev,
-                             style='Control.TButton', width=3)
-        btn_prev.pack(side=tk.LEFT, padx=4, pady=2)
+        self.btn_prev = ctk.CTkButton(left, text="⏮", command=self._on_prev,
+                             font=symbol_font, width=btn_width, height=btn_height,
+                             fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_prev.pack(side=tk.LEFT, padx=4, pady=2)
 
-        btn_stop = ttk.Button(left, text="◼", command=self._on_stop,
-                             style='Control.TButton', width=3)
-        btn_stop.pack(side=tk.LEFT, padx=4, pady=2)
+        self.btn_stop = ctk.CTkButton(left, text="◼", command=self._on_stop,
+                             font=symbol_font, width=btn_width, height=btn_height,
+                             fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_stop.pack(side=tk.LEFT, padx=4, pady=2)
 
-        btn_next = ttk.Button(left, text="⏭", command=self._on_next,
-                             style='Control.TButton', width=3)
-        btn_next.pack(side=tk.LEFT, padx=4, pady=2)
+        self.btn_next = ctk.CTkButton(left, text="⏭", command=self._on_next,
+                             font=symbol_font, width=btn_width, height=btn_height,
+                             fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_next.pack(side=tk.LEFT, padx=4, pady=2)
 
         if self.tooltip_manager:
-            self.tooltip_manager.attach(btn_play, lambda: "Play (Enter)")
-            self.tooltip_manager.attach(btn_pause, lambda: "Pause/Resume (Space)")
-            self.tooltip_manager.attach(btn_prev, lambda: "Previous Track (←)")
-            self.tooltip_manager.attach(btn_stop, lambda: "Stop (S)")
-            self.tooltip_manager.attach(btn_next, lambda: "Next Track (→)")
+            self.tooltip_manager.attach(self.btn_play, lambda: "Play (Enter)")
+            self.tooltip_manager.attach(self.btn_pause, lambda: "Pause/Resume (Space)")
+            self.tooltip_manager.attach(self.btn_prev, lambda: "Previous Track (←)")
+            self.tooltip_manager.attach(self.btn_stop, lambda: "Stop (S)")
+            self.tooltip_manager.attach(self.btn_next, lambda: "Next Track (→)")
 
         # ---------------- TIME LABEL ----------------
         middle = ttk.Frame(self)
@@ -109,8 +105,9 @@ class ControlsBar(ttk.Frame):
 
         # Mute button on the left
         self.mute_var = tk.BooleanVar(value=initial_mute)
-        self.btn_mute = ttk.Button(volume_control_frame, text=self._get_mute_label(initial_mute),
-                                    command=self._on_mute_toggle, width=3)
+        self.btn_mute = ctk.CTkButton(volume_control_frame, text=self._get_mute_label(initial_mute),
+                                    command=self._on_mute_toggle, font=symbol_font, width=30, height=30,
+                                    fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
         self.btn_mute.pack(side=tk.LEFT, padx=2)
 
         if self.tooltip_manager:
@@ -281,16 +278,21 @@ class ControlsBar(ttk.Frame):
     def update_theme(self):
         """Update button colors when theme changes."""
         palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
-        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
-        btn_fg = palette.get("button_fg_color", "#ffffff")
-        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+        button_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        button_fg = palette.get("button_fg_color", "#ffffff")
+        button_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
-        style = ttk.Style()
-        style.configure('Control.TButton',
-                       background=btn_bg,
-                       foreground=btn_fg)
-        style.map('Control.TButton',
-                 background=[('active', btn_hover), ('pressed', btn_hover)])
+        # Match button corner background to the frame background (from palette)
+        # Use 'bg' key from theme json (fallback based on theme name if needed)
+        is_dark = getattr(self.theme, 'name', 'Dark') == 'Dark' or (self.settings and self.settings.theme == 'Dark')
+        default_bg = "#1E1E1E" if is_dark else "#FAFAFA"
+        frame_bg = palette.get("bg", default_bg)
+
+        for btn in [self.btn_play, self.btn_pause, self.btn_prev, self.btn_stop, self.btn_next, self.btn_mute]:
+            try:
+                btn.configure(fg_color=button_bg, text_color=button_fg, hover_color=button_hover, bg_color=frame_bg)
+            except Exception:
+                pass
 
     def _on_play_on_double_change(self):
         """Handle play_on_double_click setting change."""

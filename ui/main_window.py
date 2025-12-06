@@ -7,10 +7,10 @@ import logging
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import customtkinter as ctk
 import random
 
 from audio import m3u as m3u_module
-
 from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
@@ -23,6 +23,7 @@ from mutagen import File as MutagenFile
 
 logger = logging.getLogger(__name__)
 
+
 class MainWindow:
     def __init__(self, state, theme, player, settings):
         self.state = state
@@ -31,6 +32,7 @@ class MainWindow:
         self.settings = settings
 
         # Root window
+        ctk.set_appearance_mode("Dark" if self.settings.theme == "Dark" else "Light")
         self.root = tk.Tk()
         self.root.title("Tango Studio")
         if self.settings.window_geometry:
@@ -205,10 +207,19 @@ class MainWindow:
         self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
 
-        ttk.Button(self.mid_frame, text="📂 Folder", command=self.browser_view.browse_folder).pack(pady=6)
-        ttk.Button(self.mid_frame, text="🎵 File", command=self.browser_view.browse_files).pack(pady=6)
-        ttk.Button(self.mid_frame, text="➕ Add", command=self.add_selected_to_playlist).pack(pady=8)
-        ttk.Button(self.mid_frame, text="⬇ Add Below", command=self.add_selected_below_playlist).pack(pady=8)
+        # Get button colors from theme palette (already available in self.palette)
+        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
+        btn_fg = self.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
+
+        ctk.CTkButton(self.mid_frame, text="📂 Folder", command=self.browser_view.browse_folder, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
+        ctk.CTkButton(self.mid_frame, text="🎵 File", command=self.browser_view.browse_files, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
+        ctk.CTkButton(self.mid_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
+        ctk.CTkButton(self.mid_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
 
         # Status bar
         self.status_frame = ttk.Frame(self.root, style="StatusBar.TFrame")
@@ -441,6 +452,40 @@ class MainWindow:
             logger.error(f"Failed to set audio device: {e}")
             messagebox.showerror("Error", f"Failed to set audio device: {e}", parent=self.root)
 
+    def update_theme_colors(self):
+        """Update colors for all widgets when theme changes"""
+        # Update CTk appearance
+        ctk.set_appearance_mode("Dark" if self.settings.theme == "Dark" else "Light")
+
+        # Reload styles (standard Tkinter/TTK)
+        self.theme.apply_to(self.root)
+
+        # Update palette references
+        self.palette = self.theme.palette
+        self.tooltip_manager.palette = self.palette
+
+        # Update sidebar buttons specifically
+        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
+        btn_fg = self.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
+
+        for widget in self.mid_frame.winfo_children():
+            if isinstance(widget, ctk.CTkButton):
+                # Ensure button background matches surrounding frame
+                frame_bg = self.palette.get("bg", "#1E1E1E" if self.settings.theme == "Dark" else "#FAFAFA")
+                widget.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+
+        # Update controls
+        self.controls.update_theme()
+
+        # Update PlaylistView colors (handled by styles but might need refresh)
+        self.playlist_view.update_theme()
+        if hasattr(self.browser_view, 'update_theme'):
+             self.browser_view.update_theme()
+
+        # Trigger refresh to redraw
+        self.refresh_all()
+
     def open_preferences(self):
         original_theme = self.settings.theme
 
@@ -448,20 +493,8 @@ class MainWindow:
             # Reload theme
             self.theme.reload()
 
-            # Apply globally to the main window
-            self.theme.apply_to(self.root)
-
-            # Update palette for tooltips and controls
-            self.palette = self.theme.palette
-            self.tooltip_manager.palette = self.palette
-
-            # Update controls bar button colors
-            if hasattr(self, 'controls') and hasattr(self.controls, 'update_theme'):
-                self.controls.update_theme()
-
-            # Refresh playlist highlight and UI
-            self.playlist_view.update_theme()
-            self.refresh_all()
+            # Use centralized update method
+            self.update_theme_colors()
 
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
 
