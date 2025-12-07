@@ -43,7 +43,6 @@ from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
-
 class AudioPlayer:
     def __init__(self, on_track_end: Optional[Callable[[], None]] = None) -> None:
         """
@@ -270,8 +269,6 @@ class AudioPlayer:
                 self.player.audio_output_device_set(None, '')
             else:
                 # Set using the actual device ID (GUID)
-                # Note: audio_output_device_set requires two parameters: (module, device_id)
-                # We pass None as the module to use the current audio output module
                 self.player.audio_output_device_set(None, device_id)
 
             logger.info(f"Audio device set to: {device_id}")
