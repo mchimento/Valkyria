@@ -11,8 +11,9 @@
   "button_fg_color": "#FFFFFF",
   "button_bg_color": "#0078D4",
   "button_hover": "#106EBE",
-  "status_bg": "#FFFFFF",
+  "status_bg": "#E8E8E8",
   "status_fg": "#202020",
-  "status_meta_fg": "#202020",
+  "status_meta_fg": "#505050",
+  "status_border": "#D0D0D0",
   "striped_bg": "#FAFAFA"
 }

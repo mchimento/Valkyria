@@ -18,6 +18,7 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.utils import center_window
+from ui.custom_menu_bar import CustomMenuBar
 
 from mutagen import File as MutagenFile
 
@@ -50,9 +51,12 @@ class MainWindow:
         # Tooltip manager (shared)
         self.tooltip_manager = TooltipManager(self.root, self.palette)
 
-        # Build UI
+        # Build UI - menu first so it's at the top
         self._build_menu()
         self._build_layout()
+
+        # Ensure no default menu bar is shown
+        self.root.config(menu="")
 
         # Apply initial visibility from settings for playlist and browser
         self.toggle_playlist_visibility()
@@ -74,139 +78,109 @@ class MainWindow:
 
     # ---------- Build UI ----------
     def _build_menu(self):
-        menubar = tk.Menu(self.root)
-        # File menu
-        self.filemenu = tk.Menu(menubar, tearoff=0)
-        self.filemenu.add_command(label="Open File...", command=self.open_file, underline=0)
-        self.filemenu.add_command(label="Open Multiple Files...", command=self.open_files, underline=5)
-        self.filemenu.add_command(label="Open Folder...", command=self.open_folder, underline=5)
-        self.filemenu.add_command(label="Open Playlist (M3U/M3U8)...", command=self.open_playlist, underline=5)
-        self.filemenu.add_separator()
-        self.filemenu.add_command(label="Save Playlist", command=self.save_playlist, underline=0)
-        self.filemenu.add_command(label="Save Playlist As...", command=self.save_playlist_as, underline=14)
-        self.filemenu.add_separator()
-        self.filemenu.add_command(label="Quit", command=self._on_quit, underline=0)
-        menubar.add_cascade(label="Media", menu=self.filemenu, underline=0)
+        # Create custom menu bar and pack it at the top
+        self.menubar = CustomMenuBar(self.root, self.theme)
+        self.menubar.pack(side=tk.TOP, fill=tk.X)
 
-        # Store indices for save menu items (to enable/disable them)
-        self.save_playlist_index = 5  # Index of "Save Playlist" in filemenu
-        self.save_playlist_as_index = 6  # Index of "Save Playlist As..." in filemenu
-
-        # Playlist menu
-        playlist_menu = tk.Menu(menubar, tearoff=0)
-
-        # Sort submenu
-        sort_menu = tk.Menu(playlist_menu, tearoff=0)
-        sort_menu.add_command(label="Shuffle", command=self.shuffle_playlist, underline=0)
-        sort_menu.add_command(label="Sort by Title", command=self.sort_playlist_by_title, underline=8)
-        sort_menu.add_command(label="Sort by Artist", command=self.sort_playlist_by_artist, underline=8)
-        playlist_menu.add_cascade(label="Sort", menu=sort_menu, underline=0)
-
-        # Playlist Operations submenu
-        operations_menu = tk.Menu(playlist_menu, tearoff=0)
-        operations_menu.add_command(label="Move Up", command=self.move_selected_up, underline=5)
-        operations_menu.add_command(label="Move Down", command=self.move_selected_down, underline=5)
-        operations_menu.add_separator()
-        operations_menu.add_command(label="Remove Selected", command=self.remove_selected_from_playlist, underline=0)
-        operations_menu.add_command(label="Remove All", command=self.clear_playlist, underline=7)
-        playlist_menu.add_cascade(label="Operations", menu=operations_menu, underline=0)
-
-        # Repeat Mode submenu
-        self.repeat_mode_var = tk.StringVar(value="none")
-        repeat_menu = tk.Menu(playlist_menu, tearoff=0)
-        repeat_menu.add_radiobutton(label="No Repeat", variable=self.repeat_mode_var, value="none",
-                                    command=lambda: self._set_repeat_mode("none"), underline=0)
-        repeat_menu.add_radiobutton(label="Repeat One", variable=self.repeat_mode_var, value="one",
-                                    command=lambda: self._set_repeat_mode("one"), underline=7)
-        repeat_menu.add_radiobutton(label="Repeat All", variable=self.repeat_mode_var, value="all",
-                                    command=lambda: self._set_repeat_mode("all"), underline=7)
-        playlist_menu.add_cascade(label="Repeat Mode", menu=repeat_menu, underline=0)
-
-        # Store for enable/disable based on playlist state
-        self.playlist_menu_index = menubar.index("end") + 1
-        menubar.add_cascade(label="Playlist", menu=playlist_menu, underline=0)
-
-        # View menu
-        view_menu = tk.Menu(menubar, tearoff=0)
-        # Initialize from settings so the state persists across runs, coercing to bool
+        # Initialize variables for checkbuttons and radiobuttons
         show_playlist_initial = bool(getattr(self.settings, "show_playlist", True))
         show_browser_initial = bool(getattr(self.settings, "show_browser", True))
         self.show_playlist_var = tk.BooleanVar(value=show_playlist_initial)
         self.show_browser_var = tk.BooleanVar(value=show_browser_initial)
-        view_menu.add_checkbutton(label="Show Playlist", variable=self.show_playlist_var,
-                                  command=self.toggle_playlist_visibility, underline=5)
-        view_menu.add_checkbutton(label="Show Browser", variable=self.show_browser_var,
-                                  command=self.toggle_browser_visibility, underline=5)
-        view_menu.add_separator()
         self.always_on_top_var = tk.BooleanVar(value=False)
-        view_menu.add_checkbutton(label="Always on Top", variable=self.always_on_top_var,
-                                  command=self.toggle_always_on_top, underline=0)
-        menubar.add_cascade(label="View", menu=view_menu, underline=0)
+        self.repeat_mode_var = tk.StringVar(value="none")
+        self.audio_device_var = tk.StringVar()
+
+        # Store menu item references for state management
+        self.menu_item_refs = {}
+
+        # Media menu
+        media_items = [
+            {"label": "Open File...", "command": self.open_file},
+            {"label": "Open Multiple Files...", "command": self.open_files},
+            {"label": "Open Folder...", "command": self.open_folder},
+            {"label": "Open Playlist (M3U/M3U8)...", "command": self.open_playlist},
+            {"separator": True},
+            {"label": "Save Playlist", "command": self.save_playlist, "ref": "save_playlist"},
+            {"label": "Save Playlist As...", "command": self.save_playlist_as, "ref": "save_playlist_as"},
+            {"separator": True},
+            {"label": "Quit", "command": self._on_quit, "accelerator": "Alt+F4"}
+        ]
+        self.menubar.add_menu("Media", media_items)
+        self.menu_item_refs["save_playlist"] = media_items[5]
+        self.menu_item_refs["save_playlist_as"] = media_items[6]
+
+        # Playlist menu
+        sort_submenu = [
+            {"label": "Shuffle", "command": self.shuffle_playlist},
+            {"label": "Sort by Title", "command": self.sort_playlist_by_title},
+            {"label": "Sort by Artist", "command": self.sort_playlist_by_artist}
+        ]
+
+        operations_submenu = [
+            {"label": "Move Up", "command": self.move_selected_up},
+            {"label": "Move Down", "command": self.move_selected_down},
+            {"separator": True},
+            {"label": "Remove Selected", "command": self.remove_selected_from_playlist},
+            {"label": "Remove All", "command": self.clear_playlist}
+        ]
+
+        repeat_submenu = [
+            {"label": "No Repeat", "radiobutton": True, "variable": self.repeat_mode_var,
+             "value": "none", "command": lambda: self._set_repeat_mode("none")},
+            {"label": "Repeat One", "radiobutton": True, "variable": self.repeat_mode_var,
+             "value": "one", "command": lambda: self._set_repeat_mode("one")},
+            {"label": "Repeat All", "radiobutton": True, "variable": self.repeat_mode_var,
+             "value": "all", "command": lambda: self._set_repeat_mode("all")}
+        ]
+
+        playlist_items = [
+            {"label": "Sort", "submenu": sort_submenu},
+            {"label": "Operations", "submenu": operations_submenu},
+            {"label": "Repeat Mode", "submenu": repeat_submenu, "ref": "playlist_menu"}
+        ]
+        self.menubar.add_menu("Playlist", playlist_items)
+        self.menu_item_refs["playlist_menu"] = playlist_items
+
+        # View menu
+        view_items = [
+            {"label": "Show Playlist", "checkbutton": True, "variable": self.show_playlist_var,
+             "command": self.toggle_playlist_visibility},
+            {"label": "Show Browser", "checkbutton": True, "variable": self.show_browser_var,
+             "command": self.toggle_browser_visibility},
+            {"separator": True},
+            {"label": "Always on Top", "checkbutton": True, "variable": self.always_on_top_var,
+             "command": self.toggle_always_on_top}
+        ]
+        self.menubar.add_menu("View", view_items)
 
         # Tools menu
-        self.toolsmenu = tk.Menu(menubar, tearoff=0)
-        self.toolsmenu.add_command(label="Track Information", command=self.open_media_info, underline=0)
-        self.toolsmenu.add_separator()
+        # Audio device submenu will be built dynamically
+        self.audio_device_items = []
+        self._build_audio_device_menu_items()
 
-        # Audio Device submenu
-        self.audio_device_var = tk.StringVar()
-        self.audio_device_menu = tk.Menu(self.toolsmenu, tearoff=0)
-        self._build_audio_device_menu()
-        self.toolsmenu.add_cascade(label="Audio Device", menu=self.audio_device_menu, underline=0)
+        # Create audio device menu item with reference to the list
+        audio_device_item = {"label": "Audio Device", "submenu": self.audio_device_items}
 
-        self.toolsmenu.add_separator()
-        self.toolsmenu.add_command(label="Preferences", command=self.open_preferences, underline=0)
-        menubar.add_cascade(label="Tools", menu=self.toolsmenu, underline=0)
-
-        # Store index for track info menu item
-        self.track_info_index = 0
+        tools_items = [
+            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info"},
+            {"separator": True},
+            audio_device_item,
+            {"separator": True},
+            {"label": "Preferences", "command": self.open_preferences}
+        ]
+        self.menubar.add_menu("Tools", tools_items)
+        self.menu_item_refs["track_info"] = tools_items[0]
+        self.menu_item_refs["audio_device"] = audio_device_item
 
         # Help menu
-        helpmenu = tk.Menu(menubar, tearoff=0)
-        helpmenu.add_command(label="About", command=self.open_about, underline=0)
-        menubar.add_cascade(label="Help", menu=helpmenu, underline=0)
-
-        self.root.config(menu=menubar)
-
-        # Apply menu styling
-        self._apply_menu_styling(menubar)
-        self._apply_menu_styling(self.filemenu)
-        self._apply_menu_styling(playlist_menu)
-        self._apply_menu_styling(sort_menu)
-        self._apply_menu_styling(operations_menu)
-        self._apply_menu_styling(repeat_menu)
-        self._apply_menu_styling(view_menu)
-        self._apply_menu_styling(self.toolsmenu)
-        self._apply_menu_styling(self.audio_device_menu)
-        self._apply_menu_styling(helpmenu)
+        help_items = [
+            {"label": "About", "command": self.open_about}
+        ]
+        self.menubar.add_menu("Help", help_items)
 
         # Initialize menu state
         self._update_menu_state()
-
-    def _apply_menu_styling(self, menu):
-        """Apply theme colors to a menu."""
-        palette = self.theme.palette
-        bg = palette.get("tree_bg", "#ffffff")
-        fg = palette.get("fg", "#000000")
-        active_bg = palette.get("accent", "#0078d4")
-        active_fg = "#ffffff"
-
-        try:
-            menu.configure(
-                background=bg,
-                foreground=fg,
-                activebackground=active_bg,
-                activeforeground=active_fg,
-                selectcolor=fg,  # Color for checkmarks and radio indicators
-                font=("Segoe UI", 9),  # Consistent font like VS Code
-                borderwidth=0,  # Remove gray border
-                activeborderwidth=0,  # Remove active border
-                relief=tk.FLAT,  # Flat appearance
-                disabledforeground="#666666"  # Dimmed color for disabled items
-            )
-        except:
-            # Some menu types may not support all options
-            pass
 
     def _build_layout(self):
         # Main frame
@@ -259,26 +233,46 @@ class MainWindow:
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
 
         # Status bar with CustomTkinter
-        self.status_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        # Use root background color instead of transparent for better theme support
+        is_dark = self.settings.theme.lower() == 'dark'
+        initial_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
+        self.status_frame = ctk.CTkFrame(
+            self.root,
+            fg_color=initial_bg,
+            bg_color=initial_bg,  # Match root background for seamless edges
+            corner_radius=0  # No rounded corners on outer frame
+        )
         self.status_frame.pack(
             side=tk.BOTTOM,
             fill=tk.X,
-            padx=6,
+            padx=(12, 12),  # (left, right) - 6px left, 12px right
             pady=(0, 12)
         )
 
         # Status bar background - larger with more padding
-        self.status_bg = ctk.CTkFrame(self.status_frame, corner_radius=6)
-        self.status_bg.pack(fill=tk.X, pady=(12, 0), padx=1, expand=True)
+        # Use status_bg from theme for better visibility, with more contrasting colors
+        initial_status_bg = self.palette.get('status_bg', '#E8E8E8' if not is_dark else '#2A2A2A')
+        initial_border = self.palette.get('status_border', '#D0D0D0' if not is_dark else '#3E3E3E')
+        self.status_bg = ctk.CTkFrame(
+            self.status_frame,
+            corner_radius=6,
+            fg_color=initial_status_bg,
+            bg_color=initial_bg,  # Match parent frame for seamless corners
+            border_color=initial_border,
+            border_width=1  # Add border for better visibility
+        )
+        self.status_bg.pack(fill=tk.X, pady=(12, 0), padx=0, expand=True)
 
         # Status text with larger, more prominent styling
         self.status_var = tk.StringVar(value="")
+        initial_status_fg = self.palette.get('status_fg', '#202020' if not is_dark else '#FFFFFF')
         self.status_label = ctk.CTkLabel(
             self.status_bg,
             textvariable=self.status_var,
             anchor="w",
             font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=("#2b2b2b", "#f0f0f0"),
+            text_color=initial_status_fg,
+            bg_color=initial_status_bg,
             justify="left",
             height=28
         )
@@ -286,12 +280,14 @@ class MainWindow:
 
         # Meta info with subtle but more visible styling
         self.meta_var = tk.StringVar(value="")
+        initial_meta_fg = self.palette.get('status_meta_fg', '#505050' if not is_dark else '#E0E0E0')
         self.meta_label = ctk.CTkLabel(
             self.status_bg,
             textvariable=self.meta_var,
             anchor="w",
             font=ctk.CTkFont(size=12),
-            text_color=("#4a4a4a", "#a0a0a0"),
+            text_color=initial_meta_fg,
+            bg_color=initial_status_bg,
             justify="left",
             height=30
         )
@@ -359,24 +355,28 @@ class MainWindow:
     def _update_menu_state(self):
         """Enable/disable menu items based on playlist state."""
         has_songs = len(self.state.playlist) > 0
-        state = tk.NORMAL if has_songs else tk.DISABLED
+        state = "normal" if has_songs else "disabled"
 
-        # Save/Load playlist items in Media menu
-        self.filemenu.entryconfig(self.save_playlist_index, state=state)
-        self.filemenu.entryconfig(self.save_playlist_as_index, state=state)
+        # Update Save Playlist items in Media menu
+        if "save_playlist" in self.menu_item_refs:
+            self.menu_item_refs["save_playlist"]["state"] = state
+        if "save_playlist_as" in self.menu_item_refs:
+            self.menu_item_refs["save_playlist_as"]["state"] = state
 
-        # Disable entire Playlist menu when empty
-        menubar = self.root.nametowidget(self.root.cget('menu'))
-        playlist_menu_state = tk.NORMAL if has_songs else tk.DISABLED
-        menubar.entryconfig(self.playlist_menu_index, state=playlist_menu_state)
+        # Update Playlist menu state
+        if "playlist_menu" in self.menu_item_refs:
+            playlist_menu_item = self.menu_item_refs["playlist_menu"]
+            # The playlist menu itself doesn't need to be disabled, but we could disable submenus
+            # For now, we'll leave it enabled but individual items can be disabled if needed
 
     def _update_track_info_state_from_player(self):
         """Set Track Information menu state based on current player status."""
         try:
             is_playing = self.player.is_playing()
             is_paused = self.player.is_paused()
-            state = tk.NORMAL if (is_playing or is_paused) else tk.DISABLED
-            self.toolsmenu.entryconfig(self.track_info_index, state=state)
+            state = "normal" if (is_playing or is_paused) else "disabled"
+            if "track_info" in self.menu_item_refs:
+                self.menu_item_refs["track_info"]["state"] = state
         except Exception:
             # Fail silently; menu state is not critical
             pass
@@ -384,8 +384,9 @@ class MainWindow:
     def _set_track_info_enabled(self, enabled: bool):
         """Enable or disable the Track Information menu item explicitly."""
         try:
-            state = tk.NORMAL if enabled else tk.DISABLED
-            self.toolsmenu.entryconfig(self.track_info_index, state=state)
+            state = "normal" if enabled else "disabled"
+            if "track_info" in self.menu_item_refs:
+                self.menu_item_refs["track_info"]["state"] = state
         except Exception:
             pass
 
@@ -459,16 +460,16 @@ class MainWindow:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save playlist: {e}", parent=self.root)
 
-    def _build_audio_device_menu(self):
-        """Populate the Audio Device submenu with available devices."""
+    def _build_audio_device_menu_items(self):
+        """Populate the Audio Device submenu items list with available devices."""
         # Clear existing items
-        self.audio_device_menu.delete(0, tk.END)
+        self.audio_device_items.clear()
 
         try:
             devices = self.player.get_audio_devices()
 
             if not devices:
-                self.audio_device_menu.add_command(label="No devices found", state=tk.DISABLED)
+                self.audio_device_items.append({"label": "No devices found", "state": "disabled"})
                 return
 
             # Set default device as first item
@@ -479,18 +480,16 @@ class MainWindow:
             for i, (device_id, device_name) in enumerate(devices):
                 # Mark the first device as system default
                 label = device_name if i > 0 else f"{device_name} (system default)"
-                self.audio_device_menu.add_radiobutton(
-                    label=label,
-                    variable=self.audio_device_var,
-                    value=device_id,
-                    command=lambda dev_id=device_id: self.set_audio_device(dev_id)
-                )
+                self.audio_device_items.append({
+                    "label": label,
+                    "radiobutton": True,
+                    "variable": self.audio_device_var,
+                    "value": device_id,
+                    "command": lambda dev_id=device_id: self.set_audio_device(dev_id)
+                })
         except Exception as e:
             logger.error(f"Failed to build audio device menu: {e}")
-            self.audio_device_menu.add_command(label="Error loading devices", state=tk.DISABLED)
-
-        # Apply menu styling to ensure indicators are visible
-        self._apply_menu_styling(self.audio_device_menu)
+            self.audio_device_items.append({"label": "Error loading devices", "state": "disabled"})
 
     def set_audio_device(self, device_id: str):
         """Set the audio output device."""
@@ -505,6 +504,14 @@ class MainWindow:
 
     def update_theme_colors(self):
         """Update colors for all widgets when theme changes"""
+        # Close any open dropdown menus before updating theme to avoid errors
+        if hasattr(self, 'menubar') and self.menubar:
+            if hasattr(self.menubar, 'active_dropdown'):
+                try:
+                    self.menubar._close_active_menu()
+                except:
+                    pass
+
         # Update CTk appearance
         ctk.set_appearance_mode("Dark" if self.settings.theme == "dark" else "Light")
 
@@ -514,6 +521,29 @@ class MainWindow:
         # Update palette references
         self.palette = self.theme.palette
         self.tooltip_manager.palette = self.palette
+
+        # Note: theme.apply_to() already sets root window background
+        # We close dropdown menus first to prevent errors when it tries to update child widgets
+
+        # Determine theme mode for color calculations
+        is_dark = self.settings.theme.lower() == 'dark'
+
+        # Force root window background update to fix corner artifacts
+        root_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
+        try:
+            # Use direct Tk call to ensure root background is updated everywhere
+            self.root.tk.call(self.root._w, 'configure', '-bg', root_bg)
+            # Also force update the root window immediately
+            self.root.update_idletasks()
+        except:
+            pass
+
+        # Update TFrame style to fix padding areas (main_frame padding=6)
+        try:
+            style = ttk.Style(self.root)
+            style.configure("TFrame", background=root_bg)
+        except:
+            pass
 
         # Update sidebar buttons specifically
         btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
@@ -534,71 +564,63 @@ class MainWindow:
         if hasattr(self.browser_view, 'update_theme'):
              self.browser_view.update_theme()
 
-        # Update menu styling
-        menubar = self.root.nametowidget(self.root.cget('menu'))
-        self._apply_menu_styling(menubar)
-        self._apply_menu_styling(self.filemenu)
-        # Get playlist menu from menubar
-        try:
-            playlist_menu = menubar.nametowidget(menubar.entrycget(self.playlist_menu_index, 'menu'))
-            self._apply_menu_styling(playlist_menu)
-            # Update submenus
-            for i in range(playlist_menu.index('end') + 1):
-                try:
-                    submenu_name = playlist_menu.entrycget(i, 'menu')
-                    if submenu_name:
-                        submenu = playlist_menu.nametowidget(submenu_name)
-                        self._apply_menu_styling(submenu)
-                except:
-                    pass
-        except:
-            pass
-        # Update view and tools menus
-        try:
-            for menu_index in range(menubar.index('end') + 1):
-                try:
-                    menu_name = menubar.entrycget(menu_index, 'menu')
-                    if menu_name:
-                        menu = menubar.nametowidget(menu_name)
-                        self._apply_menu_styling(menu)
-                except:
-                    pass
-        except:
-            pass
+        # Update custom menu bar theme
+        if hasattr(self, 'menubar') and self.menubar:
+            self.menubar.update_theme()
 
         # Update status bar colors
         if hasattr(self, 'status_bg'):
-            is_dark = self.settings.theme.lower() == 'dark'
-            bg_color = self.palette.get('tree_bg', '#2b2b2b' if is_dark else '#f0f0f0')
+            # Use status_bg from theme with more contrasting colors for better visibility
+            if is_dark:
+                status_bg_color = self.palette.get('status_bg', '#2A2A2A')  # Lighter than bg for contrast
+                status_text_color = self.palette.get('status_fg', '#FFFFFF')
+                status_meta_color = self.palette.get('status_meta_fg', '#E0E0E0')
+                status_border_color = self.palette.get('status_border', '#3E3E3E')
+            else:
+                # Light mode: use a darker gray for clear contrast against light background
+                status_bg_color = self.palette.get('status_bg', '#E8E8E8')  # Darker gray for visibility
+                status_text_color = self.palette.get('status_fg', '#202020')
+                status_meta_color = self.palette.get('status_meta_fg', '#505050')
+                status_border_color = self.palette.get('status_border', '#D0D0D0')
+
             frame_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
-            border_color = self.palette.get('border', '#3e3e42' if is_dark else '#e0e0e0')
-            text_color = self.palette.get('fg', '#f0f0f0' if is_dark else '#2b2b2b')
-            meta_color = self.palette.get('disabled_fg', '#a0a0a0' if is_dark else '#4a4a4a')
 
-            # Update parent frame background
-            self.status_frame.configure(fg_color=frame_bg)
+            # Update parent frame background - ensure it matches root background
+            # Both fg_color and bg_color must match root for seamless edges
+            self.status_frame.configure(
+                fg_color=frame_bg,
+                bg_color=frame_bg  # Critical: bg_color affects frame edges/corners
+            )
 
-            # Update status bar frame
+            # Update status bar frame with subtle border for better visibility
+            # bg_color is critical for rounded corners - must match parent frame
             self.status_bg.configure(
-                fg_color=bg_color,
-                bg_color=frame_bg,
-                border_color=border_color,
-                border_width=1
+                fg_color=status_bg_color,  # Use status_bg for better visibility
+                bg_color=frame_bg,  # This controls corner colors - must match parent
+                border_color=status_border_color,  # Subtle border for separation
+                border_width=1  # Add border for better visibility
             )
 
             # Update status and meta labels
             self.status_label.configure(
-                text_color=text_color,
-                bg_color=bg_color
+                text_color=status_text_color,
+                bg_color=status_bg_color
             )
             self.meta_label.configure(
-                text_color=meta_color,
-                bg_color=bg_color
+                text_color=status_meta_color,
+                bg_color=status_bg_color
             )
 
             # Force update the frames to prevent visual glitches
             self.status_frame.update_idletasks()
             self.status_bg.update_idletasks()
+
+        # Update main_frame background to ensure padding areas are correct
+        if hasattr(self, 'main_frame'):
+            try:
+                self.main_frame.configure(style="TFrame")
+            except:
+                pass
 
         # Trigger refresh to redraw
         self.refresh_all()

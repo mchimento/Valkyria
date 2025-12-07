@@ -70,6 +70,13 @@ class ThemeManager:
         """
         apply_base_styles(root, self.palette)
         try:
-            root.configure(bg=self.palette.get("bg"))
+            # Use direct Tk call to bypass CustomTkinter wrappers that might cause issues
+            # with child widgets (like dropdown menus) during theme updates
+            bg_color = self.palette.get("bg", "#ffffff")
+            root.tk.call(root._w, 'configure', '-bg', bg_color)
         except Exception as e:
-            logger.error(f"Failed to apply theme to root window: {e}", exc_info=True)
+            # Fallback to standard configure if direct call fails
+            try:
+                root.configure(bg=self.palette.get("bg"))
+            except Exception as e2:
+                logger.error(f"Failed to apply theme to root window: {e2}", exc_info=True)
