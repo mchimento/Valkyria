@@ -26,6 +26,9 @@ class PreferencesWindow(tk.Toplevel):
         self.resizable(False, False)
         self.transient(master)
 
+        # Hide window initially to prevent flickering during positioning
+        self.withdraw()
+
         center_window(self, master)
 
         ttk.Label(self, text="Theme").pack(pady=(12, 6))
@@ -83,6 +86,9 @@ class PreferencesWindow(tk.Toplevel):
         self.save_btn.pack(side=tk.RIGHT, padx=5)
 
         self._apply_theme_to_this_window(self.settings.theme)
+
+        # Show window after all setup is complete
+        self.deiconify()
 
     def _preview_theme(self):
         """Update the preferences window and main window for live preview."""

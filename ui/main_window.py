@@ -676,6 +676,9 @@ class MainWindow:
             info_window.transient(self.root)
             info_window.grab_set()
 
+            # Hide window initially to prevent flickering during positioning
+            info_window.withdraw()
+
             content_frame = ttk.Frame(info_window, padding=20)
             content_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -686,6 +689,9 @@ class MainWindow:
             info_window.bind("<Escape>", lambda e: info_window.destroy())
 
             center_window(info_window, self.root)
+
+            # Show window after positioning
+            info_window.deiconify()
             return
 
         current_track = self.state.playlist[self.state.current_index]
@@ -697,6 +703,9 @@ class MainWindow:
         about_window.title("About")
         about_window.geometry("400x250")
         about_window.resizable(False, False)
+
+        # Hide window initially to prevent flickering during positioning
+        about_window.withdraw()
 
         # Remove icon from About dialog
         try:
@@ -767,7 +776,11 @@ class MainWindow:
         about_window.bind("<Return>", lambda e: about_window.destroy())
         about_window.bind("<Escape>", lambda e: about_window.destroy())
 
+        # Center window after all setup is complete
         center_window(about_window, self.root)
+
+        # Show window after all setup is complete
+        about_window.deiconify()
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")

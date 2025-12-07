@@ -22,6 +22,9 @@ class MediaInfoWindow:
         self.window.resizable(True, True)
         self.window.transient(parent)
 
+        # Hide window initially to prevent flickering during positioning
+        self.window.withdraw()
+
         center_window(self.window, parent)
 
         # Create notebook (tabbed interface)
@@ -96,6 +99,9 @@ class MediaInfoWindow:
 
         # Check for theme changes periodically
         self._check_theme_change()
+        
+        # Show window after all setup is complete
+        self.window.deiconify()
 
     def _check_theme_change(self):
         """Check if theme has changed and update if needed."""
