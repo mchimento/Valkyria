@@ -70,7 +70,6 @@ class MainWindow:
 
         # Keep UI in sync initially
         self.refresh_all()
-        # Initialize Track Information menu state based on current player status
         self._update_track_info_state_from_player()
 
         # Ensure player stopped on exit and save geometry
@@ -122,8 +121,11 @@ class MainWindow:
             {"label": "Move Down", "command": self.move_selected_down},
             {"separator": True},
             {"label": "Remove Selected", "command": self.remove_selected_from_playlist},
-            {"label": "Remove All", "command": self.clear_playlist}
+            {"label": "Remove All", "command": self.clear_playlist},
+            {"separator": True},
+            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info"}
         ]
+        self.menu_item_refs["track_info"] = operations_submenu[6]
 
         repeat_submenu = [
             {"label": "No Repeat", "radiobutton": True, "variable": self.repeat_mode_var,
@@ -163,14 +165,11 @@ class MainWindow:
         audio_device_item = {"label": "Audio Device", "submenu": self.audio_device_items}
 
         tools_items = [
-            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info"},
-            {"separator": True},
             audio_device_item,
             {"separator": True},
             {"label": "Preferences", "command": self.open_preferences}
         ]
         self.menubar.add_menu("Tools", tools_items)
-        self.menu_item_refs["track_info"] = tools_items[0]
         self.menu_item_refs["audio_device"] = audio_device_item
 
         # Help menu
@@ -371,6 +370,10 @@ class MainWindow:
         if "save_playlist_as" in self.menu_item_refs:
             self.menu_item_refs["save_playlist_as"]["state"] = state
 
+        # Update Track Information item - disable when no songs in playlist
+        if "track_info" in self.menu_item_refs:
+            self.menu_item_refs["track_info"]["state"] = state
+
         # Update Playlist menu state
         if "playlist_menu" in self.menu_item_refs:
             playlist_menu_item = self.menu_item_refs["playlist_menu"]
@@ -378,11 +381,18 @@ class MainWindow:
             # For now, we'll leave it enabled but individual items can be disabled if needed
 
     def _update_track_info_state_from_player(self):
-        """Set Track Information menu state based on current player status."""
+        """Set Track Information menu state based on current player status and playlist state."""
         try:
-            is_playing = self.player.is_playing()
-            is_paused = self.player.is_paused()
-            state = "normal" if (is_playing or is_paused) else "disabled"
+            has_songs = len(self.state.playlist) > 0
+            # First check if there are songs - if not, always disable
+            if not has_songs:
+                state = "disabled"
+            else:
+                # Only enable if something is playing or paused
+                is_playing = self.player.is_playing()
+                is_paused = self.player.is_paused()
+                state = "normal" if (is_playing or is_paused) else "disabled"
+
             if "track_info" in self.menu_item_refs:
                 self.menu_item_refs["track_info"]["state"] = state
         except Exception:

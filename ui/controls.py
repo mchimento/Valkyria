@@ -141,16 +141,13 @@ class ControlsBar(ttk.Frame):
             elif self.state.playlist and self.state.current_index is None:
                 self.state.current_index = 0
 
-        # default to first song
         if self.state.current_index is None and self.state.playlist:
             self.state.current_index = 0
 
-        # play
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
             self.player.play(path)
 
-        # highlight & auto-scroll (Suggestion #3)
         if self.playlist:
             self.playlist._highlight_current()
             try:
