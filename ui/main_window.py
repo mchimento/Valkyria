@@ -218,18 +218,26 @@ class MainWindow:
         self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
 
+        # Create a container to center buttons vertically
+        button_container = ttk.Frame(self.mid_frame, style="TFrame")
+        button_container.pack(expand=True, fill=tk.BOTH)
+
+        # Create another frame to center buttons horizontally within the container
+        center_frame = ttk.Frame(button_container, style="TFrame")
+        center_frame.pack(expand=True)
+
         # Get button colors from theme palette (already available in self.palette)
         btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
         btn_fg = self.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
 
-        ctk.CTkButton(self.mid_frame, text="📂 Folder", command=self.browser_view.browse_folder, width=120,
+        ctk.CTkButton(center_frame, text="📂 Folder", command=self.browser_view.browse_folder, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(self.mid_frame, text="🎵 File", command=self.browser_view.browse_files, width=120,
+        ctk.CTkButton(center_frame, text="🎵 File", command=self.browser_view.browse_files, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(self.mid_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
+        ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
-        ctk.CTkButton(self.mid_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
+        ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
 
         # Status bar with CustomTkinter
@@ -550,11 +558,18 @@ class MainWindow:
         btn_fg = self.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
 
-        for widget in self.mid_frame.winfo_children():
-            if isinstance(widget, ctk.CTkButton):
-                # Ensure button background matches surrounding frame
-                frame_bg = self.palette.get("bg", "#1E1E1E" if self.settings.theme == "Dark" else "#FAFAFA")
-                widget.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+        # Find all buttons in the nested frame structure
+        def update_buttons_in_frame(frame):
+            for widget in frame.winfo_children():
+                if isinstance(widget, ctk.CTkButton):
+                    # Ensure button background matches surrounding frame
+                    frame_bg = self.palette.get("bg", "#1E1E1E" if self.settings.theme == "Dark" else "#FAFAFA")
+                    widget.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+                elif isinstance(widget, ttk.Frame):
+                    # Recursively search in nested frames
+                    update_buttons_in_frame(widget)
+
+        update_buttons_in_frame(self.mid_frame)
 
         # Update controls
         self.controls.update_theme()

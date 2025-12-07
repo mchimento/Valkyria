@@ -133,8 +133,6 @@ class ControlsBar(ttk.Frame):
         master.bind("<plus>", lambda e: self._volume_step(+5))
         master.bind("<minus>", lambda e: self._volume_step(-5))
 
-
-
     def _on_play(self, from_user=False):
         if from_user and self.playlist_tree:
             selected = self.playlist_tree.selection()
@@ -246,7 +244,6 @@ class ControlsBar(ttk.Frame):
     def _on_volume_change(self, val):
         volume_int = int(float(val))
         self.volume_var.set(f"Volume: {volume_int}%")
-        # Save volume to settings
         if self.settings:
             self.settings.volume = volume_int
             try:
@@ -282,8 +279,6 @@ class ControlsBar(ttk.Frame):
         button_fg = palette.get("button_fg_color", "#ffffff")
         button_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
-        # Match button corner background to the frame background (from palette)
-        # Use 'bg' key from theme json (fallback based on theme name if needed)
         is_dark = getattr(self.theme, 'name', 'Dark') == 'Dark' or (self.settings and self.settings.theme == 'Dark')
         default_bg = "#1E1E1E" if is_dark else "#FAFAFA"
         frame_bg = palette.get("bg", default_bg)

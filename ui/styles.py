@@ -10,16 +10,9 @@ from typing import Dict, Any
 def apply_base_styles(root: tk.Tk, palette: Dict[str, Any]) -> None:
     """
     Apply base TTK styles to the application based on a theme palette.
-
-    Args:
-        root: The Tkinter root window.
-        palette: Dictionary containing theme colors and settings.
-            Expected keys: bg, fg, accent, accent_hover, tree_bg, tree_header,
-            tooltip_bg, highlight, ui_font, button_bg_color, button_fg_color, etc.
     """
     style = ttk.Style(root)
 
-    # Use clam for consistent look across platforms
     try:
         style.theme_use("clam")
     except Exception:
