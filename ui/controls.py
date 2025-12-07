@@ -186,6 +186,24 @@ class ControlsBar(ttk.Frame):
     def stop(self):
         self.player.stop()
 
+    def prev(self):
+        if self.state.current_index is None:
+            return
+        if self.state.current_index - 1 >= 0:
+            # Stop current playback before changing to previous song
+            self.player.stop()
+            self.state.current_index -= 1
+            self._on_play(from_user=False)
+
+    def next(self):
+        if self.state.current_index is None:
+            return
+        if self.state.current_index + 1 < len(self.state.playlist):
+            # Stop current playback before changing to next song
+            self.player.stop()
+            self.state.current_index += 1
+            self._on_play(from_user=False)
+
     def _get_mute_label(self, is_muted: bool) -> str:
         """Get the mute button symbol based on mute state."""
         return "🔇" if is_muted else "🔊"
@@ -212,29 +230,6 @@ class ControlsBar(ttk.Frame):
         # Save to settings
         if self.settings:
             self.settings.mute = new_state
-            try:
-                self.settings.save()
-            except Exception:
-                pass
-
-    def prev(self):
-        if self.state.current_index is None:
-            return
-        if self.state.current_index - 1 >= 0:
-            self.state.current_index -= 1
-            self._on_play(from_user=False)
-
-    def next(self):
-        if self.state.current_index is None:
-            return
-        if self.state.current_index + 1 < len(self.state.playlist):
-            self.state.current_index += 1
-            self._on_play(from_user=False)
-
-    # ---------------- VOLUME STEPS FOR + / - KEYS ----------------
-    def _volume_step(self, delta):
-        new = max(0, min(100, self.volume.get() + delta))
-        self.volume.set(new)
         self.volume_var.set(f"Volume: {int(new)}%")
         try:
             self.player.set_volume(int(new))
