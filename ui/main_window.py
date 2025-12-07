@@ -600,51 +600,75 @@ class MainWindow:
         MediaInfoWindow(self.root, current_track, theme_manager=self.theme)
 
     def open_about(self):
-        # Create custom dialog to avoid Windows system sound
-        about_window = tk.Toplevel(self.root)
+        # Create custom dialog using CustomTkinter
+        about_window = ctk.CTkToplevel(self.root)
         about_window.title("About")
-        about_window.geometry("400x200")
+        about_window.geometry("400x250")
         about_window.resizable(False, False)
+
+        # Remove icon from About dialog
+        try:
+            about_window.iconbitmap("assets/transparent.ico")
+        except:
+            pass
 
         # Center the window
         about_window.transient(self.root)
-        about_window.grab_set()
+        # Don't grab focus - let main window stay focused
+
+        # Get theme colors
+        palette = self.theme.palette
+        bg_color = palette.get("bg", "#1E1E1E" if self.settings.theme == "dark" else "#FAFAFA")
+        fg_color = palette.get("fg", "#FFFFFF" if self.settings.theme == "dark" else "#000000")
+        accent_color = palette.get("accent", "#0078d4")
+
+        about_window.configure(fg_color=bg_color)
 
         # Content frame
-        content_frame = ttk.Frame(about_window, padding=20)
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        content_frame = ctk.CTkFrame(about_window, fg_color="transparent")
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         # Title
-        title_label = ttk.Label(
+        title_label = ctk.CTkLabel(
             content_frame,
             text="Tango Studio",
-            font=("TkDefaultFont", 16, "bold")
+            font=("Segoe UI", 24, "bold"),
+            text_color=accent_color
         )
-        title_label.pack(pady=(0, 10))
+        title_label.pack(pady=(0, 15))
 
         # Description
-        desc_label = ttk.Label(
+        desc_label = ctk.CTkLabel(
             content_frame,
-            text="A modern audio player.",
-            justify=tk.CENTER
+            text="A modern audio player with custom themes and intuitive controls.",
+            font=("Segoe UI", 14),
+            text_color=fg_color,
+            wraplength=350
         )
         desc_label.pack(pady=5)
 
         # Version
-        version_label = ttk.Label(
+        version_label = ctk.CTkLabel(
             content_frame,
-            text="Version 1.0",
-            justify=tk.CENTER
+            text="Version 1.0.0",
+            font=("Segoe UI", 12),
+            text_color=fg_color
         )
         version_label.pack(pady=5)
 
         # OK button
-        ok_button = ttk.Button(
+        ok_button = ctk.CTkButton(
             content_frame,
             text="OK",
+            font=("Segoe UI", 12),
+            fg_color=accent_color,
+            hover_color=palette.get("accent_hover", "#106ebe"),
+            text_color="#ffffff",
+            width=80,
+            height=32,
             command=about_window.destroy
         )
-        ok_button.pack(pady=(20, 0))
+        ok_button.pack(pady=(10, 0))
         ok_button.focus_set()
 
         # Bind Enter and Escape to close
