@@ -30,7 +30,8 @@ class PreferencesWindow(tk.Toplevel):
 
         ttk.Label(self, text="Theme").pack(pady=(12, 6))
 
-        self.var = tk.StringVar(value=self.settings.theme)
+        # Use lowercase theme consistently
+        self.var = tk.StringVar(value=self.settings.theme.lower())
         rb_frame = ttk.Frame(self)
         rb_frame.pack(pady=6, padx=12)
 

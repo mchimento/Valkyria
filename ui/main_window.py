@@ -32,7 +32,7 @@ class MainWindow:
         self.settings = settings
 
         # Root window
-        ctk.set_appearance_mode("Dark" if self.settings.theme == "Dark" else "Light")
+        ctk.set_appearance_mode("Dark" if self.settings.theme == "dark" else "Light")
         self.root = tk.Tk()
         self.root.title("Tango Studio")
         if self.settings.window_geometry:
@@ -495,7 +495,7 @@ class MainWindow:
     def update_theme_colors(self):
         """Update colors for all widgets when theme changes"""
         # Update CTk appearance
-        ctk.set_appearance_mode("Dark" if self.settings.theme == "Dark" else "Light")
+        ctk.set_appearance_mode("Dark" if self.settings.theme == "dark" else "Light")
 
         # Reload styles (standard Tkinter/TTK)
         self.theme.apply_to(self.root)
@@ -562,6 +562,9 @@ class MainWindow:
         original_theme = self.settings.theme
 
         def on_apply(selected_theme):
+            # Update settings with lowercase theme
+            self.settings.theme = selected_theme
+
             # Reload theme
             self.theme.reload()
 
