@@ -34,8 +34,8 @@ class TestMainWindowMenus(unittest.TestCase):
     def setUp(self, mock_prefs, mock_tooltip, mock_playlist_view, mock_browser_view, mock_controls):
         """Set up test fixtures."""
         self.mock_state = MagicMock()
-        self.mock_state.playlist = []
-        self.mock_state.current_index = None
+        self.mock_state.playlist = ["/path/to/song1.mp3", "/path/to/song2.mp3"]  # Add songs to playlist
+        self.mock_state.current_index = 0
         self.mock_state.play_on_double = False
 
         self.mock_theme = MagicMock()
@@ -78,9 +78,10 @@ class TestMainWindowMenus(unittest.TestCase):
             self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
-            # Check track info menu state
-            state = main_window.toolsmenu.entryconfig(main_window.track_info_index)['state']
-            self.assertEqual(state[4], tk.DISABLED)
+            # Check track info menu state through menu_item_refs
+            track_info_item = main_window.menu_item_refs.get("track_info")
+            self.assertIsNotNone(track_info_item)
+            self.assertEqual(track_info_item.get("state"), "disabled")
         finally:
             try:
                 root.destroy()
@@ -104,9 +105,10 @@ class TestMainWindowMenus(unittest.TestCase):
             self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
-            # Check track info menu state
-            state = main_window.toolsmenu.entryconfig(main_window.track_info_index)['state']
-            self.assertEqual(state[4], tk.NORMAL)
+            # Check track info menu state through menu_item_refs
+            track_info_item = main_window.menu_item_refs.get("track_info")
+            self.assertIsNotNone(track_info_item)
+            self.assertEqual(track_info_item.get("state"), "normal")
         finally:
             try:
                 root.destroy()
@@ -130,9 +132,10 @@ class TestMainWindowMenus(unittest.TestCase):
             self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
-            # Check track info menu state
-            state = main_window.toolsmenu.entryconfig(main_window.track_info_index)['state']
-            self.assertEqual(state[4], tk.NORMAL)
+            # Check track info menu state through menu_item_refs
+            track_info_item = main_window.menu_item_refs.get("track_info")
+            self.assertIsNotNone(track_info_item)
+            self.assertEqual(track_info_item.get("state"), "normal")
         finally:
             try:
                 root.destroy()
@@ -153,11 +156,10 @@ class TestMainWindowMenus(unittest.TestCase):
             self.root = root
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
-            # Check that audio device menu has items
-            menu_items = main_window.audio_device_menu.index('end')
-            self.assertIsNotNone(menu_items)
+            # Check that audio device items list has items
+            self.assertIsNotNone(main_window.audio_device_items)
             # Should have at least 2 items (default + device1)
-            self.assertGreaterEqual(menu_items, 1)
+            self.assertGreaterEqual(len(main_window.audio_device_items), 1)
         finally:
             try:
                 root.destroy()
