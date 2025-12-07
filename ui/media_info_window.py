@@ -25,17 +25,17 @@ class MediaInfoWindow:
         center_window(self.window, parent)
 
         # Create notebook (tabbed interface)
-        notebook = ttk.Notebook(self.window)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.notebook = ttk.Notebook(self.window)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Create tabs
-        general_frame = ttk.Frame(notebook)
-        codec_frame = ttk.Frame(notebook)
-        metadata_frame = ttk.Frame(notebook)
+        general_frame = ttk.Frame(self.notebook)
+        codec_frame = ttk.Frame(self.notebook)
+        metadata_frame = ttk.Frame(self.notebook)
 
-        notebook.add(general_frame, text="General")
-        notebook.add(codec_frame, text="Codec")
-        notebook.add(metadata_frame, text="Metadata")
+        self.notebook.add(general_frame, text="General")
+        self.notebook.add(codec_frame, text="Codec")
+        self.notebook.add(metadata_frame, text="Metadata")
 
         # Load file information
         self.file_info = self._get_file_info()
@@ -160,6 +160,40 @@ class MediaInfoWindow:
 
         if self.save_btn:
             self.save_btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=bg)
+
+        # Update notebook (tab bar) styling
+        self._update_notebook_style()
+
+    def _update_notebook_style(self):
+        """Update notebook tab bar colors based on theme."""
+        if not self.theme_manager:
+            return
+
+        palette = self.theme_manager.palette
+        bg = palette.get("bg", "#ffffff")
+        fg = palette.get("fg", "#000000")
+        accent = palette.get("accent", "#0078d4")
+        tree_bg = palette.get("tree_bg", "#ffffff")
+
+        # Create or get style
+        style = ttk.Style(self.window)
+
+        # Configure notebook style
+        style.configure("TNotebook", background=bg, borderwidth=0)
+        style.configure("TNotebook.Tab",
+                       background=tree_bg,
+                       foreground=fg,
+                       padding=[12, 6],
+                       borderwidth=0)
+
+        # Selected tab styling
+        style.map("TNotebook.Tab",
+                 background=[("selected", accent)],
+                 foreground=[("selected", "#ffffff")],
+                 expand=[("selected", [1, 1, 1, 0])])
+
+        # Frame background
+        style.configure("TFrame", background=bg)
 
     def _get_file_info(self):
         """Extract all file information using mutagen."""
