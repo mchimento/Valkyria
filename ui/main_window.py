@@ -253,7 +253,7 @@ class MainWindow:
             side=tk.BOTTOM,
             fill=tk.X,
             padx=(12, 12),  # (left, right) - 6px left, 12px right
-            pady=(0, 12)
+            pady=(0, 20)
         )
 
         # Status bar background - larger with more padding
@@ -268,7 +268,7 @@ class MainWindow:
             border_color=initial_border,
             border_width=1  # Add border for better visibility
         )
-        self.status_bg.pack(fill=tk.X, pady=(12, 0), padx=0, expand=True)
+        self.status_bg.pack(fill=tk.X, pady=(3, 0), padx=0, expand=True)
 
         # Status text with larger, more prominent styling
         self.status_var = tk.StringVar(value="")
@@ -277,11 +277,11 @@ class MainWindow:
             self.status_bg,
             textvariable=self.status_var,
             anchor="w",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(size=15, weight="bold"),
             text_color=initial_status_fg,
             bg_color=initial_status_bg,
             justify="left",
-            height=28
+            height=45
         )
         self.status_label.pack(side=tk.TOP, fill=tk.X, padx=12, pady=6)
 
@@ -292,11 +292,11 @@ class MainWindow:
             self.status_bg,
             textvariable=self.meta_var,
             anchor="w",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=14),
             text_color=initial_meta_fg,
             bg_color=initial_status_bg,
             justify="left",
-            height=30
+            height=34
         )
         self.meta_label.pack(side=tk.TOP, fill=tk.X, padx=12, pady=(0, 8))
 
