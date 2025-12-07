@@ -87,7 +87,7 @@ class MainWindow:
         self.show_playlist_var = tk.BooleanVar(value=show_playlist_initial)
         self.show_browser_var = tk.BooleanVar(value=show_browser_initial)
         self.always_on_top_var = tk.BooleanVar(value=False)
-        self.play_on_double_var = tk.BooleanVar(value=getattr(self.settings, "play_on_double", False))
+        self.play_on_double_var = tk.BooleanVar(value=bool(getattr(self.settings, "play_on_double", False)))
         self.repeat_mode_var = tk.StringVar(value="none")
         self.audio_device_var = tk.StringVar()
 
