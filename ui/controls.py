@@ -85,57 +85,39 @@ class ControlsBar(ttk.Frame):
         ttk.Checkbutton(middle, text="Play on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(side=tk.LEFT, padx=(12, 0))
 
         # ---------------- VOLUME ----------------
-        right = ctk.CTkFrame(self, fg_color="transparent")
+        right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, padx=6)
 
         # Get initial volume and mute state from settings
         initial_volume = self.settings.volume if self.settings else 80
         initial_mute = self.settings.mute if self.settings else False
 
-        # Volume label variable
+        # Volume label variable (must be created before slider that uses it)
         self.volume_var = tk.StringVar(value=f"Volume: {initial_volume}%")
 
         # Volume label positioned above the volume slider
-        volume_label = ctk.CTkLabel(right, textvariable=self.volume_var,
-                                 text_color=("#2b2b2b", "#f0f0f0"),
-                                 font=ctk.CTkFont(size=12))
-        volume_label.pack(side=tk.TOP, padx=(45, 0), pady=(0, 2))
+        volume_label = ttk.Label(right, textvariable=self.volume_var)
+        volume_label.pack(side=tk.TOP, padx=(45, 0))
 
         # Mute button and volume slider in a horizontal frame
-        volume_control_frame = ctk.CTkFrame(right, fg_color="transparent")
-        volume_control_frame.pack(side=tk.TOP, fill=tk.X, expand=True)
+        volume_control_frame = ttk.Frame(right)
+        volume_control_frame.pack(side=tk.TOP)
 
         # Mute button on the left
         self.mute_var = tk.BooleanVar(value=initial_mute)
-        self.btn_mute = ctk.CTkButton(volume_control_frame,
-                                    text=self._get_mute_label(initial_mute),
-                                    command=self._on_mute_toggle,
-                                    font=symbol_font,
-                                    width=30,
-                                    height=30,
-                                    fg_color=btn_bg,
-                                    text_color=btn_fg,
-                                    hover_color=btn_hover,
-                                    corner_radius=4)
-        self.btn_mute.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_mute = ctk.CTkButton(volume_control_frame, text=self._get_mute_label(initial_mute),
+                                    command=self._on_mute_toggle, font=symbol_font, width=30, height=30,
+                                    fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_mute.pack(side=tk.LEFT, padx=2)
 
         if self.tooltip_manager:
             self.tooltip_manager.attach(self.btn_mute, lambda: self._get_mute_tooltip(initial_mute))
 
-        # Volume slider on the right with CustomTkinter
-        self.volume = ctk.CTkSlider(volume_control_frame,
-                                  from_=0,
-                                  to=100,
-                                  width=120,  # Fixed width for the slider
-                                  number_of_steps=100,
-                                  command=self._on_volume_change)
+        # Volume slider on the right
+        self.volume = ttk.Scale(volume_control_frame, from_=0, to=100, orient="horizontal",
+                                command=self._on_volume_change)
         self.volume.set(initial_volume)
-        self.volume.pack(side=tk.LEFT, fill=tk.NONE, expand=False, padx=(0, 5))
-
-        # Set slider colors from theme
-        self.volume.configure(button_color=btn_bg,
-                            progress_color=btn_bg,
-                            button_hover_color=btn_hover)
+        self.volume.pack(side=tk.LEFT, padx=5)
 
         # time updater
         self._update_id = None
@@ -262,10 +244,8 @@ class ControlsBar(ttk.Frame):
             pass
 
     def _on_volume_change(self, val):
-        # CTkSlider passes the value directly as a float, no need for float()
-        volume_int = int(round(float(val)))
+        volume_int = int(float(val))
         self.volume_var.set(f"Volume: {volume_int}%")
-
         # Save volume to settings
         if self.settings:
             self.settings.volume = volume_int
@@ -273,15 +253,10 @@ class ControlsBar(ttk.Frame):
                 self.settings.save()
             except Exception:
                 pass
-
-        # Update player volume if not muted
-        if not self.player.get_mute_state():
+        try:
             self.player.set_volume(volume_int)
-
-        # Update mute button if volume is 0 or unmuted
-        current_mute = self.player.get_mute_state()
-        if (volume_int == 0 and not current_mute) or (volume_int > 0 and current_mute):
-            self._on_mute_toggle()
+        except Exception:
+            pass
 
     # ---------------- TIME UPDATE ----------------
     def _schedule_time_update(self):
