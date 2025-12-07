@@ -205,7 +205,7 @@ class ControlsBar(ttk.Frame):
         self.player.set_mute(new_state)
 
         # Update button label (symbol only)
-        self.btn_mute.config(text=self._get_mute_label(new_state))
+        self.btn_mute.configure(text=self._get_mute_label(new_state))
 
         # Update tooltip
         if self.tooltip_manager:

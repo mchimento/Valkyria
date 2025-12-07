@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
+import customtkinter as ctk
 from ui.utils import center_window
 
 class PreferencesWindow(tk.Toplevel):
@@ -44,31 +45,39 @@ class PreferencesWindow(tk.Toplevel):
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=(8, 12))
 
-        UI_FONT = (self.theme_manager.palette.get("ui_font", "Segoe UI"), 10)
-        btn_width = 6
-        btn_height = 1
+        # Get button colors from theme palette (matching controls.py)
+        palette = self.theme_manager.palette
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
-        self.cancel_btn = tk.Button(
+        UI_FONT = (palette.get("ui_font", "Segoe UI"), 12)
+        btn_width = 70
+        btn_height = 30
+
+        self.cancel_btn = ctk.CTkButton(
             btn_frame,
             text="Cancel",
             command=self._cancel,
             font=UI_FONT,
-            relief=tk.RAISED,
-            bd=1,
             width=btn_width,
-            height=btn_height
+            height=btn_height,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=btn_hover
         )
         self.cancel_btn.pack(side=tk.RIGHT, padx=5)
 
-        self.save_btn = tk.Button(
+        self.save_btn = ctk.CTkButton(
             btn_frame,
             text="Save",
             command=self._save,
             font=UI_FONT,
-            relief=tk.RAISED,
-            bd=1,
             width=btn_width,
-            height=btn_height
+            height=btn_height,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=btn_hover
         )
         self.save_btn.pack(side=tk.RIGHT, padx=5)
 
@@ -126,7 +135,7 @@ class PreferencesWindow(tk.Toplevel):
 
         # Recursive restyle for all widgets
         def restyle(widget):
-            if isinstance(widget, tk.Button):
+            if isinstance(widget, (tk.Button, ctk.CTkButton)):
                 return  # buttons handled separately
             if isinstance(widget, tk.Frame):
                 widget.configure(bg=bg)
@@ -145,16 +154,16 @@ class PreferencesWindow(tk.Toplevel):
 
     def _apply_button_theme(self):
         palette = self.theme_manager.palette
-        btn_bg = palette.get("button_bg_color", "#4a79a8")
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         btn_fg = palette.get("button_fg_color", "#ffffff")
-        btn_hover = palette.get("button_hover", "#6b99d0")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+
+        # Match button corner background to the frame background
+        bg = palette.get("bg", "#ffffff")
 
         for btn in (self.save_btn, self.cancel_btn):
-            btn.configure(bg=btn_bg, fg=btn_fg,
-                          activebackground=btn_hover,
-                          activeforeground=btn_fg)
-            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=btn_hover))
-            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=btn_bg))
+            btn.configure(fg_color=btn_bg, text_color=btn_fg,
+                         hover_color=btn_hover, bg_color=bg)
 
 
     def _save(self):
