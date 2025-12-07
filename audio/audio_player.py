@@ -84,6 +84,10 @@ class AudioPlayer:
         """
         with self._lock:
             try:
+                # Stop current playback to prevent audio overlap noise
+                if self.player.is_playing():
+                    self.player.stop()
+
                 media = self.instance.media_new(path)
                 self.player.set_media(media)
                 self.player.play()
