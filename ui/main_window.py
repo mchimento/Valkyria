@@ -168,8 +168,45 @@ class MainWindow:
 
         self.root.config(menu=menubar)
 
+        # Apply menu styling
+        self._apply_menu_styling(menubar)
+        self._apply_menu_styling(self.filemenu)
+        self._apply_menu_styling(playlist_menu)
+        self._apply_menu_styling(sort_menu)
+        self._apply_menu_styling(operations_menu)
+        self._apply_menu_styling(repeat_menu)
+        self._apply_menu_styling(view_menu)
+        self._apply_menu_styling(self.toolsmenu)
+        self._apply_menu_styling(self.audio_device_menu)
+        self._apply_menu_styling(helpmenu)
+
         # Initialize menu state
         self._update_menu_state()
+
+    def _apply_menu_styling(self, menu):
+        """Apply theme colors to a menu."""
+        palette = self.theme.palette
+        bg = palette.get("tree_bg", "#ffffff")
+        fg = palette.get("fg", "#000000")
+        active_bg = palette.get("accent", "#0078d4")
+        active_fg = "#ffffff"
+
+        try:
+            menu.configure(
+                background=bg,
+                foreground=fg,
+                activebackground=active_bg,
+                activeforeground=active_fg,
+                selectcolor=fg,  # Color for checkmarks and radio indicators
+                font=("Segoe UI", 9),  # Consistent font like VS Code
+                borderwidth=0,  # Remove gray border
+                activeborderwidth=0,  # Remove active border
+                relief=tk.FLAT,  # Flat appearance
+                disabledforeground="#666666"  # Dimmed color for disabled items
+            )
+        except:
+            # Some menu types may not support all options
+            pass
 
     def _build_layout(self):
         # Main frame
@@ -441,6 +478,9 @@ class MainWindow:
             logger.error(f"Failed to build audio device menu: {e}")
             self.audio_device_menu.add_command(label="Error loading devices", state=tk.DISABLED)
 
+        # Apply menu styling to ensure indicators are visible
+        self._apply_menu_styling(self.audio_device_menu)
+
     def set_audio_device(self, device_id: str):
         """Set the audio output device."""
         try:
@@ -482,6 +522,38 @@ class MainWindow:
         self.playlist_view.update_theme()
         if hasattr(self.browser_view, 'update_theme'):
              self.browser_view.update_theme()
+
+        # Update menu styling
+        menubar = self.root.nametowidget(self.root.cget('menu'))
+        self._apply_menu_styling(menubar)
+        self._apply_menu_styling(self.filemenu)
+        # Get playlist menu from menubar
+        try:
+            playlist_menu = menubar.nametowidget(menubar.entrycget(self.playlist_menu_index, 'menu'))
+            self._apply_menu_styling(playlist_menu)
+            # Update submenus
+            for i in range(playlist_menu.index('end') + 1):
+                try:
+                    submenu_name = playlist_menu.entrycget(i, 'menu')
+                    if submenu_name:
+                        submenu = playlist_menu.nametowidget(submenu_name)
+                        self._apply_menu_styling(submenu)
+                except:
+                    pass
+        except:
+            pass
+        # Update view and tools menus
+        try:
+            for menu_index in range(menubar.index('end') + 1):
+                try:
+                    menu_name = menubar.entrycget(menu_index, 'menu')
+                    if menu_name:
+                        menu = menubar.nametowidget(menu_name)
+                        self._apply_menu_styling(menu)
+                except:
+                    pass
+        except:
+            pass
 
         # Trigger refresh to redraw
         self.refresh_all()
