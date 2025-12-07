@@ -227,6 +227,7 @@ class ControlsBar(ttk.Frame):
         # Save to settings
         if self.settings:
             self.settings.mute = new_state
+        new = int(self.volume.get())
         self.volume_var.set(f"Volume: {int(new)}%")
         try:
             self.player.set_volume(int(new))
