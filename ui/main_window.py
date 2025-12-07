@@ -87,6 +87,7 @@ class MainWindow:
         self.show_playlist_var = tk.BooleanVar(value=show_playlist_initial)
         self.show_browser_var = tk.BooleanVar(value=show_browser_initial)
         self.always_on_top_var = tk.BooleanVar(value=False)
+        self.play_on_double_var = tk.BooleanVar(value=getattr(self.settings, "play_on_double", False))
         self.repeat_mode_var = tk.StringVar(value="none")
         self.audio_device_var = tk.StringVar()
 
@@ -651,8 +652,6 @@ class MainWindow:
         self.refresh_all()
 
     def open_preferences(self):
-        original_theme = self.settings.theme
-
         def on_apply(selected_theme):
             # Update settings with lowercase theme
             self.settings.theme = selected_theme
