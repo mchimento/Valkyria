@@ -258,9 +258,8 @@ class MainWindow:
         ctk.CTkButton(self.mid_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
 
-        # Status bar
-        self.status_frame = ttk.Frame(self.root, style="StatusBar.TFrame")
-        self.status_frame.configure(padding=(0, 10, 0, 0))
+        # Status bar with CustomTkinter
+        self.status_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         self.status_frame.pack(
             side=tk.BOTTOM,
             fill=tk.X,
@@ -268,23 +267,35 @@ class MainWindow:
             pady=(0, 12)
         )
 
-        self.meta_var = tk.StringVar(value="")
-        self.meta_label = ttk.Label(
-            self.status_frame,
-            textvariable=self.meta_var,
-            anchor="w",
-            style="StatusBarMeta.TLabel"
-        )
-        self.meta_label.pack(side=tk.BOTTOM, anchor="w", padx=4, pady=(4, 2))
+        # Status bar background - larger with more padding
+        self.status_bg = ctk.CTkFrame(self.status_frame, corner_radius=6)
+        self.status_bg.pack(fill=tk.X, pady=(12, 0), padx=1, expand=True)
 
+        # Status text with larger, more prominent styling
         self.status_var = tk.StringVar(value="")
-        self.status_label = ttk.Label(
-            self.status_frame,
+        self.status_label = ctk.CTkLabel(
+            self.status_bg,
             textvariable=self.status_var,
             anchor="w",
-            style="StatusBarMain.TLabel"
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=("#2b2b2b", "#f0f0f0"),
+            justify="left",
+            height=28
         )
-        self.status_label.pack(side=tk.BOTTOM, anchor="w", padx=4, pady=(4, 2))
+        self.status_label.pack(side=tk.TOP, fill=tk.X, padx=12, pady=6)
+
+        # Meta info with subtle but more visible styling
+        self.meta_var = tk.StringVar(value="")
+        self.meta_label = ctk.CTkLabel(
+            self.status_bg,
+            textvariable=self.meta_var,
+            anchor="w",
+            font=ctk.CTkFont(size=12),
+            text_color=("#4a4a4a", "#a0a0a0"),
+            justify="left",
+            height=30
+        )
+        self.meta_label.pack(side=tk.TOP, fill=tk.X, padx=12, pady=(0, 8))
 
         # Bottom: Controls bar
         self.controls = ControlsBar(
@@ -554,6 +565,40 @@ class MainWindow:
                     pass
         except:
             pass
+
+        # Update status bar colors
+        if hasattr(self, 'status_bg'):
+            is_dark = self.settings.theme.lower() == 'dark'
+            bg_color = self.palette.get('tree_bg', '#2b2b2b' if is_dark else '#f0f0f0')
+            frame_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
+            border_color = self.palette.get('border', '#3e3e42' if is_dark else '#e0e0e0')
+            text_color = self.palette.get('fg', '#f0f0f0' if is_dark else '#2b2b2b')
+            meta_color = self.palette.get('disabled_fg', '#a0a0a0' if is_dark else '#4a4a4a')
+
+            # Update parent frame background
+            self.status_frame.configure(fg_color=frame_bg)
+
+            # Update status bar frame
+            self.status_bg.configure(
+                fg_color=bg_color,
+                bg_color=frame_bg,
+                border_color=border_color,
+                border_width=1
+            )
+
+            # Update status and meta labels
+            self.status_label.configure(
+                text_color=text_color,
+                bg_color=bg_color
+            )
+            self.meta_label.configure(
+                text_color=meta_color,
+                bg_color=bg_color
+            )
+
+            # Force update the frames to prevent visual glitches
+            self.status_frame.update_idletasks()
+            self.status_bg.update_idletasks()
 
         # Trigger refresh to redraw
         self.refresh_all()
