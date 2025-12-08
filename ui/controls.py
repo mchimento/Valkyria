@@ -99,7 +99,7 @@ class ControlsBar(ttk.Frame):
         # Mute button on the left
         self.mute_var = tk.BooleanVar(value=initial_mute)
         self.btn_mute = ctk.CTkButton(volume_control_frame, text=self._get_mute_label(initial_mute),
-                                    command=self._on_mute_toggle, font=symbol_font, width=30, height=30,
+                                    command=self._on_mute_toggle, font=(symbol_font, 20), width=30, height=35,
                                     fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
         self.btn_mute.pack(side=tk.LEFT, padx=2)
 
