@@ -15,5 +15,15 @@
   "status_fg": "#FFFFFF",
   "status_meta_fg": "#E0E0E0",
   "status_border": "#3E3E3E",
-  "striped_bg": "#2A2A2B"
+  "striped_bg": "#2A2A2B",
+  "menubar_bg": "#323233",
+  "menubar_hover": "#2A2D2E",
+  "menubar_text": "#CCCCCC",
+  "dropdown_bg": "#252526",
+  "dropdown_hover": "#2A2D2E",
+  "dropdown_text": "#CCCCCC",
+  "dropdown_disabled": "#666666",
+  "dropdown_separator": "#454545",
+  "dropdown_border": "#3E3E42",
+  "dropdown_shortcut": "#858585"
 }

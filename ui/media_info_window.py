@@ -59,17 +59,11 @@ class MediaInfoWindow:
         button_frame.pack(side=tk.BOTTOM, pady=(0, 10))
 
         # Get button colors from theme
-        if self.theme_manager:
-            palette = self.theme_manager.palette
-            btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
-            btn_fg = palette.get("button_fg_color", "#ffffff")
-            btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
-            bg = palette.get("bg", "#ffffff")
-        else:
-            btn_bg = "#0078d4"
-            btn_fg = "#ffffff"
-            btn_hover = "#106ebe"
-            bg = "#ffffff"
+        palette = self.theme_manager.palette if self.theme_manager else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+        bg = palette.get("bg", "#ffffff")
 
         close_btn = ctk.CTkButton(
             button_frame,

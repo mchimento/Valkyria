@@ -32,35 +32,24 @@ class CustomMenuBar(ctk.CTkFrame):
         return palette.get("bg", "#1E1E1E")
 
     def _get_menubar_bg(self):
-        """Get menu bar background color based on theme (VS Code style)."""
         if not self.theme_manager:
             return "#323233"
         palette = self.theme_manager.palette
-        fg = palette.get("fg", "#CCCCCC")
-        is_dark = fg > "#888888"
-        return "#323233" if is_dark else "#F3F3F3"
+        return palette.get("menubar_bg", "#323233")
 
     def _get_hover_color(self):
-        """Get hover color for menu buttons (VS Code style)."""
         if not self.theme_manager:
             return "#2A2D2E"
         palette = self.theme_manager.palette
-        fg = palette.get("fg", "#CCCCCC")
-        is_dark = fg > "#888888"
-        return "#2A2D2E" if is_dark else "#E5E5E5"
+        return palette.get("menubar_hover", "#2A2D2E")
 
     def _get_text_color(self):
-        """Get text color for menu buttons (VS Code style)."""
         if not self.theme_manager:
             return "#CCCCCC"
         palette = self.theme_manager.palette
-        fg = palette.get("fg", "#CCCCCC")
-        is_dark = fg > "#888888"
-        # VS Code uses slightly lighter text for menu bar
-        return "#CCCCCC" if is_dark else "#333333"
+        return palette.get("menubar_text", "#CCCCCC")
 
     def add_menu(self, label: str, items: List[Dict[str, Any]]):
-        """Add a menu to the menu bar (VS Code style)."""
         # Calculate width based on text length for better fit
         text_width = len(label) * 8 + 20  # Approximate width
         btn = ctk.CTkButton(
@@ -146,11 +135,9 @@ class CustomMenuBar(ctk.CTkFrame):
         hover_color = self._get_hover_color()
         text_color = self._get_text_color()
 
-        # Update menu bar frame with both fg_color and bg_color
-        # bg_color is critical for corner rendering - must match root background
         self.configure(
             fg_color=menubar_bg,
-            bg_color=root_bg  # Match root background for seamless corners
+            bg_color=root_bg
         )
 
         for btn in self.menu_buttons.values():
@@ -168,17 +155,15 @@ class DropdownMenu(ctk.CTkFrame):
         self.submenu_windows = []
 
         palette = theme_manager.palette if theme_manager else {}
-        fg = palette.get("fg", "#CCCCCC")
-        is_dark = fg > "#888888"
 
-        # VS Code-like colors
-        self.bg_color = "#252526" if is_dark else "#FFFFFF"
-        self.hover_color = "#2A2D2E" if is_dark else "#E5E5E5"
-        self.text_color = "#CCCCCC" if is_dark else "#333333"
-        self.disabled_color = "#666666" if is_dark else "#999999"
-        self.separator_color = "#454545" if is_dark else "#D4D4D4"
-        self.border_color = "#3E3E42" if is_dark else "#E1E1E1"
-        self.shortcut_color = "#858585" if is_dark else "#6A6A6A"
+        # Use theme-based colors for dropdown
+        self.bg_color = palette.get("dropdown_bg", "#252526")
+        self.hover_color = palette.get("dropdown_hover", "#2A2D2E")
+        self.text_color = palette.get("dropdown_text", "#CCCCCC")
+        self.disabled_color = palette.get("dropdown_disabled", "#666666")
+        self.separator_color = palette.get("dropdown_separator", "#454545")
+        self.border_color = palette.get("dropdown_border", "#3E3E42")
+        self.shortcut_color = palette.get("dropdown_shortcut", "#858585")
 
         self.configure(
             fg_color=self.bg_color,
