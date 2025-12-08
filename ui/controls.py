@@ -191,6 +191,7 @@ class ControlsBar(ttk.Frame):
         self._send_status("next")
 
     def play(self):
+        self.player.stop()
         self._on_play(from_user=False)
 
     def pause(self):

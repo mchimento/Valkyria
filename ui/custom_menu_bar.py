@@ -13,16 +13,13 @@ class CustomMenuBar(ctk.CTkFrame):
         self.dropdown_menus = {}
         self.menus_data = {}
 
-        # VS Code-like menu bar styling
-        # Set bg_color to match root window background for seamless corners
         root_bg = self._get_root_bg()
         self.configure(
             height=30,
             fg_color=self._get_menubar_bg(),
-            bg_color=root_bg,  # Match root background for seamless corners
+            bg_color=root_bg,
             corner_radius=0
         )
-        # Don't pack here - let the parent control placement
 
     def _get_root_bg(self):
         """Get root window background color based on theme."""
@@ -60,13 +57,13 @@ class CustomMenuBar(ctk.CTkFrame):
             fg_color=self._get_menubar_bg(),
             hover_color=self._get_hover_color(),
             text_color=self._get_text_color(),
-            font=("Segoe UI", 13),  # VS Code uses 13px
+            font=("Segoe UI", 13),
             corner_radius=0,
             anchor="center",
             command=lambda l=label: self._toggle_menu(l),
             border_width=0
         )
-        btn.pack(side=tk.LEFT, padx=(8, 0))  # VS Code-like padding
+        btn.pack(side=tk.LEFT, padx=(8, 0))
         self.menu_buttons[label] = btn
         self.menus_data[label] = items
 
@@ -175,7 +172,6 @@ class DropdownMenu(ctk.CTkFrame):
         self._build_items()
 
     def _build_items(self):
-        """Build menu items (VS Code style)."""
         for item in self.items:
             if item.get("separator"):
                 # Create a more visible separator using CTkLabel
@@ -191,7 +187,6 @@ class DropdownMenu(ctk.CTkFrame):
                 self._create_menu_item(item)
 
     def _create_menu_item(self, item: Dict):
-        """Create a single menu item (VS Code style with keyboard shortcuts)."""
         label = item.get("label", "")
         command = item.get("command")
         state = item.get("state", "normal")
@@ -220,12 +215,12 @@ class DropdownMenu(ctk.CTkFrame):
         btn = ctk.CTkButton(
             item_frame,
             text=display_label,
-            width=1,  # Will expand to fill
+            width=1,
             height=27,
             fg_color=self.bg_color,
             hover_color=self.hover_color if state == "normal" else self.bg_color,
             text_color=text_color,
-            font=("Segoe UI", 12),  # VS Code uses 12px
+            font=("Segoe UI", 12),
             corner_radius=0,
             anchor="w",
             command=lambda: self._execute_item(item) if state == "normal" else None,
@@ -266,7 +261,7 @@ class DropdownMenu(ctk.CTkFrame):
             btn.bind("<Enter>", lambda e, i=item, f=item_frame: self._show_submenu(i, f))
 
     def _show_submenu(self, item: Dict, widget):
-        """Show submenu on hover (VS Code style)."""
+        """Show submenu on hover"""
         submenu_items = item.get("submenu", [])
         if not submenu_items:
             return
