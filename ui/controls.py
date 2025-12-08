@@ -92,13 +92,6 @@ class ControlsBar(ttk.Frame):
         initial_volume = self.settings.volume if self.settings else 80
         initial_mute = self.settings.mute if self.settings else False
 
-        # Volume label variable (must be created before slider that uses it)
-        self.volume_var = tk.StringVar(value=f"Volume: {initial_volume}%")
-
-        # Volume label positioned above the volume slider
-        volume_label = ttk.Label(right, textvariable=self.volume_var)
-        volume_label.pack(side=tk.TOP, padx=(45, 0))
-
         # Mute button and volume slider in a horizontal frame
         volume_control_frame = ttk.Frame(right)
         volume_control_frame.pack(side=tk.TOP)
@@ -129,10 +122,18 @@ class ControlsBar(ttk.Frame):
                                   button_color=slider_fg,
                                   button_hover_color=slider_hover,
                                   corner_radius=8,
-                                  width=120,  # Compact size
-                                  height=18)   # Not too tall
+                                  width=100,
+                                  height=19)
         self.volume.set(initial_volume)
-        self.volume.pack(side=tk.LEFT, padx=5)
+        self.volume.pack(side=tk.LEFT, padx=(5, 2))
+
+        # Volume percentage label
+        self.volume_percent_label = ctk.CTkLabel(volume_control_frame,
+                                                text=f"{initial_volume}%",
+                                                text_color=palette.get("fg", "#202020"),
+                                                font=("Segoe UI", 14),
+                                                width=40)
+        self.volume_percent_label.pack(side=tk.LEFT, padx=(2, 5))
 
         # time updater
         self._update_id = None
@@ -243,7 +244,6 @@ class ControlsBar(ttk.Frame):
         if self.settings:
             self.settings.mute = new_state
         new = int(self.volume.get())
-        self.volume_var.set(f"Volume: {int(new)}%")
         try:
             self.player.set_volume(int(new))
         except Exception:
@@ -251,7 +251,7 @@ class ControlsBar(ttk.Frame):
 
     def _on_volume_change(self, val):
         volume_int = int(float(val))
-        self.volume_var.set(f"Volume: {volume_int}%")
+        self.volume_percent_label.configure(text=f"{volume_int}%")
         if self.settings:
             self.settings.volume = volume_int
             try:
@@ -310,6 +310,9 @@ class ControlsBar(ttk.Frame):
                                 progress_color=slider_progress,
                                 button_color=slider_fg,
                                 button_hover_color=slider_hover)
+
+            self.volume_percent_label.configure(text_color=palette.get("fg", "#202020"),
+                                                fg_color=frame_bg)
         except Exception:
             pass
 
