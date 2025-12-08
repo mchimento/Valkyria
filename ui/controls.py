@@ -113,9 +113,23 @@ class ControlsBar(ttk.Frame):
         if self.tooltip_manager:
             self.tooltip_manager.attach(self.btn_mute, lambda: self._get_mute_tooltip(initial_mute))
 
-        # Volume slider on the right
-        self.volume = ttk.Scale(volume_control_frame, from_=0, to=100, orient="horizontal",
-                                command=self._on_volume_change)
+        # Volume slider on the right - using CustomTkinter for modern look
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        slider_fg = palette.get("slider_fg", palette.get("accent", "#0078d4"))
+        slider_bg = palette.get("slider_bg", "#E0E0E0")
+        slider_hover = palette.get("slider_hover", palette.get("accent_hover", "#106ebe"))
+        slider_progress = palette.get("slider_progress", palette.get("accent", "#0078d4"))
+        frame_bg = palette.get("bg", "#FAFAFA")
+
+        self.volume = ctk.CTkSlider(volume_control_frame, from_=0, to=100,
+                                  command=self._on_volume_change,
+                                  fg_color=slider_bg,
+                                  bg_color=frame_bg,
+                                  progress_color=slider_progress,
+                                  button_color=slider_fg,
+                                  button_hover_color=slider_hover,
+                                  width=120,  # Compact size
+                                  height=18)   # Not too tall
         self.volume.set(initial_volume)
         self.volume.pack(side=tk.LEFT, padx=5)
 
@@ -276,15 +290,27 @@ class ControlsBar(ttk.Frame):
         default_bg = "#1E1E1E" if is_dark else "#FAFAFA"
         frame_bg = palette.get("bg", default_bg)
 
+        # Update buttons
         for btn in [self.btn_play, self.btn_pause, self.btn_prev, self.btn_stop, self.btn_next, self.btn_mute]:
             try:
                 btn.configure(fg_color=button_bg, text_color=button_fg, hover_color=button_hover, bg_color=frame_bg)
             except Exception:
                 pass
 
-    def _on_play_on_double_change(self):
-        """Handle play_on_double_click setting change."""
-        self.state.play_on_double = self.play_on_double_var.get()
+        # Update volume slider
+        try:
+            slider_fg = palette.get("slider_fg", palette.get("accent", "#0078d4"))
+            slider_bg = palette.get("slider_bg", "#E0E0E0")
+            slider_hover = palette.get("slider_hover", palette.get("accent_hover", "#106ebe"))
+            slider_progress = palette.get("slider_progress", palette.get("accent", "#0078d4"))
+
+            self.volume.configure(fg_color=slider_bg,
+                                bg_color=frame_bg,
+                                progress_color=slider_progress,
+                                button_color=slider_fg,
+                                button_hover_color=slider_hover)
+        except Exception:
+            pass
 
     def destroy(self):
         if self._update_id:

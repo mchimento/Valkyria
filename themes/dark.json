@@ -25,5 +25,9 @@
   "dropdown_disabled": "#666666",
   "dropdown_separator": "#454545",
   "dropdown_border": "#3E3E42",
-  "dropdown_shortcut": "#858585"
+  "dropdown_shortcut": "#858585",
+  "slider_fg": "#BB86FC",
+  "slider_bg": "#404040",
+  "slider_hover": "#985EFF",
+  "slider_progress": "#BB86FC"
 }
