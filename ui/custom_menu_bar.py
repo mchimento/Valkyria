@@ -178,8 +178,15 @@ class DropdownMenu(ctk.CTkFrame):
         """Build menu items (VS Code style)."""
         for item in self.items:
             if item.get("separator"):
-                sep = ctk.CTkFrame(self, height=1, fg_color=self.separator_color)
-                sep.pack(fill=tk.X, padx=0, pady=4)  # VS Code separator spacing
+                # Create a more visible separator using CTkLabel
+                sep_container = ctk.CTkFrame(self, fg_color=self.bg_color, height=5)
+                sep_container.pack(fill=tk.X, padx=0, pady=0)
+                sep_container.pack_propagate(False)
+
+                # Create separator line using CTkLabel with better rendering
+                sep_line = ctk.CTkLabel(sep_container, text="", fg_color="transparent",
+                                       bg_color=self.separator_color, height=1)
+                sep_line.pack(fill=tk.X, padx=0, pady=2)  # Center perfectly to avoid dots
             else:
                 self._create_menu_item(item)
 

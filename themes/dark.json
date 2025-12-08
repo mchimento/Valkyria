@@ -23,7 +23,7 @@
   "dropdown_hover": "#2A2D2E",
   "dropdown_text": "#CCCCCC",
   "dropdown_disabled": "#666666",
-  "dropdown_separator": "#454545",
+  "dropdown_separator": "#808080",
   "dropdown_border": "#3E3E42",
   "dropdown_shortcut": "#858585",
   "slider_fg": "#BB86FC",
