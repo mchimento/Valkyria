@@ -128,6 +128,7 @@ class ControlsBar(ttk.Frame):
                                   progress_color=slider_progress,
                                   button_color=slider_fg,
                                   button_hover_color=slider_hover,
+                                  corner_radius=8,
                                   width=120,  # Compact size
                                   height=18)   # Not too tall
         self.volume.set(initial_volume)
