@@ -24,6 +24,7 @@ class ControlsBar(ttk.Frame):
         self.settings = settings
         self.playlist = playlist
         self.playlist_tree = self.playlist.tree if self.playlist else None
+        self.is_paused = False
 
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
@@ -164,6 +165,10 @@ class ControlsBar(ttk.Frame):
             path = self.state.playlist[self.state.current_index]
             self.player.play(path)
 
+        # Reset pause button state when play is pressed
+        self.is_paused = False
+        self._update_pause_button_state()
+
         if self.playlist:
             self.playlist._highlight_current()
             try:
@@ -175,8 +180,16 @@ class ControlsBar(ttk.Frame):
 
     def _on_pause(self):
         if self.player.is_playing() or self.player.is_paused():
-            self.pause()
-            self._send_status("pause")
+            if self.is_paused:
+                # Resume playback
+                self.player.pause()  # VLC's pause() method toggles - resumes when paused
+                self.is_paused = False
+                self._update_pause_button_state()
+                self._send_status("play")
+            else:
+                # Pause playback
+                self.pause()
+                self._send_status("pause")
 
     def _on_stop(self):
         self.stop()
@@ -192,13 +205,19 @@ class ControlsBar(ttk.Frame):
 
     def play(self):
         self.player.stop()
+        self.is_paused = False
+        self._update_pause_button_state()
         self._on_play(from_user=False)
 
     def pause(self):
         self.player.pause()
+        self.is_paused = True
+        self._update_pause_button_state()
 
     def stop(self):
         self.player.stop()
+        self.is_paused = False
+        self._update_pause_button_state()
 
     def prev(self):
         if self.state.current_index is None:
@@ -207,6 +226,8 @@ class ControlsBar(ttk.Frame):
             # Stop current playback before changing to previous song
             self.player.stop()
             self.state.current_index -= 1
+            self.is_paused = False
+            self._update_pause_button_state()
             self._on_play(from_user=False)
 
     def next(self):
@@ -216,15 +237,9 @@ class ControlsBar(ttk.Frame):
             # Stop current playback before changing to next song
             self.player.stop()
             self.state.current_index += 1
+            self.is_paused = False
+            self._update_pause_button_state()
             self._on_play(from_user=False)
-
-    def _get_mute_label(self, is_muted: bool) -> str:
-        """Get the mute button symbol based on mute state."""
-        return "🔇" if is_muted else "🔊"
-
-    def _get_mute_tooltip(self, is_muted: bool) -> str:
-        """Get the mute button tooltip based on mute state."""
-        return "Muted (M)" if is_muted else "Mute (M)"
 
     def _on_mute_toggle(self):
         """Toggle mute state."""
@@ -264,7 +279,31 @@ class ControlsBar(ttk.Frame):
         except Exception:
             pass
 
-    # ---------------- TIME UPDATE ----------------
+    def _get_mute_label(self, is_muted: bool) -> str:
+        """Get the mute button symbol based on mute state."""
+        return "🔇" if is_muted else "🔊"
+
+    def _get_mute_tooltip(self, is_muted: bool) -> str:
+        """Get the mute button tooltip based on mute state."""
+        return "Muted (M)" if is_muted else "Mute (M)"
+
+    def _update_pause_button_state(self):
+        """Update pause button color based on pause state."""
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color")
+        btn_pressed = palette.get("button_pressed")
+        btn_fg = palette.get("button_fg_color")
+        btn_hover = palette.get("button_hover")
+        frame_bg = palette.get("bg")
+
+        try:
+            if self.is_paused:
+                self.btn_pause.configure(fg_color=btn_pressed, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+            else:
+                self.btn_pause.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+        except Exception:
+            pass
+
     def _schedule_time_update(self):
         try:
             length_ms = self.player.get_length()
@@ -292,12 +331,15 @@ class ControlsBar(ttk.Frame):
         default_bg = "#1E1E1E" if is_dark else "#FAFAFA"
         frame_bg = palette.get("bg", default_bg)
 
-        # Update buttons
-        for btn in [self.btn_play, self.btn_pause, self.btn_prev, self.btn_stop, self.btn_next, self.btn_mute]:
+        # Update buttons (except pause button which has special state handling)
+        for btn in [self.btn_play, self.btn_prev, self.btn_stop, self.btn_next, self.btn_mute]:
             try:
                 btn.configure(fg_color=button_bg, text_color=button_fg, hover_color=button_hover, bg_color=frame_bg)
             except Exception:
                 pass
+
+        # Update pause button with state-aware colors
+        self._update_pause_button_state()
 
         # Update volume slider
         try:
