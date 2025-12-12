@@ -25,6 +25,8 @@ class ControlsBar(ttk.Frame):
         self.playlist = playlist
         self.playlist_tree = self.playlist.tree if self.playlist else None
         self.is_paused = False
+        self.is_playing = False
+        self.is_muted = False
 
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
@@ -165,9 +167,18 @@ class ControlsBar(ttk.Frame):
             path = self.state.playlist[self.state.current_index]
             self.player.play(path)
 
-        # Reset pause button state when play is pressed
-        self.is_paused = False
-        self._update_pause_button_state()
+        # Set play button to pressed state and reset pause button only if playlist has songs
+        if self.state.playlist and len(self.state.playlist) > 0:
+            self.is_playing = True
+            self.is_paused = False
+            self._update_play_button_state()
+            self._update_pause_button_state()
+        else:
+            # Reset both buttons to normal if playlist is empty
+            self.is_playing = False
+            self.is_paused = False
+            self._update_play_button_state()
+            self._update_pause_button_state()
 
         if self.playlist:
             self.playlist._highlight_current()
@@ -181,13 +192,15 @@ class ControlsBar(ttk.Frame):
     def _on_pause(self):
         if self.player.is_playing() or self.player.is_paused():
             if self.is_paused:
-                # Resume playback
+                # Resume playback - set play button to pressed state
                 self.player.pause()  # VLC's pause() method toggles - resumes when paused
                 self.is_paused = False
+                self.is_playing = True
                 self._update_pause_button_state()
+                self._update_play_button_state()
                 self._send_status("play")
             else:
-                # Pause playback
+                # Pause playback - reset play button to normal
                 self.pause()
                 self._send_status("pause")
 
@@ -212,12 +225,16 @@ class ControlsBar(ttk.Frame):
     def pause(self):
         self.player.pause()
         self.is_paused = True
+        self.is_playing = False
         self._update_pause_button_state()
+        self._update_play_button_state()
 
     def stop(self):
         self.player.stop()
         self.is_paused = False
+        self.is_playing = False
         self._update_pause_button_state()
+        self._update_play_button_state()
 
     def prev(self):
         if self.state.current_index is None:
@@ -248,6 +265,10 @@ class ControlsBar(ttk.Frame):
 
         # Update player
         self.player.set_mute(new_state)
+
+        # Update mute button state and appearance
+        self.is_muted = new_state
+        self._update_mute_button_state()
 
         # Update button label (symbol only)
         self.btn_mute.configure(text=self._get_mute_label(new_state))
@@ -287,6 +308,23 @@ class ControlsBar(ttk.Frame):
         """Get the mute button tooltip based on mute state."""
         return "Muted (M)" if is_muted else "Mute (M)"
 
+    def _update_play_button_state(self):
+        """Update play button color based on playing state."""
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color")
+        btn_pressed = palette.get("button_pressed")
+        btn_fg = palette.get("button_fg_color")
+        btn_hover = palette.get("button_hover")
+        frame_bg = palette.get("bg")
+
+        try:
+            if self.is_playing:
+                self.btn_play.configure(fg_color=btn_pressed, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+            else:
+                self.btn_play.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+        except Exception:
+            pass
+
     def _update_pause_button_state(self):
         """Update pause button color based on pause state."""
         palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
@@ -301,6 +339,23 @@ class ControlsBar(ttk.Frame):
                 self.btn_pause.configure(fg_color=btn_pressed, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
             else:
                 self.btn_pause.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+        except Exception:
+            pass
+
+    def _update_mute_button_state(self):
+        """Update mute button color based on mute state."""
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color")
+        btn_pressed = palette.get("button_pressed")
+        btn_fg = palette.get("button_fg_color")
+        btn_hover = palette.get("button_hover")
+        frame_bg = palette.get("bg")
+
+        try:
+            if self.is_muted:
+                self.btn_mute.configure(fg_color=btn_pressed, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+            else:
+                self.btn_mute.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
         except Exception:
             pass
 
@@ -326,20 +381,19 @@ class ControlsBar(ttk.Frame):
         button_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         button_fg = palette.get("button_fg_color", "#ffffff")
         button_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+        frame_bg = palette.get("bg", "#1E1E1E")
 
-        is_dark = getattr(self.theme, 'name', 'Dark') == 'Dark' or (self.settings and self.settings.theme == 'Dark')
-        default_bg = "#1E1E1E" if is_dark else "#FAFAFA"
-        frame_bg = palette.get("bg", default_bg)
-
-        # Update buttons (except pause button which has special state handling)
-        for btn in [self.btn_play, self.btn_prev, self.btn_stop, self.btn_next, self.btn_mute]:
+        # Update buttons (except play, pause, and mute buttons which have special state handling)
+        for btn in [self.btn_prev, self.btn_stop, self.btn_next]:
             try:
                 btn.configure(fg_color=button_bg, text_color=button_fg, hover_color=button_hover, bg_color=frame_bg)
             except Exception:
                 pass
 
-        # Update pause button with state-aware colors
+        # Update play, pause, and mute buttons with state-aware colors
+        self._update_play_button_state()
         self._update_pause_button_state()
+        self._update_mute_button_state()
 
         # Update volume slider
         try:
