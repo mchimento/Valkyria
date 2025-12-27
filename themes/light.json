@@ -16,7 +16,7 @@
   "status_fg": "#202020",
   "status_meta_fg": "#505050",
   "status_border": "#D0D0D0",
-  "striped_bg": "#FAFAFA",
+  "striped_bg": "#F0F0F0",
   "menubar_bg": "#F3F3F3",
   "menubar_hover": "#E5E5E5",
   "menubar_text": "#333333",
@@ -30,5 +30,10 @@
   "slider_fg": "#0078D4",
   "slider_bg": "#E0E0E0",
   "slider_hover": "#106EBE",
-  "slider_progress": "#0078D4"
+  "slider_progress": "#0078D4",
+  "select_bg": "#0078D4",
+  "select_fg": "#FFFFFF",
+  "hover_bg": "#106EBE",
+  "scrollbar_track": "#E0E0E0",
+  "scrollbar_thumb": "#0078D4"
 }

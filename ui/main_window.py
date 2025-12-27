@@ -1019,13 +1019,11 @@ class MainWindow:
     def _on_playlist_select(self, index):
         """
         Called when the user selects a row in the playlist (single-click).
-        Keeps state.current_index in sync with UI selection.
+        Tracks selection but does NOT update current_index since that's for playing state.
         Does NOT start playback — double-click or menu actions do that.
         """
-        if index is None:
-            return
-        if 0 <= index < len(self.state.playlist):
-            self.state.current_index = index
+        # Selection is already tracked in the playlist view via state.selected_indices
+        # No need to update current_index here as that represents the playing song
 
     # ---------- Context Menu Callbacks ----------
     def _on_context_play_song(self, index):

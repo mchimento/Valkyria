@@ -13,6 +13,7 @@ class AppState:
     play_on_double: bool = True
     current_playlist_path: Optional[str] = None
     repeat_mode: str = 'none'  # 'none', 'one', 'all'
+    selected_indices: List[int] = field(default_factory=list)
 
     # Track current theme (default to light; will be overridden by apply_theme)
     _current_theme: str = 'light'
