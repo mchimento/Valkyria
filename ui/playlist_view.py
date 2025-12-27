@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import os
+from mutagen import File as MutagenFile
 from ui.utils import get_display_title
 from ui.playlist_context_menu import PlaylistContextMenu
 
@@ -25,6 +26,7 @@ class PlaylistView(ttk.Frame):
         # Cache for performance
         self._visible_items = []
         self._scroll_pending = False
+        self._metadata_cache = {}
 
         self._setup_ui()
         self._setup_bindings()
@@ -45,7 +47,7 @@ class PlaylistView(ttk.Frame):
             bg=self.theme.palette.get("bg", "#121212"),
             anchor="w"
         )
-        self.header_label.pack(fill="x", padx=10, pady=(5, 10))
+        self.header_label.pack(fill="x", padx=10, pady=(5, 15))
 
         # Main container
         tree_frame = ttk.Frame(self)
@@ -75,17 +77,26 @@ class PlaylistView(ttk.Frame):
             outline=""
         )
 
-        # Treeview
+        # Treeview with metadata columns
         self.tree = ttk.Treeview(
             tree_frame,
-            columns=("Playlist",),
-            show="tree",  # Hide headings since we have a separate header label
+            columns=("Title", "Artist", "Album", "Duration"),
+            show="headings",  # Show column headings
             selectmode="extended",  # Allow multi-select
             yscrollcommand=self._on_tree_scroll
         )
 
-        self.tree.column('#0', width=40, minwidth=40, stretch=False)
-        self.tree.column('Playlist', width=350, minwidth=100, stretch=True)
+        # Configure columns with left-aligned headers
+        self.tree.heading("Title", text="Title", anchor="w")
+        self.tree.heading("Artist", text="Artist", anchor="w")
+        self.tree.heading("Album", text="Album", anchor="w")
+        self.tree.heading("Duration", text="Duration", anchor="w")
+
+        # Make columns wider for better visibility
+        self.tree.column("Title", width=200, minwidth=100, stretch=True)
+        self.tree.column("Artist", width=160, minwidth=80, stretch=True)
+        self.tree.column("Album", width=160, minwidth=80, stretch=True)
+        self.tree.column("Duration", width=100, minwidth=60, stretch=False)
 
         self.tree.pack(fill="both", expand=True)
 
@@ -227,7 +238,12 @@ class PlaylistView(ttk.Frame):
         # Batch insert for performance
         items_to_insert = []
         for i, filepath in enumerate(self.state.playlist):
-            title = get_display_title(filepath)
+            # Get metadata for the file
+            metadata = self._get_metadata(filepath)
+            title = metadata.get("title", get_display_title(filepath))
+            artist = metadata.get("artist", "")
+            album = metadata.get("album", "")
+            duration = metadata.get("duration", "")
 
             # Determine tags based on state
             tags = ["odd" if i % 2 == 1 else "even"]
@@ -238,15 +254,15 @@ class PlaylistView(ttk.Frame):
                 icon = "▶"
                 tags.append("playing")
 
-            items_to_insert.append((i, icon, title, filepath, tags))
+            items_to_insert.append((i, icon, title, artist, album, duration, filepath, tags))
 
         # Insert all at once
-        for i, icon, title, filepath, tags in items_to_insert:
+        for i, icon, title, artist, album, duration, filepath, tags in items_to_insert:
             self.tree.insert(
                 '',
                 tk.END,
                 text=icon,
-                values=(title,),
+                values=(title, artist, album, duration),
                 tags=tuple(tags)
             )
 
@@ -259,6 +275,41 @@ class PlaylistView(ttk.Frame):
 
         # Update scrollbar
         self._update_scrollbar()
+
+    def _get_metadata(self, filepath):
+        """Get metadata for a file, using cache for performance."""
+        if filepath in self._metadata_cache:
+            return self._metadata_cache[filepath]
+
+        metadata = {}
+        try:
+            audio = MutagenFile(filepath, easy=True)
+            if audio:
+                # Extract basic metadata
+                metadata["title"] = str(audio.get("title", [os.path.basename(filepath)])[0])
+                metadata["artist"] = str(audio.get("artist", ["Unknown Artist"])[0])
+                metadata["album"] = str(audio.get("album", ["Unknown Album"])[0])
+
+                # Format duration
+                duration = audio.info.length if hasattr(audio.info, 'length') else 0
+                if duration:
+                    minutes = int(duration // 60)
+                    seconds = int(duration % 60)
+                    metadata["duration"] = f"{minutes:02d}:{seconds:02d}"
+                else:
+                    metadata["duration"] = ""
+        except Exception:
+            # Fallback to filename if metadata extraction fails
+            metadata = {
+                "title": os.path.basename(filepath),
+                "artist": "Unknown Artist",
+                "album": "Unknown Album",
+                "duration": ""
+            }
+
+        # Cache the result
+        self._metadata_cache[filepath] = metadata
+        return metadata
 
     def _highlight_current(self):
         """Update visual highlighting for currently playing track."""
@@ -346,6 +397,11 @@ class PlaylistView(ttk.Frame):
 
         for idx in removed_indices:
             self.state.playlist.pop(idx)
+            # Clear cache for removed file
+            if idx < len(self.state.playlist):
+                removed_file = self.state.playlist[idx]
+                if removed_file in self._metadata_cache:
+                    del self._metadata_cache[removed_file]
 
         # Adjust current_index
         if self.state.current_index is not None:
@@ -455,6 +511,12 @@ class PlaylistView(ttk.Frame):
                 icon = "▶"
 
             self.tree.item(iid, text=icon, tags=tuple(tags))
+
+    def _update_metadata_cache(self, filepath):
+        """Update metadata cache for a specific file."""
+        if filepath in self._metadata_cache:
+            del self._metadata_cache[filepath]
+        self._get_metadata(filepath)
 
     # ========== External Drag & Drop ==========
 
