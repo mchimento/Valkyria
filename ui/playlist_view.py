@@ -116,9 +116,21 @@ class PlaylistView(ttk.Frame):
         self.scrollbar_canvas.bind("<Enter>", self._on_scrollbar_enter)
         self.scrollbar_canvas.bind("<Leave>", self._on_scrollbar_leave)
 
+        # Treeview hover effects
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", self._on_tree_leave)
+
     def _apply_modern_style(self):
         """Apply modern, theme-aware styling."""
         style = ttk.Style()
+
+        style.layout("Playlist.Treeview", [
+        ("Treeview.treearea", {"sticky": "nswe"})
+        ])
+        style.layout("Playlist.Treeview.Heading", [
+            ("Treeheading.cell", {"sticky": "nswe"}),
+            ("Treeheading.text", {"sticky": "nswe"})
+        ])
 
         # Get theme colors
         bg = self.theme.palette.get("bg", "#121212")
@@ -131,7 +143,7 @@ class PlaylistView(ttk.Frame):
 
         # Configure treeview style
         style.configure(
-            "Modern.Treeview",
+            "Playlist.Treeview",
             background=bg,
             foreground=fg,
             fieldbackground=bg,
@@ -141,7 +153,7 @@ class PlaylistView(ttk.Frame):
         )
 
         style.configure(
-            "Modern.Treeview.Heading",
+            "Playlist.Treeview.Heading",
             background=bg,
             foreground=fg,
             borderwidth=0,
@@ -149,12 +161,12 @@ class PlaylistView(ttk.Frame):
         )
 
         style.map(
-            "Modern.Treeview",
+            "Playlist.Treeview",
             background=[("selected", select_bg)],
             foreground=[("selected", select_fg)]
         )
 
-        self.tree.configure(style="Modern.Treeview")
+        self.tree.configure(style="Playlist.Treeview")
 
         # Configure tags for different states
         self.tree.tag_configure("hover", background=hover_bg)
@@ -589,3 +601,33 @@ class PlaylistView(ttk.Frame):
             self.scroll_thumb,
             fill=self.theme.palette.get("button_bg_color", "#535353")
         )
+
+    def _on_tree_motion(self, event):
+        """Handle mouse motion over treeview items for hover effect."""
+        item = self.tree.identify_row(event.y)
+        if item:
+            # Remove hover from all items first
+            children = self.tree.get_children()
+            for child in children:
+                tags = list(self.tree.item(child, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self.tree.item(child, tags=tuple(tags))
+
+            # Add hover to current item
+            tags = list(self.tree.item(item, "tags"))
+            if "hover" not in tags:
+                tags.append("hover")
+                self.tree.item(item, tags=tuple(tags))
+        else:
+            # Remove hover from all items if not over any item
+            self._on_tree_leave(event)
+
+    def _on_tree_leave(self, event):
+        """Handle mouse leaving treeview area."""
+        children = self.tree.get_children()
+        for child in children:
+            tags = list(self.tree.item(child, "tags"))
+            if "hover" in tags:
+                tags.remove("hover")
+                self.tree.item(child, tags=tuple(tags))
