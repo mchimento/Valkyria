@@ -36,9 +36,20 @@ class PlaylistView(ttk.Frame):
 
     def _setup_ui(self):
         """Initialize the UI components."""
+        # Header label
+        self.header_label = tk.Label(
+            self,
+            text="Playback queue",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 18, "bold"),
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            anchor="w"
+        )
+        self.header_label.pack(fill="x", padx=10, pady=(5, 10))
+
         # Main container
         tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill="both", expand=True)
+        tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         # Custom scrollbar (styled to be modern)
         self.scrollbar_canvas = tk.Canvas(
@@ -48,6 +59,9 @@ class PlaylistView(ttk.Frame):
             bg=self.theme.palette.get("bg", "#121212")
         )
         self.scrollbar_canvas.pack(side="right", fill="y")
+
+        # Bind to configure event to update scrollbar when canvas is resized
+        self.scrollbar_canvas.bind("<Configure>", lambda e: self._update_scrollbar())
 
         # Scrollbar track and thumb
         self.scroll_track = self.scrollbar_canvas.create_rectangle(
@@ -65,13 +79,11 @@ class PlaylistView(ttk.Frame):
         self.tree = ttk.Treeview(
             tree_frame,
             columns=("Playlist",),
-            show="tree headings",
+            show="tree",  # Hide headings since we have a separate header label
             selectmode="extended",  # Allow multi-select
             yscrollcommand=self._on_tree_scroll
         )
 
-        self.tree.heading("#0", text="")
-        self.tree.heading("Playlist", text="Playlist")
         self.tree.column('#0', width=40, minwidth=40, stretch=False)
         self.tree.column('Playlist', width=350, minwidth=100, stretch=True)
 
@@ -157,7 +169,9 @@ class PlaylistView(ttk.Frame):
             background=bg,
             foreground=fg,
             borderwidth=0,
-            relief="flat"
+            relief="flat",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 16, "bold"),
+            padding=(0, 0, 0, 0)
         )
 
         style.map(
@@ -177,16 +191,24 @@ class PlaylistView(ttk.Frame):
     def update_theme(self):
         """Update theme-dependent styles."""
         self._apply_modern_style()
+
+        # Update header label
+        self.header_label.configure(
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 16, "bold")
+        )
+
         self.scrollbar_canvas.configure(
             bg=self.theme.palette.get("bg", "#121212")
         )
         self.scrollbar_canvas.itemconfig(
             self.scroll_track,
-            fill=self.theme.palette.get("button_bg_color", "#282828")
+            fill=self.theme.palette.get("scrollbar_track", "#404040")
         )
         self.scrollbar_canvas.itemconfig(
             self.scroll_thumb,
-            fill=self.theme.palette.get("button_bg_color", "#535353")
+            fill=self.theme.palette.get("scrollbar_thumb", "#BB86FC")
         )
         self.refresh(preserve_selection=True)
 
@@ -528,7 +550,7 @@ class PlaylistView(ttk.Frame):
         self.drop_indicator.place_forget()
         self.drop_target_index = None
 
-    # ========== Smooth Scrolling ==========
+    # ========== Scrolling ==========
 
     def _on_mousewheel(self, event):
         """Handle smooth mouse wheel scrolling."""
@@ -560,8 +582,8 @@ class PlaylistView(ttk.Frame):
                 2, 0, 10, canvas_height
             )
 
-            # Calculate thumb position and size
-            thumb_height = max(30, int((last - first) * canvas_height))
+            visible_ratio = max(0.1, last - first)  # Minimum 10% visible ratio
+            thumb_height = max(40, int(visible_ratio * canvas_height))  # Minimum 40px height
             thumb_y = int(first * canvas_height)
 
             self.scrollbar_canvas.coords(
@@ -592,14 +614,14 @@ class PlaylistView(ttk.Frame):
         """Handle mouse entering scrollbar area."""
         self.scrollbar_canvas.itemconfig(
             self.scroll_thumb,
-            fill=self.theme.palette.get("button_hover", "#7E45E3")
+            fill=self.theme.palette.get("accent_hover", "#985EFF")
         )
 
     def _on_scrollbar_leave(self, event):
         """Handle mouse leaving scrollbar area."""
         self.scrollbar_canvas.itemconfig(
             self.scroll_thumb,
-            fill=self.theme.palette.get("button_bg_color", "#535353")
+            fill=self.theme.palette.get("scrollbar_thumb", "#BB86FC")
         )
 
     def _on_tree_motion(self, event):

@@ -122,7 +122,7 @@ class MainWindow:
             {"label": "Move Down", "command": self.move_selected_down},
             {"separator": True},
             {"label": "Remove Selected", "command": self.remove_selected_from_playlist},
-            {"label": "Remove All", "command": self.clear_playlist},
+            {"label": "Clear", "command": self.clear_playlist},
             {"separator": True},
             {"label": "Track Information", "command": self.open_media_info, "ref": "track_info"}
         ]
@@ -142,12 +142,12 @@ class MainWindow:
             {"label": "Operations", "submenu": operations_submenu},
             {"label": "Repeat Mode", "submenu": repeat_submenu, "ref": "playlist_menu"}
         ]
-        self.menubar.add_menu("Playlist", playlist_items)
+        self.menubar.add_menu("Playback", playlist_items)
         self.menu_item_refs["playlist_menu"] = playlist_items
 
         # View menu
         view_items = [
-            {"label": "Show Playlist", "checkbutton": True, "variable": self.show_playlist_var,
+            {"label": "Show Playback", "checkbutton": True, "variable": self.show_playlist_var,
              "command": self.toggle_playlist_visibility},
             {"label": "Show Browser", "checkbutton": True, "variable": self.show_browser_var,
              "command": self.toggle_browser_visibility},
@@ -202,14 +202,14 @@ class MainWindow:
             metadata_callback=self._on_context_show_metadata,
             remove_callback=self._on_context_remove_song
         )
-        self.playlist_view.pack(fill=tk.BOTH, expand=True)
+        self.playlist_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Right: Browser view
         self.right_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
 
         self.browser_view = BrowserView(self.right_frame, self.state, self.theme, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
-        self.browser_view.pack(fill=tk.BOTH, expand=True)
+        self.browser_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Link browser view to playlist view for drag and drop
         self.browser_view.set_playlist_view(self.playlist_view)
