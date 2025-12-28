@@ -668,8 +668,9 @@ class MainWindow:
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
 
     def open_media_info(self):
-        """Open media information dialog for the currently selected track."""
-        if self.state.current_index is None or not self.state.playlist:
+        """Open media information dialog for the currently selected track in playlist."""
+        # Check if there are any selected tracks in the playlist
+        if not self.playlist_view.tree.selection():
             # Create custom silent dialog instead of messagebox
             info_window = tk.Toplevel(self.root)
             info_window.title("Media Information")
@@ -684,7 +685,7 @@ class MainWindow:
             content_frame = ttk.Frame(info_window, padding=20)
             content_frame.pack(fill=tk.BOTH, expand=True)
 
-            ttk.Label(content_frame, text="No track is playing.").pack(pady=10)
+            ttk.Label(content_frame, text="No track is selected.").pack(pady=10)
             ttk.Button(content_frame, text="OK", command=info_window.destroy).pack()
 
             info_window.bind("<Return>", lambda e: info_window.destroy())
@@ -696,8 +697,13 @@ class MainWindow:
             info_window.deiconify()
             return
 
-        current_track = self.state.playlist[self.state.current_index]
-        MediaInfoWindow(self.root, current_track, theme_manager=self.theme)
+        # Get the first selected track (handle multiple selections by showing the first one)
+        selected_items = self.playlist_view.tree.selection()
+        first_selected_index = self.playlist_view.tree.index(selected_items[0])
+
+        if 0 <= first_selected_index < len(self.state.playlist):
+            track = self.state.playlist[first_selected_index]
+            MediaInfoWindow(self.root, track, theme_manager=self.theme)
 
     def open_about(self):
         # Create custom dialog using CustomTkinter
