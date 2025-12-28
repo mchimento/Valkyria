@@ -68,6 +68,9 @@ class MainWindow:
         self.root.bind("<<OpenPlaylist>>", lambda e: self.open_playlist())
         self.root.bind("<<SavePlaylist>>", lambda e: self.save_playlist_as())
 
+        # Global click handler to clear playlist selection when clicking outside
+        self.root.bind_all("<Button-1>", self._on_global_click, add="+")
+
         # Keep UI in sync initially
         self.refresh_all()
         self._update_track_info_state_from_player()
@@ -979,6 +982,70 @@ class MainWindow:
         self.refresh_all()
 
     # ---------- Handlers for custom events from subcomponents ----------
+    def _on_global_click(self, event):
+        """Handle global clicks to clear playlist selection when clicking outside playlist."""
+        # Check if there are any selected items in the playlist
+        if not self.playlist_view.tree.selection():
+            return  # No selection to clear
+
+        # Get the widget that was clicked
+        widget = event.widget
+
+        # Check if the click is within the playlist treeview
+        if widget == self.playlist_view.tree:
+            return  # Click was on playlist, don't clear selection
+
+        # Check if the click is within the playlist view container (including scrollbar)
+        playlist_container = self.playlist_view
+        if widget == playlist_container:
+            return  # Click was within playlist container, don't clear selection
+
+        # Check if the click is on any child of the playlist view
+        current = widget
+        while current:
+            if current == playlist_container:
+                return  # Click was within playlist hierarchy, don't clear selection
+            try:
+                current = current.master
+            except:
+                break
+
+        # Check if the click is on the menu bar or its dropdowns
+        if hasattr(self, 'menubar'):
+            # Check if click is on menu bar buttons or their children
+            for menu_button in self.menubar.menu_buttons.values():
+                # Check if the clicked widget is the menu button itself
+                if widget == menu_button:
+                    return  # Click was on menu bar, don't clear selection
+
+                # Check if the clicked widget is a child of the menu button
+                current = widget
+                while current:
+                    if current == menu_button:
+                        return  # Click was on menu bar child, don't clear selection
+                    try:
+                        current = current.master
+                    except:
+                        break
+
+            # Check if click is within menu bar
+            if widget == self.menubar:
+                return  # Click was on menu bar, don't clear selection
+
+            # Check if click is on any dropdown menu
+            if hasattr(self.menubar, 'active_dropdown') and self.menubar.active_dropdown:
+                current = widget
+                while current:
+                    if current == self.menubar.active_dropdown:
+                        return  # Click was on dropdown menu, don't clear selection
+                    try:
+                        current = current.master
+                    except:
+                        break
+
+        # If we get here, the click was outside the playlist and menu system
+        self.playlist_view.clear_selection()
+
     def _on_browser_add_selected(self, event):
         """
         BrowserView emits <<BrowserAddSelected>> and stores the actual selected paths

@@ -77,7 +77,6 @@ class PlaylistView(ttk.Frame):
             outline=""
         )
 
-        # Treeview with metadata columns
         self.tree = ttk.Treeview(
             tree_frame,
             columns=("Title", "Artist", "Album", "Duration"),
@@ -86,17 +85,15 @@ class PlaylistView(ttk.Frame):
             yscrollcommand=self._on_tree_scroll
         )
 
-        # Configure columns with left-aligned headers
         self.tree.heading("Title", text="Title", anchor="w")
         self.tree.heading("Artist", text="Artist", anchor="w")
         self.tree.heading("Album", text="Album", anchor="w")
         self.tree.heading("Duration", text="Duration", anchor="w")
 
-        # Make columns wider for better visibility
-        self.tree.column("Title", width=200, minwidth=100, stretch=True)
-        self.tree.column("Artist", width=160, minwidth=80, stretch=True)
-        self.tree.column("Album", width=160, minwidth=80, stretch=True)
-        self.tree.column("Duration", width=100, minwidth=60, stretch=False)
+        self.tree.column("Title", width=220, minwidth=150, stretch=True)
+        self.tree.column("Artist", width=100, minwidth=70, stretch=True)
+        self.tree.column("Album", width=100, minwidth=60, stretch=True)
+        self.tree.column("Duration", width=100, minwidth=50, stretch=False)
 
         self.tree.pack(fill="both", expand=True)
 
@@ -706,6 +703,11 @@ class PlaylistView(ttk.Frame):
         else:
             # Remove hover from all items if not over any item
             self._on_tree_leave(event)
+
+    def clear_selection(self):
+        """Clear all selected items in the playlist."""
+        self.tree.selection_remove(self.tree.selection())
+        self.state.selected_indices = []
 
     def _on_tree_leave(self, event):
         """Handle mouse leaving treeview area."""
