@@ -661,6 +661,10 @@ class PlaylistView(ttk.Frame):
             # Remove hover from all items if not over any item
             self._on_tree_leave(event)
 
+    def get_selected_indices(self):
+        """Return a list of indices of selected items."""
+        return [self.tree.index(item) for item in self.tree.selection()]
+
     def clear_selection(self):
         """Clear all selected items in the playlist."""
         self.tree.selection_remove(self.tree.selection())

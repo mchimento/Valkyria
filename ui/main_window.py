@@ -8,9 +8,8 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
-import random
 
-from audio import m3u as m3u_module
+from audio import m3u as m3u_module, playback
 from audio.metadata import get_display_title, get_metadata
 from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
@@ -813,21 +812,19 @@ class MainWindow:
 
     # ---------- Playlist operations (menu) ----------
     def shuffle_playlist(self):
-        random.shuffle(self.state.playlist)
-        if self.state.current_index is not None:
-            current_path = self.state.playlist[self.state.current_index]
-            # find new index
-            try:
-                self.state.current_index = self.state.playlist.index(current_path)
-            except ValueError:
-                self.state.current_index = None
+        self.state.playlist, self.state.current_index = playback.shuffle_playlist(self.state.playlist, self.state.current_index)
         self.refresh_all()
+        self._set_temporary_status("Playlist shuffled")
 
     def clear_playlist(self):
-        if messagebox.askyesno("Clear Playlist", "Clear all entries from the playlist?", parent=self.root):
-            self.state.playlist.clear()
-            self.state.current_index = None
+        if not self.state.playlist:
+            return
+            
+        if messagebox.askyesno("Clear Playlist", "Are you sure you want to clear the playlist?", parent=self.root):
+            self.state.playlist, self.state.current_index = playback.clear_playlist()
+            self.player.stop()
             self.refresh_all()
+            self._set_temporary_status("Playlist cleared")
 
     # ---------- Repeat Mode ----------
     def _set_repeat_mode(self, mode):
@@ -838,103 +835,90 @@ class MainWindow:
     # ---------- Playlist Operations ----------
     def remove_selected_from_playlist(self):
         """Remove selected song from playlist."""
-        if not self.playlist_view or not self.playlist_view.tree:
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices:
             return
-        selected = self.playlist_view.tree.selection()
-        if not selected:
-            messagebox.showwarning("No Selection", "Please select a song to remove.", parent=self.root)
-            return
-
-        for item in selected:
-            idx = self.playlist_view.tree.index(item)
-            if 0 <= idx < len(self.state.playlist):
-                if self.state.current_index == idx:
-                    self.state.current_index = None
-                del self.state.playlist[idx]
-
+            
+        self.state.playlist, self.state.current_index = playback.remove_selected_from_playlist(
+            self.state.playlist, selected_indices, self.state.current_index
+        )
+        
+        # Stop playback if current track was removed
+        if self.state.current_index is None:
+            self.player.stop()
+            
         self.refresh_all()
-        self._set_temporary_status(f"Removed {len(selected)} song(s)")
+        self._set_temporary_status(f"Removed {len(selected_indices)} item(s) from playlist")
 
     def move_selected_up(self):
         """Move selected song up in playlist."""
-        if not self.playlist_view or not self.playlist_view.tree:
-            return
-        selected = self.playlist_view.tree.selection()
-        if not selected or len(selected) != 1:
-            messagebox.showwarning("Selection Error", "Please select exactly one song to move.", parent=self.root)
-            return
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices or 0 in selected_indices:
+            return  # Can't move up if first item is selected
 
-        idx = self.playlist_view.tree.index(selected[0])
-        if idx > 0 and idx < len(self.state.playlist):
-            self.state.playlist[idx], self.state.playlist[idx-1] = self.state.playlist[idx-1], self.state.playlist[idx]
-            if self.state.current_index == idx:
-                self.state.current_index = idx - 1
-            elif self.state.current_index == idx - 1:
-                self.state.current_index = idx
-            self.refresh_all()
+        # Move items up
+        new_playlist = playback.move_selected_up(
+            self.state.playlist, 
+            selected_indices
+        )
+        
+        # Update current index if it was moved
+        if self.state.current_index is not None:
+            if self.state.current_index in selected_indices:
+                self.state.current_index -= 1
+            elif self.state.current_index - 1 in selected_indices:
+                self.state.current_index += 1
+                
+        self.state.playlist = new_playlist
+        
+        # Update selection (shift indices up)
+        new_selection = [i-1 if i > 0 and i-1 not in selected_indices else i 
+                        for i in selected_indices]
+        self.playlist_view.tree.selection_set(*[
+            self.playlist_view.tree.get_children()[i] 
+            for i in new_selection 
+            if 0 <= i < len(self.state.playlist)
+        ])
+        self.refresh_all()
 
     def move_selected_down(self):
         """Move selected song down in playlist."""
-        if not self.playlist_view or not self.playlist_view.tree:
-            return
-        selected = self.playlist_view.tree.selection()
-        if not selected or len(selected) != 1:
-            messagebox.showwarning("Selection Error", "Please select exactly one song to move.", parent=self.root)
-            return
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices or max(selected_indices) >= len(self.state.playlist) - 1:
+            return  # Can't move down if last item is selected
 
-        idx = self.playlist_view.tree.index(selected[0])
-        if idx >= 0 and idx < len(self.state.playlist) - 1:
-            self.state.playlist[idx], self.state.playlist[idx+1] = self.state.playlist[idx+1], self.state.playlist[idx]
-            if self.state.current_index == idx:
-                self.state.current_index = idx + 1
-            elif self.state.current_index == idx + 1:
-                self.state.current_index = idx
-            self.refresh_all()
+        # Move items down
+        new_playlist = playback.move_selected_down(
+            self.state.playlist, 
+            selected_indices
+        )
+        
+        # Update current index if it was moved
+        if self.state.current_index is not None:
+            if self.state.current_index in selected_indices:
+                self.state.current_index += 1
+            elif self.state.current_index + 1 in selected_indices:
+                self.state.current_index -= 1
+                
+        self.state.playlist = new_playlist
+        
+        # Update selection (shift indices down)
+        new_selection = [i+1 if i < len(self.state.playlist) - 1 and i+1 not in selected_indices else i 
+                        for i in selected_indices]
+        self.playlist_view.tree.selection_set(*[
+            self.playlist_view.tree.get_children()[i] 
+            for i in new_selection 
+            if 0 <= i < len(self.state.playlist)
+        ])
+        self.refresh_all()
 
     def sort_playlist_by_title(self):
-        """Sort playlist by title (from metadata) or filename."""
-        if not self.state.playlist:
-            messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
-            return
-
-        current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
-        self.state.playlist.sort(key=lambda x: get_display_title(x).lower())
-
-        if current_path:
-            try:
-                self.state.current_index = self.state.playlist.index(current_path)
-            except ValueError:
-                self.state.current_index = None
-
+        self.state.playlist, self.state.current_index = playback.sort_playlist_by_title(self.state.playlist, self.state.current_index)
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by title")
 
     def sort_playlist_by_artist(self):
-        """Sort playlist by artist (from metadata) or filename."""
-        if not self.state.playlist:
-            messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
-            return
-
-        def get_artist(file_path):
-            """Get artist from metadata or return empty string."""
-            try:
-                audio = MutagenFile(file_path, easy=True)
-                if audio and audio.tags:
-                    artist = audio.get('artist', [''])[0]
-                    return artist.lower() if artist else ''
-            except Exception:
-                pass
-            return ''
-
-        current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
-        self.state.playlist.sort(key=get_artist)
-
-        if current_path:
-            try:
-                self.state.current_index = self.state.playlist.index(current_path)
-            except ValueError:
-                self.state.current_index = None
-
+        self.state.playlist, self.state.current_index = playback.sort_playlist_by_artist(self.state.playlist, self.state.current_index)
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by artist")
 
