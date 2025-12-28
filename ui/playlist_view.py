@@ -272,6 +272,15 @@ class PlaylistView(ttk.Frame):
         # Update scrollbar
         self._update_scrollbar()
 
+        # Hide/show tree and scrollbar based on playlist content
+        is_empty = len(self.state.playlist) == 0
+        if is_empty:
+            self.tree.pack_forget()
+            self.scrollbar_canvas.pack_forget()
+        else:
+            self.scrollbar_canvas.pack(side="right", fill="y")
+            self.tree.pack(fill="both", expand=True, padx=(0, 10))
+
     def _get_metadata(self, filepath):
         """Get metadata for a file using the centralized metadata module."""
         return get_metadata(filepath)
