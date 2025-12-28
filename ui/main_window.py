@@ -211,7 +211,7 @@ class MainWindow:
 
         # Right: Browser view
         self.right_frame = ttk.Frame(self.main_frame, style="TFrame")
-        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
 
         self.browser_view = BrowserView(self.right_frame, self.state, self.theme, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
         self.browser_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -977,7 +977,7 @@ class MainWindow:
         """Toggle browser visibility and mid_frame buttons."""
         if self.show_browser_var.get():
             # Show browser frame and middle buttons
-            self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
+            self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
             self.browser_view.pack(fill=tk.BOTH, expand=True)
             self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
         else:

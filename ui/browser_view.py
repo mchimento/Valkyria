@@ -59,7 +59,7 @@ class BrowserView(ttk.Frame):
             yscrollcommand=self._on_tree_scroll
         )
         self.tree.column('name', width=0, minwidth=0, stretch=False)
-        self.tree.column('#0', width=150, minwidth=150, stretch=True, anchor="w")
+        self.tree.column('#0', width=300, minwidth=200, stretch=False, anchor="w")
 
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
