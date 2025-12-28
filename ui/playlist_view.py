@@ -88,14 +88,14 @@ class PlaylistView(ttk.Frame):
         self.tree.heading("Title", text="Title", anchor="w")
         self.tree.heading("Artist", text="Artist", anchor="w")
         self.tree.heading("Album", text="Album", anchor="w")
-        self.tree.heading("Duration", text="Duration", anchor="w")
+        self.tree.heading("Duration", text="Duration", anchor="e")
 
-        self.tree.column("Title", width=200, minwidth=150, stretch=True)
-        self.tree.column("Artist", width=100, minwidth=70, stretch=True)
-        self.tree.column("Album", width=100, minwidth=60, stretch=True)
-        self.tree.column("Duration", width=100, minwidth=50, stretch=False)
+        self.tree.column("Title", width=200, minwidth=150, stretch=True, anchor="w")
+        self.tree.column("Artist", width=80, minwidth=50, stretch=True, anchor="w")
+        self.tree.column("Album", width=100, minwidth=60, stretch=True, anchor="w")
+        self.tree.column("Duration", width=100, minwidth=50, stretch=False, anchor="e")
 
-        self.tree.pack(fill="both", expand=True)
+        self.tree.pack(fill="both", expand=True, padx=(0, 10))
 
         # Context menu
         self.context_menu = PlaylistContextMenu(
@@ -178,7 +178,7 @@ class PlaylistView(ttk.Frame):
             foreground=fg,
             borderwidth=0,
             relief="flat",
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 16, "bold"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 13, "bold"),
             padding=(0, 0, 0, 0)
         )
 
