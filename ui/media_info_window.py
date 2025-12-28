@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
 from pathlib import Path
-from mutagen import File as MutagenFile
+from audio.metadata import get_file_info, save_metadata
 from ui.utils import center_window
 
 
@@ -196,84 +196,8 @@ class MediaInfoWindow:
         style.configure("TFrame", background=bg)
 
     def _get_file_info(self):
-        """Extract all file information using mutagen."""
-        info = {
-            'path': self.file_path,
-            'filename': os.path.basename(self.file_path),
-            'size': 0,
-            'format': '',
-            'duration': 0,
-            'bitrate': 0,
-            'sample_rate': 0,
-            'channels': 0,
-            'codec': '',
-            'metadata': {}
-        }
-
-        try:
-            # Get file size
-            info['size'] = os.path.getsize(self.file_path)
-
-            # Load with mutagen
-            audio = MutagenFile(self.file_path, easy=True)
-            if audio is None:
-                return info
-
-            # Get audio info
-            if hasattr(audio, 'info'):
-                audio_info = audio.info
-
-                # Duration
-                if hasattr(audio_info, 'length'):
-                    info['duration'] = int(audio_info.length)
-
-                # Bitrate
-                if hasattr(audio_info, 'bitrate'):
-                    info['bitrate'] = int(audio_info.bitrate)
-
-                # Sample rate
-                if hasattr(audio_info, 'sample_rate'):
-                    info['sample_rate'] = int(audio_info.sample_rate)
-
-                # Channels
-                if hasattr(audio_info, 'channels'):
-                    info['channels'] = int(audio_info.channels)
-
-            # Determine format/codec
-            class_name = audio.__class__.__name__.lower()
-            if 'mp3' in class_name:
-                info['format'] = 'MP3'
-                info['codec'] = 'MPEG Audio Layer 3'
-            elif 'flac' in class_name:
-                info['format'] = 'FLAC'
-                info['codec'] = 'Free Lossless Audio Codec'
-            elif 'ogg' in class_name or 'vorbis' in class_name:
-                info['format'] = 'OGG'
-                info['codec'] = 'Vorbis'
-            elif 'm4a' in class_name or 'mp4' in class_name or 'aac' in class_name:
-                info['format'] = 'M4A/AAC'
-                info['codec'] = 'Advanced Audio Coding'
-            elif 'wave' in class_name or 'wav' in class_name:
-                info['format'] = 'WAV'
-                info['codec'] = 'PCM'
-            else:
-                ext = os.path.splitext(self.file_path)[1].upper().lstrip('.')
-                info['format'] = ext
-                info['codec'] = 'Unknown'
-
-            # Get metadata tags
-            if audio.tags:
-                for key in audio.keys():
-                    value = audio[key]
-                    if isinstance(value, list) and len(value) > 0:
-                        info['metadata'][key] = value[0]
-                    else:
-                        info['metadata'][key] = str(value)
-
-        except Exception:
-            pass
-
-        return info
+        """Extract all file information using the centralized metadata module."""
+        return get_file_info(self.file_path)
 
     def _populate_general_tab(self, frame):
         container = ttk.Frame(frame, padding=15)
@@ -480,26 +404,20 @@ class MediaInfoWindow:
     def _save_metadata(self):
         """Save edited metadata back to the file."""
         try:
-            audio = MutagenFile(self.file_path, easy=True)
-            if audio is None:
-                messagebox.showerror("Error", "Could not load file for writing.", parent=self.window)
-                return
-
             # Update tags from entries
+            metadata_to_save = {}
             for key, entry in self.entries.items():
                 val = entry.get().strip()
                 if val:
-                    audio[key] = [val]
-                else:
-                    # Remove tag if empty
-                    if key in audio:
-                        del audio[key]
+                    metadata_to_save[key] = val
 
-            audio.save()
-            messagebox.showinfo("Success", "Metadata saved successfully!", parent=self.window)
-
-            # Refresh file info to show updates
-            self.file_info = self._get_file_info()
+            success = save_metadata(self.file_path, metadata_to_save)
+            if success:
+                messagebox.showinfo("Success", "Metadata saved successfully!", parent=self.window)
+                # Refresh file info to show updates
+                self.file_info = self._get_file_info()
+            else:
+                messagebox.showerror("Error", "Could not load file for writing.", parent=self.window)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save metadata: {e}", parent=self.window)

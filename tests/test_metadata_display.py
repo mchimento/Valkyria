@@ -1,10 +1,10 @@
 import unittest
 import os
 from unittest.mock import MagicMock, patch
-from ui.utils import get_display_title
+from audio.metadata import get_display_title
 
 class TestMetadataDisplay(unittest.TestCase):
-    @patch('ui.utils.MutagenFile')
+    @patch('audio.metadata.MutagenFile')
     def test_get_display_title_with_title_and_artist(self, mock_mutagen):
         # Setup mock
         mock_audio = MagicMock()
@@ -16,7 +16,7 @@ class TestMetadataDisplay(unittest.TestCase):
         result = get_display_title("dummy_path.mp3")
         self.assertEqual(result, "My Title — My Artist")
 
-    @patch('ui.utils.MutagenFile')
+    @patch('audio.metadata.MutagenFile')
     def test_get_display_title_with_title_only(self, mock_mutagen):
         # Setup mock
         mock_audio = MagicMock()
@@ -28,7 +28,7 @@ class TestMetadataDisplay(unittest.TestCase):
         result = get_display_title("dummy_path.mp3")
         self.assertEqual(result, "My Title")
 
-    @patch('ui.utils.MutagenFile')
+    @patch('audio.metadata.MutagenFile')
     def test_get_display_title_no_metadata(self, mock_mutagen):
         # Setup mock to return None or empty dict-like object
         mock_mutagen.return_value = {}
@@ -37,7 +37,7 @@ class TestMetadataDisplay(unittest.TestCase):
         result = get_display_title("/path/to/filename.mp3")
         self.assertEqual(result, "filename.mp3")
 
-    @patch('ui.utils.MutagenFile')
+    @patch('audio.metadata.MutagenFile')
     def test_get_display_title_exception(self, mock_mutagen):
         # Setup mock to raise exception
         mock_mutagen.side_effect = Exception("Error reading file")

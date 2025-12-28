@@ -11,6 +11,7 @@ import customtkinter as ctk
 import random
 
 from audio import m3u as m3u_module
+from audio.metadata import get_display_title, get_metadata
 from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
@@ -19,8 +20,6 @@ from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
-
-from mutagen import File as MutagenFile
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,6 @@ class MainWindow:
         self.theme.apply_to(self.root)
 
         self.palette = self.theme.palette
-        self._meta_cache = {}
 
         # Tooltip manager (shared)
         self.tooltip_manager = TooltipManager(self.root, self.palette)
@@ -899,8 +897,6 @@ class MainWindow:
             messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
             return
 
-        from ui.utils import get_display_title
-
         current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
         self.state.playlist.sort(key=lambda x: get_display_title(x).lower())
 
@@ -1225,8 +1221,7 @@ class MainWindow:
         """
         Restore playing status and populate metadata line.
 
-        Uses mutagen to read tags (title, artist), duration and bitrate.
-        Caches results per-file for responsiveness.
+        Uses the centralized metadata module to read tags (title, artist), duration and bitrate.
         """
         idx = self.state.current_index
         if idx is None or idx >= len(self.state.playlist):
@@ -1237,16 +1232,12 @@ class MainWindow:
         path = self.state.playlist[idx]
         name = os.path.basename(path)
 
-        # Prefer tag title if available, else filename
-        meta = self._meta_cache.get(path)
-        if meta is None:
-            meta = self._read_metadata(path)
-            # store even empty dict to avoid repeated failed reads
-            self._meta_cache[path] = meta
+        # Get metadata using the centralized module
+        meta = get_metadata(path)
 
         title = meta.get("title") or name
         artist = meta.get("artist")
-        duration_s = meta.get("duration")
+        duration_s = meta.get("duration_s")
         bitrate = meta.get("bitrate")
         fmt = meta.get("format")
 
@@ -1254,8 +1245,8 @@ class MainWindow:
             self.status_var.set(f"{prefix}: {title} — {artist}")
         else:
             self.status_var.set(f"{prefix}: {title}")
-
-        # Build metadata line parts
+        
+        # Build metadata line parts (only duration, bitrate, format)
         parts = []
         if duration_s:
             parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
@@ -1266,85 +1257,7 @@ class MainWindow:
 
         self.meta_var.set(" • ".join(parts))
 
-    def _read_metadata(self, path):
-        """
-        Use mutagen to extract: title, artist, duration (s), bitrate (kbps), format.
-        Returns a dict with keys possibly missing.
-        """
-        md = {}
-        try:
-            f = MutagenFile(path, easy=True)
-            if f is None:
-                return md
-            # title/artist (easy tags)
-            title = None
-            artist = None
-            try:
-                title = f.get("title", [None])[0]
-                artist = f.get("artist", [None])[0]
-            except Exception:
-                # some formats expose tags differently; try generic tags
-                tags = getattr(f, "tags", None)
-                if tags:
-                    title = title or tags.get("TITLE") or tags.get("\xa9nam")
-                    artist = artist or tags.get("ARTIST") or tags.get("\xa9ART")
-                    # tags may be lists, extract first string
-                    if isinstance(title, (list, tuple)):
-                        title = title[0]
-                    if isinstance(artist, (list, tuple)):
-                        artist = artist[0]
-
-            # duration in seconds
-            duration = None
-            try:
-                duration = int(f.info.length) if getattr(f, "info", None) and getattr(f.info, "length", None) else None
-            except Exception:
-                duration = None
-
-            # bitrate (some formats)
-            bitrate = None
-            try:
-                if getattr(f, "info", None) and getattr(f.info, "bitrate", None):
-                    # mutagen gives bits per second for many formats
-                    bitrate = int(getattr(f.info, "bitrate") // 1000)
-            except Exception:
-                bitrate = None
-
-            # format: mime or extension
-            fmt = None
-            try:
-                # Try to infer format from class name or filename extension
-                cls_name = f.__class__.__name__.lower()
-                if "mp3" in cls_name:
-                    fmt = "mp3"
-                elif "flac" in cls_name:
-                    fmt = "flac"
-                elif "ogg" in cls_name:
-                    fmt = "ogg"
-                elif "m4a" in cls_name or "mp4" in cls_name:
-                    fmt = "m4a"
-                else:
-                    # fallback to file extension
-                    fmt = os.path.splitext(path)[1].lstrip(".").lower()
-            except Exception:
-                fmt = None
-
-            if title:
-                md["title"] = str(title)
-            if artist:
-                md["artist"] = str(artist)
-            if duration:
-                md["duration"] = int(duration)
-            if bitrate:
-                md["bitrate"] = int(bitrate)
-            if fmt:
-                md["format"] = fmt
-        except Exception:
-            # don't let metadata errors break the UI
-            return md
-
-        return md
-
+    # ---------- Keyboard Accelerators ----------
     def _bind_keyboard_accelerators(self):
         """Bind keyboard accelerators to their corresponding commands."""
         # Alt+key shortcuts for main menu bar navigation

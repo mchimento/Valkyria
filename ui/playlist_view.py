@@ -1,8 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import os
-from mutagen import File as MutagenFile
-from ui.utils import get_display_title
+from audio.metadata import get_metadata, get_display_title
 from ui.playlist_context_menu import PlaylistContextMenu
 
 
@@ -26,7 +25,6 @@ class PlaylistView(ttk.Frame):
         # Cache for performance
         self._visible_items = []
         self._scroll_pending = False
-        self._metadata_cache = {}
 
         self._setup_ui()
         self._setup_bindings()
@@ -274,39 +272,8 @@ class PlaylistView(ttk.Frame):
         self._update_scrollbar()
 
     def _get_metadata(self, filepath):
-        """Get metadata for a file, using cache for performance."""
-        if filepath in self._metadata_cache:
-            return self._metadata_cache[filepath]
-
-        metadata = {}
-        try:
-            audio = MutagenFile(filepath, easy=True)
-            if audio:
-                # Extract basic metadata
-                metadata["title"] = str(audio.get("title", [os.path.basename(filepath)])[0])
-                metadata["artist"] = str(audio.get("artist", ["Unknown Artist"])[0])
-                metadata["album"] = str(audio.get("album", ["Unknown Album"])[0])
-
-                # Format duration
-                duration = audio.info.length if hasattr(audio.info, 'length') else 0
-                if duration:
-                    minutes = int(duration // 60)
-                    seconds = int(duration % 60)
-                    metadata["duration"] = f"{minutes:02d}:{seconds:02d}"
-                else:
-                    metadata["duration"] = ""
-        except Exception:
-            # Fallback to filename if metadata extraction fails
-            metadata = {
-                "title": os.path.basename(filepath),
-                "artist": "Unknown Artist",
-                "album": "Unknown Album",
-                "duration": ""
-            }
-
-        # Cache the result
-        self._metadata_cache[filepath] = metadata
-        return metadata
+        """Get metadata for a file using the centralized metadata module."""
+        return get_metadata(filepath)
 
     def _highlight_current(self):
         """Update visual highlighting for currently playing track."""
@@ -394,11 +361,6 @@ class PlaylistView(ttk.Frame):
 
         for idx in removed_indices:
             self.state.playlist.pop(idx)
-            # Clear cache for removed file
-            if idx < len(self.state.playlist):
-                removed_file = self.state.playlist[idx]
-                if removed_file in self._metadata_cache:
-                    del self._metadata_cache[removed_file]
 
         # Adjust current_index
         if self.state.current_index is not None:
@@ -509,11 +471,6 @@ class PlaylistView(ttk.Frame):
 
             self.tree.item(iid, text=icon, tags=tuple(tags))
 
-    def _update_metadata_cache(self, filepath):
-        """Update metadata cache for a specific file."""
-        if filepath in self._metadata_cache:
-            del self._metadata_cache[filepath]
-        self._get_metadata(filepath)
 
     # ========== External Drag & Drop ==========
 

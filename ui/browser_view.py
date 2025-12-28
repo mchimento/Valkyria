@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
 
-from ui.utils import get_display_title
+from audio.metadata import get_display_title
 
 class BrowserView(ttk.Frame):
     def __init__(self, master, state, theme, tooltip_manager=None, status_callback=None):

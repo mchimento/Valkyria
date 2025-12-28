@@ -1,25 +1,6 @@
 import tkinter as tk
 import os
-from mutagen import File as MutagenFile
-
-def get_display_title(file_path):
-    """
-    Get the display title for a file.
-    Returns "Title — Artist" if both tags exist, "Title" if only title exists,
-    or the filename if no tags are found.
-    """
-    try:
-        audio = MutagenFile(file_path, easy=True)
-        if audio and 'title' in audio:
-            title = audio['title'][0]
-            if 'artist' in audio:
-                artist = audio['artist'][0]
-                return f"{title} — {artist}"
-            return title
-    except Exception:
-        pass
-
-    return os.path.basename(file_path)
+from audio.metadata import get_display_title
 
 def center_window(window, parent=None):
     """
