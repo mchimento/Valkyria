@@ -100,7 +100,8 @@ class PlaylistView(ttk.Frame):
             self.tree,
             play_callback=self._on_context_play,
             metadata_callback=self._on_context_metadata,
-            remove_callback=self._on_context_remove
+            remove_callback=self._on_context_remove,
+            get_current_file_callback=self._get_current_file_path
         )
 
     def _setup_bindings(self):
@@ -401,6 +402,13 @@ class PlaylistView(ttk.Frame):
         """Remove track from context menu."""
         if callable(self.remove_callback):
             self.remove_callback(self.context_menu_index)
+
+    def _get_current_file_path(self):
+        """Get the file path of the currently selected track."""
+        if hasattr(self, 'context_menu_index') and self.context_menu_index is not None:
+            if 0 <= self.context_menu_index < len(self.state.playlist):
+                return self.state.playlist[self.context_menu_index]
+        return None
 
     # ========== Drag and Drop ==========
 

@@ -1,3 +1,4 @@
 python-vlc
 mutagen
 customtkinter
+Pillow

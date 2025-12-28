@@ -819,7 +819,7 @@ class MainWindow:
     def clear_playlist(self):
         if not self.state.playlist:
             return
-            
+
         if messagebox.askyesno("Clear Playlist", "Are you sure you want to clear the playlist?", parent=self.root):
             self.state.playlist, self.state.current_index = playback.clear_playlist()
             self.player.stop()
@@ -838,15 +838,15 @@ class MainWindow:
         selected_indices = self.playlist_view.get_selected_indices()
         if not selected_indices:
             return
-            
+
         self.state.playlist, self.state.current_index = playback.remove_selected_from_playlist(
             self.state.playlist, selected_indices, self.state.current_index
         )
-        
+
         # Stop playback if current track was removed
         if self.state.current_index is None:
             self.player.stop()
-            
+
         self.refresh_all()
         self._set_temporary_status(f"Removed {len(selected_indices)} item(s) from playlist")
 
@@ -858,25 +858,25 @@ class MainWindow:
 
         # Move items up
         new_playlist = playback.move_selected_up(
-            self.state.playlist, 
+            self.state.playlist,
             selected_indices
         )
-        
+
         # Update current index if it was moved
         if self.state.current_index is not None:
             if self.state.current_index in selected_indices:
                 self.state.current_index -= 1
             elif self.state.current_index - 1 in selected_indices:
                 self.state.current_index += 1
-                
+
         self.state.playlist = new_playlist
-        
+
         # Update selection (shift indices up)
-        new_selection = [i-1 if i > 0 and i-1 not in selected_indices else i 
+        new_selection = [i-1 if i > 0 and i-1 not in selected_indices else i
                         for i in selected_indices]
         self.playlist_view.tree.selection_set(*[
-            self.playlist_view.tree.get_children()[i] 
-            for i in new_selection 
+            self.playlist_view.tree.get_children()[i]
+            for i in new_selection
             if 0 <= i < len(self.state.playlist)
         ])
         self.refresh_all()
@@ -889,25 +889,25 @@ class MainWindow:
 
         # Move items down
         new_playlist = playback.move_selected_down(
-            self.state.playlist, 
+            self.state.playlist,
             selected_indices
         )
-        
+
         # Update current index if it was moved
         if self.state.current_index is not None:
             if self.state.current_index in selected_indices:
                 self.state.current_index += 1
             elif self.state.current_index + 1 in selected_indices:
                 self.state.current_index -= 1
-                
+
         self.state.playlist = new_playlist
-        
+
         # Update selection (shift indices down)
-        new_selection = [i+1 if i < len(self.state.playlist) - 1 and i+1 not in selected_indices else i 
+        new_selection = [i+1 if i < len(self.state.playlist) - 1 and i+1 not in selected_indices else i
                         for i in selected_indices]
         self.playlist_view.tree.selection_set(*[
-            self.playlist_view.tree.get_children()[i] 
-            for i in new_selection 
+            self.playlist_view.tree.get_children()[i]
+            for i in new_selection
             if 0 <= i < len(self.state.playlist)
         ])
         self.refresh_all()
@@ -1229,7 +1229,7 @@ class MainWindow:
             self.status_var.set(f"{prefix}: {title} — {artist}")
         else:
             self.status_var.set(f"{prefix}: {title}")
-        
+
         # Build metadata line parts (only duration, bitrate, format)
         parts = []
         if duration_s:
