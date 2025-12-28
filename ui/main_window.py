@@ -99,13 +99,13 @@ class MainWindow:
 
         # Media menu
         media_items = [
-            {"label": "Open File...", "command": self.open_file},
-            {"label": "Open Multiple Files...", "command": self.open_files},
-            {"label": "Open Folder...", "command": self.open_folder},
-            {"label": "Open Playlist (M3U/M3U8)...", "command": self.open_playlist},
+            {"label": "Open File...", "command": self.open_file, "accelerator": "Ctrl+O"},
+            {"label": "Open Multiple Files...", "command": self.open_files, "accelerator": "Ctrl+M"},
+            {"label": "Open Folder...", "command": self.open_folder, "accelerator": "Ctrl+F"},
+            {"label": "Open Playlist (M3U/M3U8)...", "command": self.open_playlist, "accelerator": "Ctrl+L"},
             {"separator": True},
-            {"label": "Save Playlist", "command": self.save_playlist, "ref": "save_playlist"},
-            {"label": "Save Playlist As...", "command": self.save_playlist_as, "ref": "save_playlist_as"},
+            {"label": "Save Playlist", "command": self.save_playlist, "ref": "save_playlist", "accelerator": "Ctrl+S"},
+            {"label": "Save Playlist As...", "command": self.save_playlist_as, "ref": "save_playlist_as", "accelerator": "Ctrl+Shift+S"},
             {"separator": True},
             {"label": "Quit", "command": self._on_quit, "accelerator": "Alt+F4"}
         ]
@@ -115,19 +115,19 @@ class MainWindow:
 
         # Playlist menu
         sort_submenu = [
-            {"label": "Shuffle", "command": self.shuffle_playlist},
-            {"label": "Sort by Title", "command": self.sort_playlist_by_title},
-            {"label": "Sort by Artist", "command": self.sort_playlist_by_artist}
+            {"label": "Shuffle", "command": self.shuffle_playlist, "accelerator": "Ctrl+H"},
+            {"label": "Sort by Title", "command": self.sort_playlist_by_title, "accelerator": "Ctrl+T"},
+            {"label": "Sort by Artist", "command": self.sort_playlist_by_artist, "accelerator": "Ctrl+R"}
         ]
 
         operations_submenu = [
-            {"label": "Move Up", "command": self.move_selected_up},
-            {"label": "Move Down", "command": self.move_selected_down},
+            {"label": "Move Up", "command": self.move_selected_up, "accelerator": "Ctrl+Up"},
+            {"label": "Move Down", "command": self.move_selected_down, "accelerator": "Ctrl+Down"},
             {"separator": True},
-            {"label": "Remove Selected", "command": self.remove_selected_from_playlist},
-            {"label": "Clear", "command": self.clear_playlist},
+            {"label": "Remove Selected", "command": self.remove_selected_from_playlist, "accelerator": "Delete"},
+            {"label": "Clear", "command": self.clear_playlist, "accelerator": "Ctrl+C"},
             {"separator": True},
-            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info"}
+            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info", "accelerator": "Ctrl+I"}
         ]
         self.menu_item_refs["track_info"] = operations_submenu[6]
 
@@ -151,9 +151,9 @@ class MainWindow:
         # View menu
         view_items = [
             {"label": "Show Playback", "checkbutton": True, "variable": self.show_playlist_var,
-             "command": self.toggle_playlist_visibility},
+             "command": self.toggle_playlist_visibility, "accelerator": "F9"},
             {"label": "Show Browser", "checkbutton": True, "variable": self.show_browser_var,
-             "command": self.toggle_browser_visibility},
+             "command": self.toggle_browser_visibility, "accelerator": "F10"},
             {"separator": True},
             {"label": "Always on Top", "checkbutton": True, "variable": self.always_on_top_var,
              "command": self.toggle_always_on_top}
@@ -171,19 +171,22 @@ class MainWindow:
         tools_items = [
             audio_device_item,
             {"separator": True},
-            {"label": "Preferences", "command": self.open_preferences}
+            {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
         self.menubar.add_menu("Tools", tools_items)
         self.menu_item_refs["audio_device"] = audio_device_item
 
         # Help menu
         help_items = [
-            {"label": "About", "command": self.open_about}
+            {"label": "About", "command": self.open_about, "accelerator": "F1"}
         ]
         self.menubar.add_menu("Help", help_items)
 
         # Initialize menu state
         self._update_menu_state()
+
+        # Bind keyboard accelerators
+        self._bind_keyboard_accelerators()
 
     def _build_layout(self):
         # Main frame
@@ -1341,6 +1344,56 @@ class MainWindow:
             return md
 
         return md
+
+    def _bind_keyboard_accelerators(self):
+        """Bind keyboard accelerators to their corresponding commands."""
+        # Alt+key shortcuts for main menu bar navigation
+        self.root.bind("<Alt-f>", lambda e: self._open_menu_by_key("Media"))
+        self.root.bind("<Alt-p>", lambda e: self._open_menu_by_key("Playback"))
+        self.root.bind("<Alt-v>", lambda e: self._open_menu_by_key("View"))
+        self.root.bind("<Alt-t>", lambda e: self._open_menu_by_key("Tools"))
+        self.root.bind("<Alt-h>", lambda e: self._open_menu_by_key("Help"))
+
+        # Escape to close menus
+        self.root.bind("<Escape>", lambda e: self._close_active_menu())
+
+        # Media menu accelerators
+        self.root.bind("<Control-o>", lambda e: self.open_file())
+        self.root.bind("<Control-m>", lambda e: self.open_files())
+        self.root.bind("<Control-f>", lambda e: self.open_folder())
+        self.root.bind("<Control-l>", lambda e: self.open_playlist())
+        self.root.bind("<Control-s>", lambda e: self.save_playlist())
+        self.root.bind("<Control-Shift-S>", lambda e: self.save_playlist_as())
+
+        # Playback menu accelerators
+        self.root.bind("<Control-h>", lambda e: self.shuffle_playlist())
+        self.root.bind("<Control-t>", lambda e: self.sort_playlist_by_title())
+        self.root.bind("<Control-r>", lambda e: self.sort_playlist_by_artist())
+        self.root.bind("<Control-Up>", lambda e: self.move_selected_up())
+        self.root.bind("<Control-Down>", lambda e: self.move_selected_down())
+        self.root.bind("<Delete>", lambda e: self.remove_selected_from_playlist())
+        self.root.bind("<Control-c>", lambda e: self.clear_playlist())
+        self.root.bind("<Control-i>", lambda e: self.open_media_info())
+
+        # View menu accelerators
+        self.root.bind("<F9>", lambda e: self.toggle_playlist_visibility())
+        self.root.bind("<F10>", lambda e: self.toggle_browser_visibility())
+
+        # Tools menu accelerators
+        self.root.bind("<Control-p>", lambda e: self.open_preferences())
+
+        # Help menu accelerators
+        self.root.bind("<F1>", lambda e: self.open_about())
+
+    def _open_menu_by_key(self, menu_label: str):
+        """Open a menu by its label using keyboard shortcut."""
+        if hasattr(self.menubar, '_toggle_menu'):
+            self.menubar._toggle_menu(menu_label)
+
+    def _close_active_menu(self):
+        """Close the currently active menu."""
+        if hasattr(self.menubar, '_close_active_menu'):
+            self.menubar._close_active_menu()
 
     # ---------- Start UI mainloop ----------
     def start(self):
