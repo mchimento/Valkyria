@@ -12,39 +12,65 @@ class BrowserView(ttk.Frame):
         self.tooltip_manager = tooltip_manager
         self.status_callback = status_callback
 
-        tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill=tk.BOTH, expand=True)
+        # Header label
+        self.header_label = tk.Label(
+            self,
+            text="Browser",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 18, "bold"),
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            anchor="w"
+        )
+        self.header_label.pack(fill="x", padx=10, pady=(5, 15))
 
-        # Vertical scrollbar
-        vsb = ttk.Scrollbar(tree_frame, orient="vertical")
-        vsb.pack(side=tk.RIGHT, fill="y")
+        # Main container
+        tree_frame = ttk.Frame(self)
+        tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Custom scrollbar (styled to be modern)
+        self.scrollbar_canvas = tk.Canvas(
+            tree_frame,
+            width=12,
+            highlightthickness=0,
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+        self.scrollbar_canvas.pack(side="right", fill="y")
+
+        # Bind to configure event to update scrollbar when canvas is resized
+        self.scrollbar_canvas.bind("<Configure>", lambda e: self._update_scrollbar())
+
+        # Scrollbar track and thumb
+        self.scroll_track = self.scrollbar_canvas.create_rectangle(
+            2, 0, 10, 100,
+            fill=self.theme.palette.get("scrollbar_track", "#282828"),
+            outline=""
+        )
+        self.scroll_thumb = self.scrollbar_canvas.create_rectangle(
+            2, 0, 10, 50,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353"),
+            outline=""
+        )
 
         self.tree = ttk.Treeview(
             tree_frame,
             columns=("name",),
             show="headings",
             selectmode="extended",
-            yscrollcommand=vsb.set
+            yscrollcommand=self._on_tree_scroll
         )
         self.tree.column('name', width=350, minwidth=100, stretch=True)
         self.tree.heading("name", text="Songs")
 
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+        if "odd" in self.theme.palette:
+            self.tree.tag_configure("odd", background=self.theme.palette["odd"])
+        if "even" in self.theme.palette:
+            self.tree.tag_configure("even", background=self.theme.palette["even"])
 
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.pack(fill="both", expand=True, padx=(0, 5))
 
-        # Connect scrollbars to Treeview
-        vsb.config(command=self.tree.yview)
-
-        # Make the container grid expandable
-        tree_frame.grid_rowconfigure(0, weight=1)
-        tree_frame.grid_columnconfigure(0, weight=1)
-
-        # ---------- Bindings ----------
-        self.tree.bind('<Delete>', self.remove_selected_from_browser)
-
-        # ---------- Drag & Drop ----------
+        # Initialize drag and drop variables
         self.playlist_view = None
         self.drag_data = None
         self.drag_start_pos = None
@@ -53,9 +79,23 @@ class BrowserView(ttk.Frame):
         # Track index for internal live reordering
         self.internal_drag_index = None
 
+        self._setup_bindings()
+
+    def _setup_bindings(self):
+        """Setup event bindings."""
+        # Delete key
+        self.tree.bind('<Delete>', self.remove_selected_from_browser)
+
+        # Drag and drop
         self.tree.bind("<ButtonPress-1>", self._on_drag_start)
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
+
+        # Custom scrollbar interaction
+        self.scrollbar_canvas.bind("<Button-1>", self._on_scrollbar_click)
+        self.scrollbar_canvas.bind("<B1-Motion>", self._on_scrollbar_drag)
+        self.scrollbar_canvas.bind("<Enter>", self._on_scrollbar_enter)
+        self.scrollbar_canvas.bind("<Leave>", self._on_scrollbar_leave)
 
     def update_theme(self):
         """Update theme-dependent styles."""
@@ -73,8 +113,12 @@ class BrowserView(ttk.Frame):
 
         self.tree.delete(*self.tree.get_children())
         for i, f in enumerate(self.state.browser_files):
-            tags = ("striped",) if i % 2 == 1 else ()
-            self.tree.insert("", "end", values=(get_display_title(f),), tags=tags)
+            # Tags for striping
+            tags = ["odd" if i % 2 == 1 else "even"]
+            if "striped_bg" in self.theme.palette and i % 2 == 1:
+                tags.append("striped")
+
+            self.tree.insert("", "end", values=(get_display_title(f),), tags=tuple(tags))
 
         # Restore selection
         if preserve_selection:
@@ -82,6 +126,9 @@ class BrowserView(ttk.Frame):
             for i in selected_indices:
                 if i < len(children):
                     self.tree.selection_add(children[i])
+
+        # Update scrollbar
+        self._update_scrollbar()
 
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
     def browse_folder(self):
@@ -282,3 +329,62 @@ class BrowserView(ttk.Frame):
             for i, iid in enumerate(self.tree.get_children()):
                 tags = ["striped"] if i % 2 == 1 else []
                 self.tree.item(iid, tags=tuple(tags))
+
+    def _on_tree_scroll(self, *args):
+        """Update custom scrollbar when tree scrolls."""
+        self._update_scrollbar()
+
+    def _update_scrollbar(self):
+        """Update custom scrollbar appearance."""
+        try:
+            # Get scroll position
+            first, last = self.tree.yview()
+
+            # Update track height
+            canvas_height = self.scrollbar_canvas.winfo_height()
+            self.scrollbar_canvas.coords(
+                self.scroll_track,
+                2, 0, 10, canvas_height
+            )
+
+            visible_ratio = max(0.1, last - first)  # Minimum 10% visible ratio
+            thumb_height = max(40, int(visible_ratio * canvas_height))  # Minimum 40px height
+            thumb_y = int(first * canvas_height)
+
+            self.scrollbar_canvas.coords(
+                self.scroll_thumb,
+                2, thumb_y, 10, thumb_y + thumb_height
+            )
+
+        except Exception:
+            pass
+
+    def _on_scrollbar_click(self, event):
+        """Handle click on scrollbar."""
+        canvas_height = self.scrollbar_canvas.winfo_height()
+        click_position = event.y / canvas_height
+
+        self.tree.yview_moveto(click_position)
+        self._update_scrollbar()
+
+    def _on_scrollbar_drag(self, event):
+        """Handle dragging the scrollbar."""
+        canvas_height = self.scrollbar_canvas.winfo_height()
+        drag_position = event.y / canvas_height
+
+        self.tree.yview_moveto(drag_position)
+        self._update_scrollbar()
+
+    def _on_scrollbar_enter(self, event):
+        """Handle mouse entering scrollbar area."""
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("accent_hover", "#985EFF")
+        )
+
+    def _on_scrollbar_leave(self, event):
+        """Handle mouse leaving scrollbar area."""
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353")
+        )
