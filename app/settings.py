@@ -14,10 +14,10 @@ class Settings:
     def __init__(self) -> None:
         self.theme: str = "light"
         self.window_geometry: Optional[str] = None
-        self.volume: int = 80  # Default volume level
-        self.mute: bool = False  # Mute state
-        self.show_playlist: bool = True  # Show playlist panel
-        self.show_browser: bool = True  # Show browser panel
+        self.volume: int = 80
+        self.mute: bool = False
+        self.show_playlist: bool = True
+        self.show_browser: bool = True
         self.load()
 
     @property

@@ -12,11 +12,8 @@ class AppState:
     dragged_index: Optional[int] = None
     play_on_double: bool = True
     current_playlist_path: Optional[str] = None
-    repeat_mode: str = 'none'  # 'none', 'one', 'all'
+    repeat_mode: str = 'none'
     selected_indices: List[int] = field(default_factory=list)
 
-    # Track current theme (default to light; will be overridden by apply_theme)
     _current_theme: str = 'light'
-
-    # Support audio extensions
     exts = (".mp3", ".wav", ".flac", ".ogg", ".m4a")

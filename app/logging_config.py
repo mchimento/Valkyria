@@ -7,11 +7,9 @@ def setup_logging():
     Configure logging for the application.
     Logs to a file in the user data directory (no console output).
     """
-    # Create a custom logger
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    # File logging - write to user data directory
     try:
         log_dir = get_user_data_path()
         log_file = log_dir / 'tango_studio.log'
@@ -21,10 +19,8 @@ def setup_logging():
         f_handler.setFormatter(f_format)
         logger.addHandler(f_handler)
 
-        # Log the location for debugging purposes
         logging.info(f"Logging initialized at {log_file}")
     except Exception:
-        # If we can't write to the log file, fall back to console
         c_handler = logging.StreamHandler(sys.stdout)
         c_handler.setLevel(logging.INFO)
         c_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -79,6 +79,22 @@ class BrowserView(ttk.Frame):
         # Track index for internal live reordering
         self.internal_drag_index = None
 
+        # Drag tooltip for showing song names during drag
+        self.drag_tooltip = tk.Toplevel(self)
+        self.drag_tooltip.withdraw()  # Hide initially
+        self.drag_tooltip.overrideredirect(True)  # Remove window decorations
+        self.drag_tooltip_label = tk.Label(
+            self.drag_tooltip,
+            bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
+            fg=self.theme.palette.get("tooltip_fg", "#FFFFFF"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 10),
+            padx=8, pady=4,
+            relief="solid",
+            borderwidth=1
+        )
+        self.drag_tooltip_label.pack()
+        self.drag_tooltip_visible = False
+
         self._setup_bindings()
 
     def _setup_bindings(self):
@@ -117,6 +133,12 @@ class BrowserView(ttk.Frame):
         self.scrollbar_canvas.itemconfig(
             self.scroll_thumb,
             fill=self.theme.palette.get("scrollbar_thumb", "#535353")
+        )
+
+        # Update drag tooltip colors
+        self.drag_tooltip_label.config(
+            bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
+            fg=self.theme.palette.get("tooltip_fg", "#FFFFFF")
         )
 
     def set_playlist_view(self, playlist_view):
@@ -226,10 +248,18 @@ class BrowserView(ttk.Frame):
                 self.drag_data = {"files": paths}
                 self.winfo_toplevel().configure(cursor="fleur")
 
+                # Show drag tooltip with song names
+                if not self.drag_tooltip_visible:
+                    self._show_drag_tooltip(paths, event.x_root, event.y_root)
+
         if not self.drag_data:
             return
 
         x_root, y_root = event.x_root, event.y_root
+
+        # Update drag tooltip position
+        if self.drag_tooltip_visible:
+            self.drag_tooltip.geometry(f"+{x_root + 10}+{y_root + 10}")
 
         # 1. External drag to Playlist (delegation)
         if self.playlist_view:
@@ -270,6 +300,11 @@ class BrowserView(ttk.Frame):
         self.winfo_toplevel().configure(cursor="")
         self.drag_start_pos = None
 
+        # Hide drag tooltip
+        if self.drag_tooltip_visible:
+            self.drag_tooltip.withdraw()
+            self.drag_tooltip_visible = False
+
         if self.drag_data:
             x_root, y_root = event.x_root, event.y_root
 
@@ -291,6 +326,23 @@ class BrowserView(ttk.Frame):
             # Click (No drag threshold exceeded)
             if self.playlist_view:
                  self.playlist_view.handle_external_drag_leave()
+
+    def _show_drag_tooltip(self, paths, x, y):
+        """Show tooltip with song names during drag."""
+        from audio.metadata import get_display_title
+
+        if len(paths) == 1:
+            # Show single song title
+            tooltip_text = get_display_title(paths[0])
+        else:
+            # Show count for multiple songs
+            tooltip_text = f"{len(paths)} songs"
+
+        self.drag_tooltip_label.config(text=tooltip_text)
+        self.drag_tooltip.geometry(f"+{x + 10}+{y + 10}")
+        self.drag_tooltip.deiconify()
+        self.drag_tooltip.lift()
+        self.drag_tooltip_visible = True
 
     def add_selected_to_playlist(self):
         # Read selection from browser view
