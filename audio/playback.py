@@ -3,11 +3,10 @@ This module handles playback-related functionality for the audio player.
 """
 
 import random
-from typing import List, Optional, Callable
 from mutagen import File as MutagenFile
 
 
-def get_artist(file_path: str) -> str:
+def get_artist(file_path):
     """Get artist from metadata or return empty string."""
     try:
         audio = MutagenFile(file_path, easy=True)
@@ -19,7 +18,7 @@ def get_artist(file_path: str) -> str:
     return ''
 
 
-def sort_playlist_by_artist(playlist: List[str], current_index: Optional[int] = None) -> tuple[List[str], Optional[int]]:
+def sort_playlist_by_artist(playlist, current_index=None):
     """Sort playlist by artist (from metadata) or filename."""
     if not playlist:
         return playlist, current_index
@@ -38,13 +37,13 @@ def sort_playlist_by_artist(playlist: List[str], current_index: Optional[int] = 
     return playlist_sorted, new_index
 
 
-def sort_playlist_by_title(playlist: List[str], current_index: Optional[int] = None) -> tuple[List[str], Optional[int]]:
+def sort_playlist_by_title(playlist, current_index=None):
     """Sort playlist by title (from metadata) or filename."""
     if not playlist:
         return playlist, current_index
 
     from .metadata import get_display_title
-    
+
     current_path = playlist[current_index] if current_index is not None else None
     playlist_sorted = sorted(playlist, key=lambda x: get_display_title(x).lower())
 
@@ -59,7 +58,7 @@ def sort_playlist_by_title(playlist: List[str], current_index: Optional[int] = N
     return playlist_sorted, new_index
 
 
-def shuffle_playlist(playlist: List[str], current_index: Optional[int] = None) -> tuple[List[str], Optional[int]]:
+def shuffle_playlist(playlist, current_index=None):
     """Shuffle the playlist while maintaining the currently playing track if any."""
     if not playlist:
         return [], None
@@ -79,16 +78,16 @@ def shuffle_playlist(playlist: List[str], current_index: Optional[int] = None) -
         return shuffled, None
 
 
-def clear_playlist() -> tuple[List, None]:
+def clear_playlist():
     """Return an empty playlist and reset current index."""
     return [], None
 
 
-def move_selected_up(playlist: List[str], selected_indices: List[int]) -> List[str]:
+def move_selected_up(playlist, selected_indices):
     """Move selected items up in the playlist."""
     if not selected_indices or min(selected_indices) <= 0:
         return playlist.copy()
-        
+
     new_playlist = playlist.copy()
     for i in sorted(selected_indices):
         if i > 0:  # Can't move first item up
@@ -96,11 +95,11 @@ def move_selected_up(playlist: List[str], selected_indices: List[int]) -> List[s
     return new_playlist
 
 
-def move_selected_down(playlist: List[str], selected_indices: List[int]) -> List[str]:
+def move_selected_down(playlist, selected_indices):
     """Move selected items down in the playlist."""
     if not selected_indices or max(selected_indices) >= len(playlist) - 1:
         return playlist.copy()
-        
+
     new_playlist = playlist.copy()
     for i in sorted(selected_indices, reverse=True):
         if i < len(new_playlist) - 1:  # Can't move last item down
@@ -108,19 +107,19 @@ def move_selected_down(playlist: List[str], selected_indices: List[int]) -> List
     return new_playlist
 
 
-def remove_selected_from_playlist(playlist: List[str], selected_indices: List[int], current_index: Optional[int]) -> tuple[List[str], Optional[int]]:
+def remove_selected_from_playlist(playlist, selected_indices, current_index):
     """Remove selected items from the playlist and adjust current index if needed."""
     if not selected_indices:
         return playlist.copy(), current_index
-        
+
     new_playlist = [track for i, track in enumerate(playlist) if i not in selected_indices]
-    
+
     # Adjust current index if needed
     if current_index is not None:
         # Count how many items before current_index were removed
         removed_before = sum(1 for i in selected_indices if i < current_index)
         new_index = current_index - removed_before
-        
+
         # If current track was removed, set to None
         if current_index in selected_indices:
             new_index = None
@@ -129,5 +128,5 @@ def remove_selected_from_playlist(playlist: List[str], selected_indices: List[in
             new_index = len(new_playlist) - 1 if new_playlist else None
     else:
         new_index = None
-        
+
     return new_playlist, new_index
