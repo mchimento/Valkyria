@@ -17,6 +17,7 @@ from ui.controls import ControlsBar
 from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
+from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
 
@@ -124,7 +125,8 @@ class MainWindow:
             {"label": "Remove Selected", "command": self.remove_selected_from_playlist, "accelerator": "Delete"},
             {"label": "Clear", "command": self.clear_playlist, "accelerator": "Ctrl+C"},
             {"separator": True},
-            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info", "accelerator": "Ctrl+I"}
+            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info", "accelerator": "Ctrl+I"},
+            {"label": "Show Album booklet", "command": self.show_booklet, "ref": "track_booklet", "accelerator": "Ctrl+B"}
         ]
         self.menu_item_refs["track_info"] = operations_submenu[6]
 
@@ -674,10 +676,9 @@ class MainWindow:
             # Create custom silent dialog instead of messagebox
             info_window = tk.Toplevel(self.root)
             info_window.title("Media Information")
-            info_window.geometry("300x100")
+            info_window.geometry("300x130")
             info_window.resizable(False, False)
             info_window.transient(self.root)
-            info_window.grab_set()
 
             # Hide window initially to prevent flickering during positioning
             info_window.withdraw()
@@ -685,8 +686,8 @@ class MainWindow:
             content_frame = ttk.Frame(info_window, padding=20)
             content_frame.pack(fill=tk.BOTH, expand=True)
 
-            ttk.Label(content_frame, text="No track is selected.").pack(pady=10)
-            ttk.Button(content_frame, text="OK", command=info_window.destroy).pack()
+            ttk.Label(content_frame, text="No track is selected").pack(pady=10)
+            ttk.Button(content_frame, text="OK", command=info_window.destroy, padding=(10, 5)).pack(pady=5)
 
             info_window.bind("<Return>", lambda e: info_window.destroy())
             info_window.bind("<Escape>", lambda e: info_window.destroy())
@@ -704,6 +705,41 @@ class MainWindow:
         if 0 <= first_selected_index < len(self.state.playlist):
             track = self.state.playlist[first_selected_index]
             MediaInfoWindow(self.root, track, theme_manager=self.theme)
+
+    def show_booklet(self):
+        # Check if there are any selected tracks in the playlist
+        if not self.playlist_view.tree.selection():
+            # Create custom silent dialog instead of messagebox
+            info_window = tk.Toplevel(self.root)
+            info_window.title("Album Booklet Information")
+            info_window.geometry("300x130")
+            info_window.resizable(False, False)
+            info_window.transient(self.root)
+
+            # Hide window initially to prevent flickering during positioning
+            info_window.withdraw()
+
+            content_frame = ttk.Frame(info_window, padding=20)
+            content_frame.pack(fill=tk.BOTH, expand=True)
+
+            ttk.Label(content_frame, text="No track is selected").pack(pady=10)
+            ttk.Button(content_frame, text="OK", command=info_window.destroy, padding=(10, 5)).pack(pady=5)
+
+            info_window.bind("<Return>", lambda e: info_window.destroy())
+            info_window.bind("<Escape>", lambda e: info_window.destroy())
+
+            center_window(info_window, self.root)
+
+            # Show window after positioning
+            info_window.deiconify()
+            return
+
+        selected_items = self.playlist_view.tree.selection()
+        first_selected_index = self.playlist_view.tree.index(selected_items[0])
+
+        if 0 <= first_selected_index < len(self.state.playlist):
+            track = self.state.playlist[first_selected_index]
+            BookletViewer(self.root, track)
 
     def open_about(self):
         # Create custom dialog using CustomTkinter
@@ -1271,6 +1307,7 @@ class MainWindow:
         self.root.bind("<Delete>", lambda e: self.remove_selected_from_playlist())
         self.root.bind("<Control-c>", lambda e: self.clear_playlist())
         self.root.bind("<Control-i>", lambda e: self.open_media_info())
+        self.root.bind("<Control-b>", lambda e: self.show_booklet())
 
         # View menu accelerators
         self.root.bind_all("<F9>", lambda e: self._toggle_playlist_visibility())
