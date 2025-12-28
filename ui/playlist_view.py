@@ -90,7 +90,7 @@ class PlaylistView(ttk.Frame):
         self.tree.heading("Album", text="Album", anchor="w")
         self.tree.heading("Duration", text="Duration", anchor="w")
 
-        self.tree.column("Title", width=220, minwidth=150, stretch=True)
+        self.tree.column("Title", width=200, minwidth=150, stretch=True)
         self.tree.column("Artist", width=100, minwidth=70, stretch=True)
         self.tree.column("Album", width=100, minwidth=60, stretch=True)
         self.tree.column("Duration", width=100, minwidth=50, stretch=False)
