@@ -960,12 +960,12 @@ class MainWindow:
     def toggle_browser_visibility(self):
         """Toggle browser visibility and mid_frame buttons."""
         if self.show_browser_var.get():
-            # Restore right frame and middle buttons
+            # Show browser frame and middle buttons
             self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
             self.browser_view.pack(fill=tk.BOTH, expand=True)
             self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
         else:
-            # Hide browser area entirely so playlist uses full width
+            # Hide browser frame and middle buttons
             self.browser_view.pack_forget()
             self.right_frame.pack_forget()
             self.mid_frame.pack_forget()
@@ -1376,8 +1376,8 @@ class MainWindow:
         self.root.bind("<Control-i>", lambda e: self.open_media_info())
 
         # View menu accelerators
-        self.root.bind("<F9>", lambda e: self.toggle_playlist_visibility())
-        self.root.bind("<F10>", lambda e: self.toggle_browser_visibility())
+        self.root.bind_all("<F9>", lambda e: self._toggle_playlist_visibility())
+        self.root.bind_all("<F10>", lambda e: self._toggle_browser_visibility())
 
         # Tools menu accelerators
         self.root.bind("<Control-p>", lambda e: self.open_preferences())
@@ -1394,6 +1394,16 @@ class MainWindow:
         """Close the currently active menu."""
         if hasattr(self.menubar, '_close_active_menu'):
             self.menubar._close_active_menu()
+
+    def _toggle_playlist_visibility(self):
+        """Toggle playlist visibility for keyboard accelerator."""
+        self.show_playlist_var.set(not self.show_playlist_var.get())
+        self.toggle_playlist_visibility()
+
+    def _toggle_browser_visibility(self):
+        """Toggle browser visibility for keyboard accelerator."""
+        self.show_browser_var.set(not self.show_browser_var.get())
+        self.toggle_browser_visibility()
 
     # ---------- Start UI mainloop ----------
     def start(self):
