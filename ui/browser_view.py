@@ -25,7 +25,7 @@ class BrowserView(ttk.Frame):
 
         # Main container
         tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        tree_frame.pack(fill="both", expand=True, padx=(10, 0), pady=(0, 10))
 
         # Custom scrollbar (styled to be modern)
         self.scrollbar_canvas = tk.Canvas(
@@ -54,12 +54,12 @@ class BrowserView(ttk.Frame):
         self.tree = ttk.Treeview(
             tree_frame,
             columns=("name",),
-            show="headings",
+            show="tree",  # Hide headings
             selectmode="extended",
             yscrollcommand=self._on_tree_scroll
         )
-        self.tree.column('name', width=350, minwidth=100, stretch=True)
-        self.tree.heading("name", text="Songs")
+        self.tree.column('name', width=0, minwidth=0, stretch=False)
+        self.tree.column('#0', width=150, minwidth=150, stretch=True, anchor="w")
 
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
@@ -68,7 +68,7 @@ class BrowserView(ttk.Frame):
         if "even" in self.theme.palette:
             self.tree.tag_configure("even", background=self.theme.palette["even"])
 
-        self.tree.pack(fill="both", expand=True, padx=(0, 5))
+        self.tree.pack(fill="both", expand=True)
 
         # Initialize drag and drop variables
         self.playlist_view = None
@@ -118,7 +118,7 @@ class BrowserView(ttk.Frame):
             if "striped_bg" in self.theme.palette and i % 2 == 1:
                 tags.append("striped")
 
-            self.tree.insert("", "end", values=(get_display_title(f),), tags=tuple(tags))
+            self.tree.insert("", "end", text=get_display_title(f), tags=tuple(tags))
 
         # Restore selection
         if preserve_selection:
