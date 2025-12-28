@@ -285,9 +285,8 @@ class BrowserView(ttk.Frame):
             idx = self.tree.index(s)
             if 0 <= idx < len(self.state.browser_files):
                 p = self.state.browser_files[idx]
-                if p not in self.state.playlist:
-                    self.state.playlist.append(p)
-                    added += 1
+                self.state.playlist.append(p)
+                added += 1
 
         self._send_status("added_to_playlist", added)
 
@@ -304,8 +303,6 @@ class BrowserView(ttk.Frame):
 
         added = 0
         for i, f in enumerate(files_to_add):
-            if f in self.state.playlist:
-                continue
             self.state.playlist.insert(insert_pos + added, f)
             added += 1
 

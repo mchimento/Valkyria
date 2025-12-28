@@ -560,9 +560,8 @@ class PlaylistView(ttk.Frame):
             added_count = 0
 
             for f in files:
-                if f not in self.state.playlist:
-                    self.state.playlist.insert(index + added_count, f)
-                    added_count += 1
+                self.state.playlist.insert(index + added_count, f)
+                added_count += 1
 
             if added_count > 0:
                 if self.state.current_index is not None and index <= self.state.current_index:

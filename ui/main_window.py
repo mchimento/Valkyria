@@ -1081,9 +1081,8 @@ class MainWindow:
             return
         added = 0
         for p in sel_paths:
-            if p not in self.state.playlist:
-                self.state.playlist.append(p)
-                added += 1
+            self.state.playlist.append(p)
+            added += 1
         if added:
             self.refresh_all()
             self._set_temporary_status(f"Added {added} file(s) to playlist")
