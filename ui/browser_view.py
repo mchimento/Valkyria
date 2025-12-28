@@ -102,6 +102,23 @@ class BrowserView(ttk.Frame):
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
 
+        # Update header label colors
+        self.header_label.config(
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+
+        # Update scrollbar colors
+        self.scrollbar_canvas.config(bg=self.theme.palette.get("bg", "#121212"))
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_track,
+            fill=self.theme.palette.get("scrollbar_track", "#282828")
+        )
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353")
+        )
+
     def set_playlist_view(self, playlist_view):
         self.playlist_view = playlist_view
 

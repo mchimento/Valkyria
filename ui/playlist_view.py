@@ -31,7 +31,7 @@ class PlaylistView(ttk.Frame):
         self._apply_modern_style()
 
         # Drop indicator for external drag-drop
-        self.drop_indicator = tk.Frame(self.tree, background="#1DB954", height=3)
+        self.drop_indicator = tk.Frame(self.tree, background=self.theme.palette.get("accent", "#BB86FC"), height=3)
         self.drop_target_index = None
 
     def _setup_ui(self):
