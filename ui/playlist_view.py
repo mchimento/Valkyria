@@ -26,6 +26,9 @@ class PlaylistView(ttk.Frame):
         self._visible_items = []
         self._scroll_pending = False
 
+        # Track clicked item for distinguishing click vs drag
+        self._clicked_item = None
+
         self._setup_ui()
         self._setup_bindings()
         self._apply_modern_style()
@@ -425,13 +428,20 @@ class PlaylistView(ttk.Frame):
         """Start drag operation."""
         item = self.tree.identify_row(event.y)
         if item:
-            # Check if this item is already selected
             current_selection = self.tree.selection()
             if item in current_selection and len(current_selection) == 1:
-                # Single selected item clicked - remove selection
                 self.tree.selection_remove(item)
                 self.state.selected_indices = []
-                return "break"  # Prevent default selection behavior
+                return "break"
+
+            # If clicking on an item that's already part of a multi-selection,
+            # preserve multi-selection for potential drag, but remember the clicked item
+            if item in current_selection and len(current_selection) > 1:
+                # Store the clicked item for potential single-click selection on release
+                self._clicked_item = item
+                # Keep the current multi-selection intact for dragging
+                self.state.dragged_index = self.tree.index(item)
+                return "break"
 
             self.state.dragged_index = self.tree.index(item)
 
@@ -439,6 +449,7 @@ class PlaylistView(ttk.Frame):
         """Handle drag motion with live swapping."""
         if self.state.dragged_index is None:
             return
+        self._clicked_item = None
 
         target_row = self.tree.identify_row(event.y)
         if not target_row:
@@ -446,7 +457,59 @@ class PlaylistView(ttk.Frame):
 
         target_index = self.tree.index(target_row)
 
-        if target_index == self.state.dragged_index:
+        # Check if we're dragging multiple items
+        current_selection = self.tree.selection()
+        dragged_item = self.tree.get_children()[self.state.dragged_index]
+        is_multi_drag = dragged_item in current_selection and len(current_selection) > 1
+
+        if is_multi_drag:
+            # Handle multi-item drag reordering
+            selected_indices = [self.tree.index(item) for item in current_selection]
+            selected_indices.sort()  # Sort to maintain order
+
+            # Calculate new positions for all selected items
+            if target_index < self.state.dragged_index:
+                # Moving up - insert before target
+                new_positions = list(range(target_index, target_index + len(selected_indices)))
+            else:
+                # Moving down - insert after target, accounting for removed items
+                new_positions = list(range(target_index - len(selected_indices) + 1, target_index + 1))
+
+            # Move items in data model
+            selected_files = [self.state.playlist[i] for i in selected_indices]
+
+            # Remove selected items from original positions
+            for i in sorted(selected_indices, reverse=True):
+                self.state.playlist.pop(i)
+
+            # Insert at new positions
+            for i, file_path in enumerate(selected_files):
+                self.state.playlist.insert(new_positions[i], file_path)
+
+            # Adjust current_index if needed
+            if self.state.current_index is not None:
+                if self.state.current_index in selected_indices:
+                    # Current playing item was dragged, find its new position
+                    old_pos = selected_indices.index(self.state.current_index)
+                    self.state.current_index = new_positions[old_pos]
+                else:
+                    # Adjust for items moved before/after current position
+                    moved_before = sum(1 for old, new in zip(selected_indices, new_positions)
+                                     if old < self.state.current_index and new >= self.state.current_index)
+                    moved_after = sum(1 for old, new in zip(selected_indices, new_positions)
+                                    if old > self.state.current_index and new <= self.state.current_index)
+                    self.state.current_index += moved_after - moved_after
+
+            self.refresh()
+
+            # Manually restore selection based on new positions
+            children = self.tree.get_children()
+            for new_pos in new_positions:
+                if new_pos < len(children):
+                    self.tree.selection_add(children[new_pos])
+
+            # Update dragged_index to the first selected item's new position
+            self.state.dragged_index = new_positions[0]
             return
 
         # Move in tree (visual)
@@ -477,6 +540,17 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_release(self, event):
         """End drag operation."""
+        # Handle single-click selection if no drag occurred
+        if self._clicked_item and self.state.dragged_index is not None:
+            current_selection = self.tree.selection()
+            if self._clicked_item in current_selection and len(current_selection) > 1:
+                # Change selection to just the clicked item
+                self.tree.selection_set(self._clicked_item)
+                self.state.selected_indices = [self.tree.index(self._clicked_item)]
+
+        # Clear clicked item
+        self._clicked_item = None
+
         self.state.dragged_index = None
         if self.state.current_index is not None:
             self._highlight_current()
