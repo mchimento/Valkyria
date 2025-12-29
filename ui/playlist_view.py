@@ -557,6 +557,11 @@ class PlaylistView(ttk.Frame):
 
             # Update dragged_index to the first selected item's new position
             self.state.dragged_index = new_positions[0]
+
+            # Scroll to the dragged item
+            dragged_item = children[self.state.dragged_index]
+            self.tree.see(dragged_item)
+
             return
 
         # Move in tree (visual)
