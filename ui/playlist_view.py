@@ -148,9 +148,9 @@ class PlaylistView(ttk.Frame):
         self.tree.bind("<Leave>", self._on_tree_leave)
 
         # Column resize tracking
-        self.tree.bind("<Button-1>", self._on_resize_start)
-        self.tree.bind("<B1-Motion>", self._on_resize_motion)
-        self.tree.bind("<ButtonRelease-1>", self._on_resize_end)
+        #self.tree.bind("<Button-1>", self._on_resize_start)
+        #self.tree.bind("<B1-Motion>", self._on_resize_motion)
+        #self.tree.bind("<ButtonRelease-1>", self._on_resize_end)
 
     def _apply_modern_style(self):
         """Apply modern, theme-aware styling."""
@@ -456,6 +456,9 @@ class PlaylistView(ttk.Frame):
                 self._clicked_item = item
                 # Keep the current multi-selection intact for dragging
                 self.state.dragged_index = self.tree.index(item)
+                # Store original selection for current_index tracking
+                self._original_selection_indices = [self.tree.index(item) for item in current_selection]
+                self._original_current_in_selection = self.state.current_index in self._original_selection_indices
                 return "break"
 
             self.state.dragged_index = self.tree.index(item)
@@ -478,6 +481,10 @@ class PlaylistView(ttk.Frame):
         is_multi_drag = dragged_item in current_selection and len(current_selection) > 1
 
         if is_multi_drag:
+            # Use stored original selection values from drag start
+            original_current_in_selection = getattr(self, '_original_current_in_selection', False)
+            original_selection_indices = getattr(self, '_original_selection_indices', [])
+
             # Handle multi-item drag reordering
             selected_indices = [self.tree.index(item) for item in current_selection]
             selected_indices.sort()  # Sort to maintain order
@@ -493,6 +500,11 @@ class PlaylistView(ttk.Frame):
             # Move items in data model
             selected_files = [self.state.playlist[i] for i in selected_indices]
 
+            # Get the current playing song's file path BEFORE reordering
+            current_song = None
+            if self.state.current_index is not None:
+                current_song = self.state.playlist[self.state.current_index]
+
             # Remove selected items from original positions
             for i in sorted(selected_indices, reverse=True):
                 self.state.playlist.pop(i)
@@ -502,18 +514,19 @@ class PlaylistView(ttk.Frame):
                 self.state.playlist.insert(new_positions[i], file_path)
 
             # Adjust current_index if needed
-            if self.state.current_index is not None:
-                if self.state.current_index in selected_indices:
-                    # Current playing item was dragged, find its new position
-                    old_pos = selected_indices.index(self.state.current_index)
+            if self.state.current_index is not None and current_song is not None:
+                if original_current_in_selection:
+                    # Current playing item was originally in the dragged selection
+                    old_pos = original_selection_indices.index(self.state.current_index)
                     self.state.current_index = new_positions[old_pos]
                 else:
-                    # Adjust for items moved before/after current position
-                    moved_before = sum(1 for old, new in zip(selected_indices, new_positions)
-                                     if old < self.state.current_index and new >= self.state.current_index)
-                    moved_after = sum(1 for old, new in zip(selected_indices, new_positions)
-                                    if old > self.state.current_index and new <= self.state.current_index)
-                    self.state.current_index += moved_after - moved_after
+                    # Find where the current song ended up after the reordering
+                    try:
+                        new_current_index = self.state.playlist.index(current_song)
+                        self.state.current_index = new_current_index
+                    except ValueError:
+                        # Song was somehow removed from playlist
+                        self.state.current_index = None
 
             self.refresh()
 
@@ -565,6 +578,12 @@ class PlaylistView(ttk.Frame):
 
         # Clear clicked item
         self._clicked_item = None
+
+        # Clear stored original selection values
+        if hasattr(self, '_original_selection_indices'):
+            delattr(self, '_original_selection_indices')
+        if hasattr(self, '_original_current_in_selection'):
+            delattr(self, '_original_current_in_selection')
 
         self.state.dragged_index = None
         if self.state.current_index is not None:
