@@ -355,7 +355,7 @@ class MainWindow:
         self.artwork_label = ctk.CTkLabel(
             self.artwork_frame,
             text="",
-            font=ctk.CTkFont(size=24),
+            font=ctk.CTkFont(size=40),
             text_color=initial_meta_fg,
             fg_color="transparent",
             anchor="nw"
