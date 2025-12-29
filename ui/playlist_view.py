@@ -436,6 +436,9 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_press(self, event):
         """Start drag operation."""
+        # Hide resize indicators when mouse button is pressed
+        self._hide_resize_indicators()
+
         item = self.tree.identify_row(event.y)
         if item:
             current_selection = self.tree.selection()
@@ -620,8 +623,6 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_release(self, event):
         """End drag operation."""
-        # Cancel single-click timer only if there was mouse movement (drag)
-        # If there was no movement, let the timer handle the single click
         if hasattr(self, '_single_click_timer') and hasattr(self, '_mouse_moved'):
             self.after_cancel(self._single_click_timer)
             delattr(self, '_single_click_timer')
