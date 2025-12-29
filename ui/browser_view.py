@@ -254,7 +254,6 @@ class BrowserView(ttk.Frame):
 
             if paths:
                 self.drag_data = {"files": paths}
-                self.winfo_toplevel().configure(cursor="fleur")
 
         if not self.drag_data:
             return
@@ -275,15 +274,20 @@ class BrowserView(ttk.Frame):
 
         # Show drag tooltip only when dragging outside browser (external drag)
         if not is_inside_browser and not self.drag_tooltip_visible:
-            self._show_drag_tooltip(paths, x_root, y_root)
+            # Calculate tooltip position relative to the browser tree (above the row)
+            tree_x = self.tree.winfo_rootx()
+            tree_y = self.tree.winfo_rooty()
+            tooltip_x = tree_x + self.drag_start_pos[0] + 10
+            tooltip_y = tree_y + self.drag_start_pos[1] - 20  # Position above the row
+            self._show_drag_tooltip(paths, tooltip_x, tooltip_y)
         elif is_inside_browser and self.drag_tooltip_visible:
             # Hide tooltip when dragging back inside browser
             self.drag_tooltip.withdraw()
             self.drag_tooltip_visible = False
 
-        # Update drag tooltip position
+        # Update drag tooltip position to follow mouse when visible (position above cursor)
         if self.drag_tooltip_visible:
-            self.drag_tooltip.geometry(f"+{x_root + 10}+{y_root + 10}")
+            self.drag_tooltip.geometry(f"+{x_root + 10}+{y_root - 20}")
 
         # 1. External drag to Playlist (delegation)
         if self.playlist_view:
