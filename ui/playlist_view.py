@@ -455,6 +455,7 @@ class PlaylistView(ttk.Frame):
                 self.state.dragged_index = self.tree.index(item)
                 self._original_selection_indices = [self.tree.index(item) for item in current_selection]
                 self._original_current_in_selection = self.state.current_index in self._original_selection_indices
+                self._original_current_index = self.state.current_index
                 return "break"
 
             self.state.dragged_index = self.tree.index(item)
@@ -508,6 +509,9 @@ class PlaylistView(ttk.Frame):
             selected_indices = [self.tree.index(item) for item in current_selection]
             selected_indices.sort()  # Sort to maintain order
 
+            # Save old playlist for mapping data
+            old_playlist = self.state.playlist.copy()
+
             # Calculate new positions for all selected items
             if target_index < self.state.dragged_index:
                 # Moving up - insert before target
@@ -536,8 +540,10 @@ class PlaylistView(ttk.Frame):
             if self.state.current_index is not None and current_song is not None:
                 if original_current_in_selection:
                     # Current playing item was originally in the dragged selection
-                    old_pos = original_selection_indices.index(self.state.current_index)
-                    self.state.current_index = new_positions[old_pos]
+                    original_current_index = getattr(self, '_original_current_index', None)
+                    if original_current_index is not None and original_current_index in original_selection_indices:
+                        old_pos = original_selection_indices.index(original_current_index)
+                        self.state.current_index = new_positions[old_pos]
                 else:
                     # Find where the current song ended up after the reordering
                     try:
@@ -558,9 +564,15 @@ class PlaylistView(ttk.Frame):
             # Clear tree
             self.tree.delete(*children)
 
-            # Re-insert in new order
-            for i, (text, values) in enumerate(current_items):
-                # Update tags based on new position
+            # Re-insert in new order, mapping to correct old data
+            for i, file_path in enumerate(self.state.playlist):
+                # Find the old index of this file
+                old_index = old_playlist.index(file_path)
+                old_text, values = current_items[old_index]
+
+                # Set text based on new playing position (ignore old text which may have wrong ▶)
+                text = "▶" if self.state.current_index is not None and i == self.state.current_index else ""
+
                 tags = ["odd" if i % 2 == 1 else "even"]
                 if self.state.current_index is not None and i == self.state.current_index:
                     tags.append("playing")
@@ -623,7 +635,9 @@ class PlaylistView(ttk.Frame):
         # Handle single-click selection if no drag occurred
         if self._clicked_item and self.state.dragged_index is not None:
             current_selection = self.tree.selection()
-            if self._clicked_item in current_selection and len(current_selection) > 1:
+            # Only change multi-selection to single if it wasn't a multi-drag operation
+            was_multi_drag = hasattr(self, '_original_selection_indices') and len(getattr(self, '_original_selection_indices', [])) > 1
+            if not was_multi_drag and self._clicked_item in current_selection and len(current_selection) > 1:
                 # Change selection to just the clicked item
                 self.tree.selection_set(self._clicked_item)
                 self.state.selected_indices = [self.tree.index(self._clicked_item)]
@@ -636,6 +650,8 @@ class PlaylistView(ttk.Frame):
             delattr(self, '_original_selection_indices')
         if hasattr(self, '_original_current_in_selection'):
             delattr(self, '_original_current_in_selection')
+        if hasattr(self, '_original_current_index'):
+            delattr(self, '_original_current_index')
         if hasattr(self, '_last_multi_drag_target'):
             delattr(self, '_last_multi_drag_target')
 
