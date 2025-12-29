@@ -233,6 +233,11 @@ class ControlsBar(ttk.Frame):
         self.player.stop()
         self.is_paused = False
         self.is_playing = False
+        # Clear current index to remove playing highlight
+        self.state.current_index = None
+        # Update playlist highlight if available
+        if self.playlist:
+            self.playlist._highlight_current()
         self._update_pause_button_state()
         self._update_play_button_state()
 

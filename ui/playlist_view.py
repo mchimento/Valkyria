@@ -1,16 +1,18 @@
-
 import tkinter as tk
 from tkinter import ttk
 import os
-
-
-from ui.utils import get_display_title
+from audio.metadata import get_metadata, get_display_title
 from ui.playlist_context_menu import PlaylistContextMenu
 
+
 class PlaylistView(ttk.Frame):
-    def __init__(self, master, state, theme, tooltip_manager=None, select_callback=None, change_callback=None,
-                 play_callback=None, metadata_callback=None, remove_callback=None):
+
+    def __init__(self, master, state, theme, tooltip_manager=None,
+                 select_callback=None, change_callback=None,
+                 play_callback=None, metadata_callback=None,
+                 remove_callback=None):
         super().__init__(master)
+
         self.state = state
         self.theme = theme
         self.select_callback = select_callback
@@ -20,137 +22,350 @@ class PlaylistView(ttk.Frame):
         self.metadata_callback = metadata_callback
         self.remove_callback = remove_callback
 
+        # Cache for performance
+        self._visible_items = []
+        self._scroll_pending = False
+
+        # Track clicked item for distinguishing click vs drag
+        self._clicked_item = None
+
+        self._setup_ui()
+        self._setup_bindings()
+        self._apply_modern_style()
+
+        # Drop indicator for external drag-drop
+        self.drop_indicator = tk.Frame(self.tree, background=self.theme.palette.get("accent", "#BB86FC"), height=3)
+        self.drop_target_index = None
+
+    def _setup_ui(self):
+        """Initialize the UI components."""
+        # Header label
+        self.header_label = tk.Label(
+            self,
+            text="Playback queue",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 18, "bold"),
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            anchor="w"
+        )
+        self.header_label.pack(fill="x", padx=10, pady=(5, 15))
+
+        # Main container
         tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill="both", expand=True)
+        tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # Vertical scrollbar
-        vsb = ttk.Scrollbar(tree_frame, orient="vertical")
-        vsb.pack(side="right", fill="y")
+        # Custom scrollbar (styled to be modern)
+        self.scrollbar_canvas = tk.Canvas(
+            tree_frame,
+            width=12,
+            highlightthickness=0,
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+        self.scrollbar_canvas.pack(side="right", fill="y")
 
-        # Treeview
+        # Bind to configure event to update scrollbar when canvas is resized
+        self.scrollbar_canvas.bind("<Configure>", lambda e: self._update_scrollbar())
+
+        # Scrollbar track and thumb
+        self.scroll_track = self.scrollbar_canvas.create_rectangle(
+            2, 0, 10, 100,
+            fill=self.theme.palette.get("scrollbar_track", "#282828"),
+            outline=""
+        )
+        self.scroll_thumb = self.scrollbar_canvas.create_rectangle(
+            2, 0, 10, 50,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353"),
+            outline=""
+        )
+
         self.tree = ttk.Treeview(
             tree_frame,
-            columns=("Playlist",),
-            show="headings",
-            selectmode="browse",
-            yscrollcommand=vsb.set
+            columns=("Title", "Artist", "Album", "Duration"),
+            show="headings",  # Show column headings
+            selectmode="extended",  # Allow multi-select
+            yscrollcommand=self._on_tree_scroll
         )
-        self.tree.heading("Playlist", text="Playlist")
-        self.tree.column('Playlist', width=350, minwidth=100, stretch=True)
-        self.update_theme()
-        self.tree.pack(fill="both", expand=True)
 
-        # Connect scrollbars to Treeview
-        vsb.config(command=self.tree.yview)
+        self.tree.heading("Title", text="Title", anchor="w")
+        self.tree.heading("Artist", text="Artist", anchor="w")
+        self.tree.heading("Album", text="Album", anchor="w")
+        self.tree.heading("Duration", text="Duration", anchor="e")
 
-        # ---------- Context Menu ----------
+        self.tree.column("Title", width=200, minwidth=150, stretch=True, anchor="w")
+        self.tree.column("Artist", width=80, minwidth=50, stretch=True, anchor="w")
+        self.tree.column("Album", width=100, minwidth=60, stretch=True, anchor="w")
+        self.tree.column("Duration", width=100, minwidth=50, stretch=False, anchor="e")
+
+        self.tree.pack(fill="both", expand=True, padx=(0, 10))
+
+        # Context menu
         self.context_menu = PlaylistContextMenu(
             self.tree,
             play_callback=self._on_context_play,
             metadata_callback=self._on_context_metadata,
-            remove_callback=self._on_context_remove
+            remove_callback=self._on_context_remove,
+            get_current_file_callback=self._get_current_file_path
         )
 
-        # ---------- Bindings ----------
+    def _setup_bindings(self):
+        """Setup event bindings."""
+        # Selection and playback
         self.tree.bind("<Double-1>", self._on_double)
+        self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
+
+        # Drag and drop
         self.tree.bind("<ButtonPress-1>", self._on_button_press)
         self.tree.bind("<B1-Motion>", self._on_mouse_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_button_release)
-        self.tree.bind('<Delete>', self.remove_selected_from_playlist)
-        self.tree.bind("<Button-3>", self._on_right_click)  # Right-click for context menu
 
-        # Drop Indicator
-        self.drop_indicator = tk.Frame(self.tree, background="red", height=2)
-        self.drop_target_index = None
+        # Keyboard navigation
+        self.tree.bind("<Up>", self._on_key_up)
+        self.tree.bind("<Down>", self._on_key_down)
+        self.tree.bind("<Return>", self._on_key_enter)
+        self.tree.bind('<Delete>', self.remove_selected_from_playlist)
+
+        # Context menu
+        self.tree.bind("<Button-3>", self._on_right_click)
+
+        # Smooth scrolling
+        self.tree.bind("<MouseWheel>", self._on_mousewheel)
+        self.tree.bind("<Button-4>", self._on_mousewheel)  # Linux
+        self.tree.bind("<Button-5>", self._on_mousewheel)  # Linux
+
+        # Custom scrollbar interaction
+        self.scrollbar_canvas.bind("<Button-1>", self._on_scrollbar_click)
+        self.scrollbar_canvas.bind("<B1-Motion>", self._on_scrollbar_drag)
+        self.scrollbar_canvas.bind("<Enter>", self._on_scrollbar_enter)
+        self.scrollbar_canvas.bind("<Leave>", self._on_scrollbar_leave)
+
+        # Treeview hover effects
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", self._on_tree_leave)
+
+    def _apply_modern_style(self):
+        """Apply modern, theme-aware styling."""
+        style = ttk.Style()
+
+        style.layout("Playlist.Treeview", [
+        ("Treeview.treearea", {"sticky": "nswe"})
+        ])
+        style.layout("Playlist.Treeview.Heading", [
+            ("Treeheading.cell", {"sticky": "nswe"}),
+            ("Treeheading.text", {"sticky": "nswe"})
+        ])
+
+        # Get theme colors
+        bg = self.theme.palette.get("bg", "#121212")
+        fg = self.theme.palette.get("fg", "#FFFFFF")
+        select_bg = self.theme.palette.get("select_bg", "#3E3E3E")
+        select_fg = self.theme.palette.get("select_fg", "#FFFFFF")
+        hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
+        playing_bg = self.theme.palette.get("highlight", "#FFF59D")
+        playing_fg = self.theme.palette.get("playing_fg", "#000000")
+
+        # Configure treeview style
+        style.configure(
+            "Playlist.Treeview",
+            background=bg,
+            foreground=fg,
+            fieldbackground=bg,
+            borderwidth=0,
+            relief="flat",
+            rowheight=40  # Taller rows for modern look
+        )
+
+        style.configure(
+            "Playlist.Treeview.Heading",
+            background=bg,
+            foreground=fg,
+            borderwidth=0,
+            relief="flat",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 13, "bold"),
+            padding=(0, 0, 0, 0)
+        )
+
+        style.map(
+            "Playlist.Treeview",
+            background=[("selected", select_bg)],
+            foreground=[("selected", select_fg)]
+        )
+
+        self.tree.configure(style="Playlist.Treeview")
+
+        # Configure tags for different states
+        self.tree.tag_configure("hover", background=hover_bg)
+        self.tree.tag_configure("playing", background=playing_bg, foreground=playing_fg)
+        self.tree.tag_configure("even", background=bg)
+        self.tree.tag_configure("odd", background=self.theme.palette.get("striped_bg", bg))
 
     def update_theme(self):
         """Update theme-dependent styles."""
-        highlight_color = self.theme.palette.get("highlight", "#FFF59D")
-        self.tree.tag_configure('current', background=highlight_color)
+        self._apply_modern_style()
 
-        if "striped_bg" in self.theme.palette:
-            self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+        # Update header label
+        self.header_label.configure(
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 16, "bold")
+        )
 
-    # ---------- Refresh ----------
+        self.scrollbar_canvas.configure(
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_track,
+            fill=self.theme.palette.get("scrollbar_track", "#404040")
+        )
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_thumb", "#BB86FC")
+        )
+        self.refresh(preserve_selection=True)
+
+    # ========== Refresh and Rendering ==========
+
     def refresh(self, preserve_selection=False):
-
-
+        """Efficiently refresh the playlist display."""
+        # Store current selection
         selected_indices = []
         if preserve_selection:
             selected_indices = [self.tree.index(item) for item in self.tree.selection()]
 
+        # Clear tree
         self.tree.delete(*self.tree.get_children())
-        for i, f in enumerate(self.state.playlist):
-            tags = ("striped",) if i % 2 == 1 else ()
-            self.tree.insert('', tk.END, values=(get_display_title(f), f), tags=tags)
+
+        # Batch insert for performance
+        items_to_insert = []
+        for i, filepath in enumerate(self.state.playlist):
+            # Get metadata for the file
+            metadata = self._get_metadata(filepath)
+            title = metadata.get("title", get_display_title(filepath))
+            artist = metadata.get("artist", "")
+            album = metadata.get("album", "")
+            duration = metadata.get("duration", "")
+
+            # Determine tags based on state
+            tags = ["odd" if i % 2 == 1 else "even"]
+
+            # Playing indicator
+            icon = ""
+            if self.state.current_index is not None and i == self.state.current_index:
+                icon = "▶"
+                tags.append("playing")
+
+            items_to_insert.append((i, icon, title, artist, album, duration, filepath, tags))
+
+        # Insert all at once
+        for i, icon, title, artist, album, duration, filepath, tags in items_to_insert:
+            self.tree.insert(
+                '',
+                tk.END,
+                text=icon,
+                values=(title, artist, album, duration),
+                tags=tuple(tags)
+            )
 
         # Restore selection
         if preserve_selection:
             children = self.tree.get_children()
-            for i in selected_indices:
-                if i < len(children):
-                    self.tree.selection_add(children[i])
+            for idx in selected_indices:
+                if idx < len(children):
+                    self.tree.selection_add(children[idx])
 
-        # Restore the yellow highlight for the currently playing song
-        if self.state.current_index is not None:
-            self._highlight_current()
+        # Update scrollbar
+        self._update_scrollbar()
 
-    def _restripe_tree(self):
-        """Re-apply striped tags to all items (fast, no I/O)."""
-        for i, iid in enumerate(self.tree.get_children()):
-            tags = ["striped"] if i % 2 == 1 else []
-            # Preserve 'current' tag if it exists (though _highlight_current handles that better)
-            # Actually _highlight_current is the authority on 'current', so _restripe just does background
-            # But we must be careful not to clobber 'current' if we use this independently.
-            current_tags = list(self.tree.item(iid, "tags"))
-            if "current" in current_tags:
-                tags.append("current")
-            self.tree.item(iid, tags=tuple(tags))
+        # Hide/show tree and scrollbar based on playlist content
+        is_empty = len(self.state.playlist) == 0
+        if is_empty:
+            self.tree.pack_forget()
+            self.scrollbar_canvas.pack_forget()
+        else:
+            self.scrollbar_canvas.pack(side="right", fill="y")
+            self.tree.pack(fill="both", expand=True, padx=(0, 10))
+
+    def _get_metadata(self, filepath):
+        """Get metadata for a file using the centralized metadata module."""
+        return get_metadata(filepath)
 
     def _highlight_current(self):
-        # Reset tags for all items to handle striping correctly
-        idx = self.state.current_index
+        """Update visual highlighting for currently playing track."""
         children = self.tree.get_children()
 
         for i, iid in enumerate(children):
-            tags = ["striped"] if i % 2 == 1 else []
+            # Base tag (striping)
+            tags = ["odd" if i % 2 == 1 else "even"]
+            icon = ""
 
-            vals = self.tree.item(iid, 'values')
-            if vals and len(vals) >= 2:
-                 current_display = vals[0]
-                 path = vals[1]
+            # Only add playing tag and icon if this is the actual current playing track
+            if self.state.current_index is not None and i == self.state.current_index:
+                icon = "▶"
+                tags.append("playing")
 
-                 # Optimization: Don't re-read from disk. Strip existing prefix.
-                 base_title = current_display
-                 if base_title.startswith("▶ "):
-                     base_title = base_title[2:]
+            # Update the item
+            self.tree.item(iid, text=icon, tags=tuple(tags))
 
-                 if idx is not None and i == idx:
-                      new_title = f"▶ {base_title}"
-                      tags.append("current")
-                      # Only update if changed to avoid unnecessary redraws
-                      if current_display != new_title:
-                          self.tree.item(iid, values=(new_title, path))
-                 else:
-                      # Restore clean title if needed
-                      if current_display != base_title:
-                          self.tree.item(iid, values=(base_title, path))
+    # ========== Event Handlers ==========
 
-            self.tree.item(iid, tags=tuple(tags))
-
-    # ---------- Events ----------
     def _on_double(self, event):
+        """Handle double-click to play track."""
         if not self.state.play_on_double:
             return
 
         sels = self.tree.selection()
         if not sels:
             return
+
         self.state.current_index = self.tree.index(sels[0])
         self.master.event_generate("<<PlaylistDouble>>", when="tail")
         self._highlight_current()
 
+    def _on_selection_change(self, event):
+        """Handle selection changes."""
+        selections = self.tree.selection()
+        self.state.selected_indices = [self.tree.index(s) for s in selections]
+
+        # Don't let selection change affect the playing state
+        # Just update the selection tracking
+        if callable(self.select_callback) and selections:
+            # Call with the first selected index for compatibility
+            self.select_callback(self.tree.index(selections[0]))
+
+    def _on_key_up(self, event):
+        """Navigate up with arrow key."""
+        selection = self.tree.selection()
+        if selection:
+            current = selection[0]
+            idx = self.tree.index(current)
+            if idx > 0:
+                children = self.tree.get_children()
+                self.tree.selection_set(children[idx - 1])
+                self.tree.see(children[idx - 1])
+        return "break"
+
+    def _on_key_down(self, event):
+        """Navigate down with arrow key."""
+        selection = self.tree.selection()
+        if selection:
+            current = selection[0]
+            idx = self.tree.index(current)
+            children = self.tree.get_children()
+            if idx < len(children) - 1:
+                self.tree.selection_set(children[idx + 1])
+                self.tree.see(children[idx + 1])
+        return "break"
+
+    def _on_key_enter(self, event):
+        """Play selected track with Enter key."""
+        sels = self.tree.selection()
+        if sels:
+            self.state.current_index = self.tree.index(sels[0])
+            self.master.event_generate("<<PlaylistDouble>>", when="tail")
+            self._highlight_current()
+        return "break"
+
     def remove_selected_from_playlist(self, event=None):
+        """Remove selected tracks from playlist."""
         selections = self.tree.selection()
         if not selections:
             return
@@ -160,83 +375,151 @@ class PlaylistView(ttk.Frame):
         for idx in removed_indices:
             self.state.playlist.pop(idx)
 
+        # Adjust current_index
         if self.state.current_index is not None:
-            # If the current song itself was removed, reset highlight
             if self.state.current_index in removed_indices:
                 self.state.current_index = None
             else:
-                # Count how many removed indices were before current
                 shift = sum(1 for i in removed_indices if i < self.state.current_index)
                 self.state.current_index -= shift
 
         self.refresh()
 
-        # Notify main window that playlist changed
         if callable(self.change_callback):
             self.change_callback()
 
-    # ---------- Context Menu ----------
+    # ========== Context Menu ==========
+
     def _on_right_click(self, event):
-        """Handle right-click to show context menu."""
-        # Identify which row was clicked
+        """Show context menu on right-click."""
         item = self.tree.identify_row(event.y)
         if not item:
             return
 
-        # Select the clicked item visually
         self.tree.selection_set(item)
-
-        # Store the index for context menu operations (don't change current_index)
         self.context_menu_index = self.tree.index(item)
-
-        # Show the context menu
         self.context_menu.show(event)
 
     def _on_context_play(self):
-        """Handle Play Song from context menu."""
+        """Play track from context menu."""
         if callable(self.play_callback):
-            # Pass the index of the song to play
             self.play_callback(self.context_menu_index)
 
     def _on_context_metadata(self):
-        """Handle Show Metadata from context menu."""
+        """Show metadata from context menu."""
         if callable(self.metadata_callback):
-            # Pass the index of the song to show metadata for
             self.metadata_callback(self.context_menu_index)
 
     def _on_context_remove(self):
-        """Handle Remove from Playlist from context menu."""
+        """Remove track from context menu."""
         if callable(self.remove_callback):
-            # Pass the index of the song to remove
             self.remove_callback(self.context_menu_index)
 
-    # ---------- Drag & Drop ----------
+    def _get_current_file_path(self):
+        """Get the file path of the currently selected track."""
+        if hasattr(self, 'context_menu_index') and self.context_menu_index is not None:
+            if 0 <= self.context_menu_index < len(self.state.playlist):
+                return self.state.playlist[self.context_menu_index]
+        return None
+
+    # ========== Drag and Drop ==========
+
     def _on_button_press(self, event):
+        """Start drag operation."""
         item = self.tree.identify_row(event.y)
         if item:
+            current_selection = self.tree.selection()
+            if item in current_selection and len(current_selection) == 1:
+                self.tree.selection_remove(item)
+                self.state.selected_indices = []
+                return "break"
+
+            # If clicking on an item that's already part of a multi-selection,
+            # preserve multi-selection for potential drag, but remember the clicked item
+            if item in current_selection and len(current_selection) > 1:
+                # Store the clicked item for potential single-click selection on release
+                self._clicked_item = item
+                # Keep the current multi-selection intact for dragging
+                self.state.dragged_index = self.tree.index(item)
+                return "break"
+
             self.state.dragged_index = self.tree.index(item)
 
     def _on_mouse_motion(self, event):
+        """Handle drag motion with live swapping."""
         if self.state.dragged_index is None:
             return
+        self._clicked_item = None
 
         target_row = self.tree.identify_row(event.y)
         if not target_row:
             return
 
         target_index = self.tree.index(target_row)
-        if target_index == self.state.dragged_index:
+
+        # Check if we're dragging multiple items
+        current_selection = self.tree.selection()
+        dragged_item = self.tree.get_children()[self.state.dragged_index]
+        is_multi_drag = dragged_item in current_selection and len(current_selection) > 1
+
+        if is_multi_drag:
+            # Handle multi-item drag reordering
+            selected_indices = [self.tree.index(item) for item in current_selection]
+            selected_indices.sort()  # Sort to maintain order
+
+            # Calculate new positions for all selected items
+            if target_index < self.state.dragged_index:
+                # Moving up - insert before target
+                new_positions = list(range(target_index, target_index + len(selected_indices)))
+            else:
+                # Moving down - insert after target, accounting for removed items
+                new_positions = list(range(target_index - len(selected_indices) + 1, target_index + 1))
+
+            # Move items in data model
+            selected_files = [self.state.playlist[i] for i in selected_indices]
+
+            # Remove selected items from original positions
+            for i in sorted(selected_indices, reverse=True):
+                self.state.playlist.pop(i)
+
+            # Insert at new positions
+            for i, file_path in enumerate(selected_files):
+                self.state.playlist.insert(new_positions[i], file_path)
+
+            # Adjust current_index if needed
+            if self.state.current_index is not None:
+                if self.state.current_index in selected_indices:
+                    # Current playing item was dragged, find its new position
+                    old_pos = selected_indices.index(self.state.current_index)
+                    self.state.current_index = new_positions[old_pos]
+                else:
+                    # Adjust for items moved before/after current position
+                    moved_before = sum(1 for old, new in zip(selected_indices, new_positions)
+                                     if old < self.state.current_index and new >= self.state.current_index)
+                    moved_after = sum(1 for old, new in zip(selected_indices, new_positions)
+                                    if old > self.state.current_index and new <= self.state.current_index)
+                    self.state.current_index += moved_after - moved_after
+
+            self.refresh()
+
+            # Manually restore selection based on new positions
+            children = self.tree.get_children()
+            for new_pos in new_positions:
+                if new_pos < len(children):
+                    self.tree.selection_add(children[new_pos])
+
+            # Update dragged_index to the first selected item's new position
+            self.state.dragged_index = new_positions[0]
             return
 
-        # Visual update: Move item in tree
-        # This is strictly visual/internal treeview logic, much faster than refresh
+        # Move in tree (visual)
         dragged_item = self.tree.get_children()[self.state.dragged_index]
         self.tree.move(dragged_item, '', target_index)
 
-        # Data update: Swap playlist entries
+        # Update data
         self.state.playlist.insert(target_index, self.state.playlist.pop(self.state.dragged_index))
 
-        # Adjust current index if a song is playing and dragged song is current
+        # Adjust current_index
         if self.state.current_index is not None:
             if self.state.dragged_index == self.state.current_index:
                 self.state.current_index = target_index
@@ -245,94 +528,101 @@ class PlaylistView(ttk.Frame):
             elif target_index <= self.state.current_index < self.state.dragged_index:
                 self.state.current_index += 1
 
-        # Re-apply stripes (fast, O(N) visual only)
-        # We don't call refresh() here to avoid I/O
-        self._restripe_tree()
+        # Update tags efficiently
+        self._reapply_tags()
 
-        # Update dragged index for next motion
+        # Update dragged index
         self.state.dragged_index = target_index
 
-        # Keep selection on the dragged item
+        # Keep selection
         self.tree.selection_set(dragged_item)
         self.tree.see(dragged_item)
 
-        # Highlight current song if there is one playing (just updates text/tags, no I/O)
-        if self.state.current_index is not None:
-             self._highlight_current()
-
     def _on_button_release(self, event):
+        """End drag operation."""
+        # Handle single-click selection if no drag occurred
+        if self._clicked_item and self.state.dragged_index is not None:
+            current_selection = self.tree.selection()
+            if self._clicked_item in current_selection and len(current_selection) > 1:
+                # Change selection to just the clicked item
+                self.tree.selection_set(self._clicked_item)
+                self.state.selected_indices = [self.tree.index(self._clicked_item)]
+
+        # Clear clicked item
+        self._clicked_item = None
+
         self.state.dragged_index = None
         if self.state.current_index is not None:
             self._highlight_current()
 
-    # ---------- External Drag & Drop (Browser -> Playlist) ----------
+    def _reapply_tags(self):
+        """Efficiently reapply tags after reordering."""
+        children = self.tree.get_children()
+        for i, iid in enumerate(children):
+            # Base striping tags
+            tags = ["odd" if i % 2 == 1 else "even"]
+            icon = ""
+
+            # Only mark as playing if it matches current_index
+            if self.state.current_index is not None and i == self.state.current_index:
+                tags.append("playing")
+                icon = "▶"
+
+            self.tree.item(iid, text=icon, tags=tuple(tags))
+
+
+    # ========== External Drag & Drop ==========
+
     def handle_external_drag_motion(self, x_root, y_root, data):
-        """
-        Called by BrowserView when dragging over the playlist.
-        """
+        """Handle drag motion from external sources."""
         try:
-            # Check if mouse is actually inside the tree widget
             tree_x = self.tree.winfo_rootx()
             tree_y = self.tree.winfo_rooty()
             tree_w = self.tree.winfo_width()
             tree_h = self.tree.winfo_height()
 
-            if not (tree_x <= x_root <= tree_x + tree_w and tree_y <= y_root <= tree_y + tree_h):
+            if not (tree_x <= x_root <= tree_x + tree_w and
+                    tree_y <= y_root <= tree_y + tree_h):
                 self.handle_external_drag_leave()
                 return
 
             local_y = y_root - tree_y
-
-            # Identify row under mouse
             item = self.tree.identify_row(local_y)
 
             if item:
                 bbox = self.tree.bbox(item)
-                # bbox is (x, y, width, height)
                 item_y, item_h = bbox[1], bbox[3]
 
-                # Determine if we are in the top or bottom half
                 if local_y < item_y + item_h / 2:
-                    # Insert before
                     self.drop_target_index = self.tree.index(item)
                     indicator_y = item_y
                 else:
-                    # Insert after
                     self.drop_target_index = self.tree.index(item) + 1
                     indicator_y = item_y + item_h
             else:
-                # If not on a row, check if we are at the end
                 children = self.tree.get_children()
                 if children:
                     last_item = children[-1]
                     bbox = self.tree.bbox(last_item)
                     if local_y > bbox[1] + bbox[3]:
-                        # Below last item
                         self.drop_target_index = len(children)
                         indicator_y = bbox[1] + bbox[3]
                     else:
-                        # Empty space but not below last item? (e.g. empty list)
-                        # If list is empty, bbox might fail or children is empty
-                        self.drop_target_index = len(children) # Append
-                        indicator_y = 0 # Top?
+                        self.drop_target_index = len(children)
+                        indicator_y = 0
                 else:
-                    # Empty list
                     self.drop_target_index = 0
                     indicator_y = 0
 
-            # Show indicator
-            self.drop_indicator.place(x=0, y=indicator_y, width=tree_w, height=2)
+            self.drop_indicator.place(x=0, y=indicator_y, width=tree_w, height=3)
             self.drop_indicator.lift()
 
         except Exception:
             self.handle_external_drag_leave()
 
     def handle_external_drop(self, x_root, y_root, data):
-        """
-        Called by BrowserView when dropping onto the playlist.
-        """
+        """Handle drop from external sources."""
         try:
-            # Hide indicator
             self.drop_indicator.place_forget()
 
             tree_x = self.tree.winfo_rootx()
@@ -340,31 +630,27 @@ class PlaylistView(ttk.Frame):
             tree_w = self.tree.winfo_width()
             tree_h = self.tree.winfo_height()
 
-            # If dropped outside, ignore
-            if not (tree_x <= x_root <= tree_x + tree_w and tree_y <= y_root <= tree_y + tree_h):
+            if not (tree_x <= x_root <= tree_x + tree_w and
+                    tree_y <= y_root <= tree_y + tree_h):
                 return
 
-            # Use the index calculated during drag motion
             if self.drop_target_index is None:
-                # Fallback if motion didn't catch it
                 self.drop_target_index = len(self.state.playlist)
 
             index = self.drop_target_index
-
-            # Insert files
             files = data.get("files", [])
             added_count = 0
-            for i, f in enumerate(files):
-                if f not in self.state.playlist:
-                    self.state.playlist.insert(index + added_count, f)
-                    added_count += 1
+
+            for f in files:
+                self.state.playlist.insert(index + added_count, f)
+                added_count += 1
 
             if added_count > 0:
-                # Adjust current_index if we inserted before it
                 if self.state.current_index is not None and index <= self.state.current_index:
                     self.state.current_index += added_count
 
                 self.refresh()
+
                 if callable(self.change_callback):
                     self.change_callback()
 
@@ -374,8 +660,119 @@ class PlaylistView(ttk.Frame):
             self.drop_target_index = None
 
     def handle_external_drag_leave(self):
-        """
-        Called when drag leaves the playlist area.
-        """
+        """Handle drag leaving the playlist area."""
         self.drop_indicator.place_forget()
         self.drop_target_index = None
+
+    # ========== Scrolling ==========
+
+    def _on_mousewheel(self, event):
+        """Handle smooth mouse wheel scrolling."""
+        if event.num == 4 or event.delta > 0:
+            delta = -1
+        elif event.num == 5 or event.delta < 0:
+            delta = 1
+        else:
+            delta = -event.delta // 120
+
+        self.tree.yview_scroll(delta, "units")
+        self._update_scrollbar()
+        return "break"
+
+    def _on_tree_scroll(self, *args):
+        """Update custom scrollbar when tree scrolls."""
+        self._update_scrollbar()
+
+    def _update_scrollbar(self):
+        """Update custom scrollbar appearance."""
+        try:
+            # Get scroll position
+            first, last = self.tree.yview()
+
+            # Update track height
+            canvas_height = self.scrollbar_canvas.winfo_height()
+            self.scrollbar_canvas.coords(
+                self.scroll_track,
+                2, 0, 10, canvas_height
+            )
+
+            visible_ratio = max(0.1, last - first)  # Minimum 10% visible ratio
+            thumb_height = max(40, int(visible_ratio * canvas_height))  # Minimum 40px height
+            thumb_y = int(first * canvas_height)
+
+            self.scrollbar_canvas.coords(
+                self.scroll_thumb,
+                2, thumb_y, 10, thumb_y + thumb_height
+            )
+
+        except Exception:
+            pass
+
+    def _on_scrollbar_click(self, event):
+        """Handle click on scrollbar."""
+        canvas_height = self.scrollbar_canvas.winfo_height()
+        click_position = event.y / canvas_height
+
+        self.tree.yview_moveto(click_position)
+        self._update_scrollbar()
+
+    def _on_scrollbar_drag(self, event):
+        """Handle dragging the scrollbar."""
+        canvas_height = self.scrollbar_canvas.winfo_height()
+        drag_position = event.y / canvas_height
+
+        self.tree.yview_moveto(drag_position)
+        self._update_scrollbar()
+
+    def _on_scrollbar_enter(self, event):
+        """Handle mouse entering scrollbar area."""
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_hover", "#525252")
+        )
+
+    def _on_scrollbar_leave(self, event):
+        """Handle mouse leaving scrollbar area."""
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_thumb", "#BB86FC")
+        )
+
+    def _on_tree_motion(self, event):
+        """Handle mouse motion over treeview items for hover effect."""
+        item = self.tree.identify_row(event.y)
+        if item:
+            # Remove hover from all items first
+            children = self.tree.get_children()
+            for child in children:
+                tags = list(self.tree.item(child, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self.tree.item(child, tags=tuple(tags))
+
+            # Add hover to current item
+            tags = list(self.tree.item(item, "tags"))
+            if "hover" not in tags:
+                tags.append("hover")
+                self.tree.item(item, tags=tuple(tags))
+        else:
+            # Remove hover from all items if not over any item
+            self._on_tree_leave(event)
+
+    def get_selected_indices(self):
+        """Return a list of indices of selected items."""
+        return [self.tree.index(item) for item in self.tree.selection()]
+
+    def clear_selection(self):
+        """Clear all selected items in the playlist."""
+        self.tree.selection_remove(self.tree.selection())
+        self.state.selected_indices = []
+
+    def _on_tree_leave(self, event):
+        """Handle mouse leaving treeview area."""
+        children = self.tree.get_children()
+        for child in children:
+            tags = list(self.tree.item(child, "tags"))
+            if "hover" in tags:
+                tags.remove("hover")
+                self.tree.item(child, tags=tuple(tags))

@@ -34,7 +34,6 @@ class ThemeManager:
         """
         name = self.settings.theme or "light"
 
-        # Use resource path to find themes
         path = get_resource_path(f"themes/{name}.json")
 
         if not path.exists():
@@ -70,12 +69,9 @@ class ThemeManager:
         """
         apply_base_styles(root, self.palette)
         try:
-            # Use direct Tk call to bypass CustomTkinter wrappers that might cause issues
-            # with child widgets (like dropdown menus) during theme updates
             bg_color = self.palette.get("bg", "#ffffff")
             root.tk.call(root._w, 'configure', '-bg', bg_color)
         except Exception as e:
-            # Fallback to standard configure if direct call fails
             try:
                 root.configure(bg=self.palette.get("bg"))
             except Exception as e2:

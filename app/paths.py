@@ -36,13 +36,11 @@ def get_user_data_path() -> Path:
     if platform.system() == "Windows":
         base = os.environ.get("LOCALAPPDATA")
         if not base:
-             # Fallback if LOCALAPPDATA not set
             base = os.path.expanduser("~\\AppData\\Local")
         path = Path(base) / "TangoStudio"
     else:
         path = Path.home() / ".tango-studio"
 
-    # Ensure directory exists
     path.mkdir(parents=True, exist_ok=True)
     return path
 

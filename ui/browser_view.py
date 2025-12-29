@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
 
-from ui.utils import get_display_title
+from audio.metadata import get_display_title
 
 class BrowserView(ttk.Frame):
     def __init__(self, master, state, theme, tooltip_manager=None, status_callback=None):
@@ -12,39 +12,69 @@ class BrowserView(ttk.Frame):
         self.tooltip_manager = tooltip_manager
         self.status_callback = status_callback
 
-        tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill=tk.BOTH, expand=True)
+        # Header label
+        self.header_label = tk.Label(
+            self,
+            text="Browser",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 18, "bold"),
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            anchor="w"
+        )
+        self.header_label.pack(fill="x", padx=10, pady=(5, 15))
 
-        # Vertical scrollbar
-        vsb = ttk.Scrollbar(tree_frame, orient="vertical")
-        vsb.pack(side=tk.RIGHT, fill="y")
+        # Main container
+        tree_frame = ttk.Frame(self)
+        tree_frame.pack(fill="both", expand=True, padx=(10, 0), pady=(0, 10))
+
+        # Custom scrollbar (styled to be modern)
+        self.scrollbar_canvas = tk.Canvas(
+            tree_frame,
+            width=12,
+            highlightthickness=0,
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+        self.scrollbar_canvas.pack(side="right", fill="y")
+
+        # Bind to configure event to update scrollbar when canvas is resized
+        self.scrollbar_canvas.bind("<Configure>", lambda e: self._update_scrollbar())
+
+        # Scrollbar track and thumb
+        self.scroll_track = self.scrollbar_canvas.create_rectangle(
+            2, 0, 10, 100,
+            fill=self.theme.palette.get("scrollbar_track", "#282828"),
+            outline=""
+        )
+        self.scroll_thumb = self.scrollbar_canvas.create_rectangle(
+            2, 0, 10, 50,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353"),
+            outline=""
+        )
 
         self.tree = ttk.Treeview(
             tree_frame,
             columns=("name",),
-            show="headings",
+            show="tree",  # Hide headings
             selectmode="extended",
-            yscrollcommand=vsb.set
+            yscrollcommand=self._on_tree_scroll
         )
-        self.tree.column('name', width=350, minwidth=100, stretch=True)
-        self.tree.heading("name", text="Songs")
+        self.tree.column('name', width=0, minwidth=0, stretch=False)
+        self.tree.column('#0', width=300, minwidth=200, stretch=False, anchor="w")
 
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+        if "even" in self.theme.palette:
+            self.tree.tag_configure("even", background=self.theme.palette["even"])
+        if "odd" in self.theme.palette:
+            self.tree.tag_configure("odd", background=self.theme.palette["odd"])
 
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        # Configure hover tag last to ensure it takes precedence
+        hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
+        self.tree.tag_configure("hover", background=hover_bg)
 
-        # Connect scrollbars to Treeview
-        vsb.config(command=self.tree.yview)
+        self.tree.pack(fill="both", expand=True)
 
-        # Make the container grid expandable
-        tree_frame.grid_rowconfigure(0, weight=1)
-        tree_frame.grid_columnconfigure(0, weight=1)
-
-        # ---------- Bindings ----------
-        self.tree.bind('<Delete>', self.remove_selected_from_browser)
-
-        # ---------- Drag & Drop ----------
+        # Initialize drag and drop variables
         self.playlist_view = None
         self.drag_data = None
         self.drag_start_pos = None
@@ -53,14 +83,70 @@ class BrowserView(ttk.Frame):
         # Track index for internal live reordering
         self.internal_drag_index = None
 
+        # Drag tooltip for showing song names during drag
+        self.drag_tooltip = tk.Toplevel(self)
+        self.drag_tooltip.withdraw()
+        self.drag_tooltip.overrideredirect(True)
+        self.drag_tooltip_label = tk.Label(
+            self.drag_tooltip,
+            bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
+            fg=self.theme.palette.get("tooltip_fg", "#FFFFFF"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 10),
+            padx=8, pady=4,
+            relief="solid",
+            borderwidth=1
+        )
+        self.drag_tooltip_label.pack()
+        self.drag_tooltip_visible = False
+
+        self._setup_bindings()
+
+    def _setup_bindings(self):
+        """Setup event bindings."""
+        self.tree.bind('<Delete>', self.remove_selected_from_browser)
+
         self.tree.bind("<ButtonPress-1>", self._on_drag_start)
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
+
+        # Treeview hover effects
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", self._on_tree_leave)
+
+        self.scrollbar_canvas.bind("<Button-1>", self._on_scrollbar_click)
+        self.scrollbar_canvas.bind("<B1-Motion>", self._on_scrollbar_drag)
+        self.scrollbar_canvas.bind("<Enter>", self._on_scrollbar_enter)
+        self.scrollbar_canvas.bind("<Leave>", self._on_scrollbar_leave)
 
     def update_theme(self):
         """Update theme-dependent styles."""
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+
+        # Update header label colors
+        self.header_label.config(
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+
+        # Update hover tag color last to ensure it takes precedence
+        hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
+        self.tree.tag_configure("hover", background=hover_bg)
+
+        self.scrollbar_canvas.config(bg=self.theme.palette.get("bg", "#121212"))
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_track,
+            fill=self.theme.palette.get("scrollbar_track", "#282828")
+        )
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353")
+        )
+
+        self.drag_tooltip_label.config(
+            bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
+            fg=self.theme.palette.get("tooltip_fg", "#FFFFFF")
+        )
 
     def set_playlist_view(self, playlist_view):
         self.playlist_view = playlist_view
@@ -73,8 +159,12 @@ class BrowserView(ttk.Frame):
 
         self.tree.delete(*self.tree.get_children())
         for i, f in enumerate(self.state.browser_files):
-            tags = ("striped",) if i % 2 == 1 else ()
-            self.tree.insert("", "end", values=(get_display_title(f),), tags=tags)
+            # Tags for striping
+            tags = ["odd" if i % 2 == 1 else "even"]
+            if "striped_bg" in self.theme.palette and i % 2 == 1:
+                tags.append("striped")
+
+            self.tree.insert("", "end", text=get_display_title(f), tags=tuple(tags))
 
         # Restore selection
         if preserve_selection:
@@ -82,6 +172,9 @@ class BrowserView(ttk.Frame):
             for i in selected_indices:
                 if i < len(children):
                     self.tree.selection_add(children[i])
+
+        # Update scrollbar
+        self._update_scrollbar()
 
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
     def browse_folder(self):
@@ -135,6 +228,8 @@ class BrowserView(ttk.Frame):
         if not self.drag_start_pos:
             return
 
+        paths = []  # Initialize paths here to make it accessible throughout the method
+
         # Check threshold if not already dragging
         if not self.drag_data:
             dx = abs(event.x - self.drag_start_pos[0])
@@ -152,7 +247,6 @@ class BrowserView(ttk.Frame):
             else:
                 self.internal_drag_index = None
 
-            paths = []
             for s in sels:
                 idx = self.tree.index(s)
                 if 0 <= idx < len(self.state.browser_files):
@@ -160,12 +254,40 @@ class BrowserView(ttk.Frame):
 
             if paths:
                 self.drag_data = {"files": paths}
-                self.winfo_toplevel().configure(cursor="fleur")
 
         if not self.drag_data:
             return
 
         x_root, y_root = event.x_root, event.y_root
+
+        # Get paths from drag_data for tooltip
+        paths = self.drag_data.get("files", [])
+
+        # Check if dragging outside browser tree bounds (external drag)
+        tree_x = self.tree.winfo_rootx()
+        tree_y = self.tree.winfo_rooty()
+        tree_w = self.tree.winfo_width()
+        tree_h = self.tree.winfo_height()
+
+        is_inside_browser = (tree_x <= x_root <= tree_x + tree_w and
+                            tree_y <= y_root <= tree_y + tree_h)
+
+        # Show drag tooltip only when dragging outside browser (external drag)
+        if not is_inside_browser and not self.drag_tooltip_visible:
+            # Calculate tooltip position relative to the browser tree (above the row)
+            tree_x = self.tree.winfo_rootx()
+            tree_y = self.tree.winfo_rooty()
+            tooltip_x = tree_x + self.drag_start_pos[0] + 10
+            tooltip_y = tree_y + self.drag_start_pos[1] - 20  # Position above the row
+            self._show_drag_tooltip(paths, tooltip_x, tooltip_y)
+        elif is_inside_browser and self.drag_tooltip_visible:
+            # Hide tooltip when dragging back inside browser
+            self.drag_tooltip.withdraw()
+            self.drag_tooltip_visible = False
+
+        # Update drag tooltip position to follow mouse when visible (position above cursor)
+        if self.drag_tooltip_visible:
+            self.drag_tooltip.geometry(f"+{x_root + 10}+{y_root - 20}")
 
         # 1. External drag to Playlist (delegation)
         if self.playlist_view:
@@ -206,6 +328,11 @@ class BrowserView(ttk.Frame):
         self.winfo_toplevel().configure(cursor="")
         self.drag_start_pos = None
 
+        # Hide drag tooltip
+        if self.drag_tooltip_visible:
+            self.drag_tooltip.withdraw()
+            self.drag_tooltip_visible = False
+
         if self.drag_data:
             x_root, y_root = event.x_root, event.y_root
 
@@ -228,6 +355,23 @@ class BrowserView(ttk.Frame):
             if self.playlist_view:
                  self.playlist_view.handle_external_drag_leave()
 
+    def _show_drag_tooltip(self, paths, x, y):
+        """Show tooltip with song names during drag."""
+        from audio.metadata import get_display_title
+
+        if len(paths) == 1:
+            # Show single song title
+            tooltip_text = get_display_title(paths[0])
+        else:
+            # Show count for multiple songs
+            tooltip_text = f"{len(paths)} songs"
+
+        self.drag_tooltip_label.config(text=tooltip_text)
+        self.drag_tooltip.geometry(f"+{x + 10}+{y + 10}")
+        self.drag_tooltip.deiconify()
+        self.drag_tooltip.lift()
+        self.drag_tooltip_visible = True
+
     def add_selected_to_playlist(self):
         # Read selection from browser view
         sels = self.tree.selection()
@@ -238,9 +382,8 @@ class BrowserView(ttk.Frame):
             idx = self.tree.index(s)
             if 0 <= idx < len(self.state.browser_files):
                 p = self.state.browser_files[idx]
-                if p not in self.state.playlist:
-                    self.state.playlist.append(p)
-                    added += 1
+                self.state.playlist.append(p)
+                added += 1
 
         self._send_status("added_to_playlist", added)
 
@@ -257,8 +400,6 @@ class BrowserView(ttk.Frame):
 
         added = 0
         for i, f in enumerate(files_to_add):
-            if f in self.state.playlist:
-                continue
             self.state.playlist.insert(insert_pos + added, f)
             added += 1
 
@@ -282,3 +423,92 @@ class BrowserView(ttk.Frame):
             for i, iid in enumerate(self.tree.get_children()):
                 tags = ["striped"] if i % 2 == 1 else []
                 self.tree.item(iid, tags=tuple(tags))
+
+    def _on_tree_scroll(self, *args):
+        """Update custom scrollbar when tree scrolls."""
+        self._update_scrollbar()
+
+    def _update_scrollbar(self):
+        """Update custom scrollbar appearance."""
+        try:
+            # Get scroll position
+            first, last = self.tree.yview()
+
+            # Update track height
+            canvas_height = self.scrollbar_canvas.winfo_height()
+            self.scrollbar_canvas.coords(
+                self.scroll_track,
+                2, 0, 10, canvas_height
+            )
+
+            visible_ratio = max(0.1, last - first)  # Minimum 10% visible ratio
+            thumb_height = max(40, int(visible_ratio * canvas_height))  # Minimum 40px height
+            thumb_y = int(first * canvas_height)
+
+            self.scrollbar_canvas.coords(
+                self.scroll_thumb,
+                2, thumb_y, 10, thumb_y + thumb_height
+            )
+
+        except Exception:
+            pass
+
+    def _on_scrollbar_click(self, event):
+        """Handle click on scrollbar."""
+        canvas_height = self.scrollbar_canvas.winfo_height()
+        click_position = event.y / canvas_height
+
+        self.tree.yview_moveto(click_position)
+        self._update_scrollbar()
+
+    def _on_scrollbar_drag(self, event):
+        """Handle dragging the scrollbar."""
+        canvas_height = self.scrollbar_canvas.winfo_height()
+        drag_position = event.y / canvas_height
+
+        self.tree.yview_moveto(drag_position)
+        self._update_scrollbar()
+
+    def _on_scrollbar_enter(self, event):
+        """Handle mouse entering scrollbar area."""
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_hover", "#525252")
+        )
+
+    def _on_scrollbar_leave(self, event):
+        """Handle mouse leaving scrollbar area."""
+        self.scrollbar_canvas.itemconfig(
+            self.scroll_thumb,
+            fill=self.theme.palette.get("scrollbar_thumb", "#535353")
+        )
+
+    def _on_tree_motion(self, event):
+        """Handle mouse motion over treeview items for hover effect."""
+        item = self.tree.identify_row(event.y)
+        if item:
+            # Remove hover from all items first
+            children = self.tree.get_children()
+            for child in children:
+                tags = list(self.tree.item(child, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self.tree.item(child, tags=tuple(tags))
+
+            # Add hover to current item (place at end to take precedence)
+            tags = list(self.tree.item(item, "tags"))
+            if "hover" not in tags:
+                tags.append("hover")
+                self.tree.item(item, tags=tuple(tags))
+        else:
+            # Remove hover from all items if not over any item
+            self._on_tree_leave(event)
+
+    def _on_tree_leave(self, event):
+        """Handle mouse leaving treeview area."""
+        children = self.tree.get_children()
+        for child in children:
+            tags = list(self.tree.item(child, "tags"))
+            if "hover" in tags:
+                tags.remove("hover")
+                self.tree.item(child, tags=tuple(tags))

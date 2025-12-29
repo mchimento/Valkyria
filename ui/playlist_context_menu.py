@@ -3,10 +3,11 @@ Context menu for playlist items.
 Provides quick access to common operations on playlist songs.
 """
 import tkinter as tk
+from ui.booklet_viewer import BookletViewer
 
 
 class PlaylistContextMenu:
-    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None):
+    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None):
         """
         Initialize the playlist context menu.
 
@@ -15,16 +16,19 @@ class PlaylistContextMenu:
             play_callback: Function to call when "Play Song" is selected
             metadata_callback: Function to call when "Show Metadata" is selected
             remove_callback: Function to call when "Remove from Playlist" is selected
+            get_current_file_callback: Function to get the current selected file path
         """
         self.parent = parent
         self.play_callback = play_callback
         self.metadata_callback = metadata_callback
         self.remove_callback = remove_callback
+        self.get_current_file_callback = get_current_file_callback
 
         # Create the menu
         self.menu = tk.Menu(parent, tearoff=0)
         self.menu.add_command(label="Play Song", command=self._on_play)
         self.menu.add_command(label="Show Metadata", command=self._on_metadata)
+        self.menu.add_command(label="Show Album Booklet", command=self._on_booklet)
         self.menu.add_separator()
         self.menu.add_command(label="Remove from Playlist", command=self._on_remove)
 
@@ -37,6 +41,13 @@ class PlaylistContextMenu:
         """Handle Show Metadata menu item."""
         if callable(self.metadata_callback):
             self.metadata_callback()
+
+    def _on_booklet(self):
+        """Handle Show Album Booklet menu item."""
+        if callable(self.get_current_file_callback):
+            filepath = self.get_current_file_callback()
+            if filepath:
+                BookletViewer(self.parent, filepath).show()
 
     def _on_remove(self):
         """Handle Remove from Playlist menu item."""

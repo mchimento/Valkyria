@@ -5,7 +5,8 @@
   "accent_hover": "#985EFF",
   "tree_bg": "#252526",
   "tree_header": "#1E1E1E",
-  "tooltip_bg": "#2D2D2D",
+  "tooltip_bg": "#BB86FC",
+  "tooltip_fg": "#FFFFFF",
   "highlight": "#EB5B00",
   "ui_font": "Segoe UI",
   "button_fg_color": "#1E1E1E",
@@ -30,5 +31,11 @@
   "slider_fg": "#BB86FC",
   "slider_bg": "#404040",
   "slider_hover": "#985EFF",
-  "slider_progress": "#BB86FC"
+  "slider_progress": "#BB86FC",
+  "select_bg": "#A279EB",
+  "select_fg": "#1E1E1E",
+  "hover_bg": "#525252",
+  "scrollbar_track": "#1E1E1E",
+  "scrollbar_thumb": "#525252",
+  "scrollbar_hover": "#999292"
 }

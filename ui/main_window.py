@@ -8,19 +8,18 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
-import random
 
-from audio import m3u as m3u_module
+from audio import m3u as m3u_module, playback
+from audio.metadata import get_display_title, get_metadata
 from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
 from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
+from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
-
-from mutagen import File as MutagenFile
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,6 @@ class MainWindow:
         self.theme.apply_to(self.root)
 
         self.palette = self.theme.palette
-        self._meta_cache = {}
 
         # Tooltip manager (shared)
         self.tooltip_manager = TooltipManager(self.root, self.palette)
@@ -67,6 +65,9 @@ class MainWindow:
         self.root.bind("<<PlaylistDouble>>", self._on_playlist_double)
         self.root.bind("<<OpenPlaylist>>", lambda e: self.open_playlist())
         self.root.bind("<<SavePlaylist>>", lambda e: self.save_playlist_as())
+
+        # Global click handler to clear playlist selection when clicking outside
+        self.root.bind_all("<Button-1>", self._on_global_click, add="+")
 
         # Keep UI in sync initially
         self.refresh_all()
@@ -96,13 +97,13 @@ class MainWindow:
 
         # Media menu
         media_items = [
-            {"label": "Open File...", "command": self.open_file},
-            {"label": "Open Multiple Files...", "command": self.open_files},
-            {"label": "Open Folder...", "command": self.open_folder},
-            {"label": "Open Playlist (M3U/M3U8)...", "command": self.open_playlist},
+            {"label": "Open File...", "command": self.open_file, "accelerator": "Ctrl+O"},
+            {"label": "Open Multiple Files...", "command": self.open_files, "accelerator": "Ctrl+M"},
+            {"label": "Open Folder...", "command": self.open_folder, "accelerator": "Ctrl+F"},
+            {"label": "Open Playlist (M3U/M3U8)...", "command": self.open_playlist, "accelerator": "Ctrl+L"},
             {"separator": True},
-            {"label": "Save Playlist", "command": self.save_playlist, "ref": "save_playlist"},
-            {"label": "Save Playlist As...", "command": self.save_playlist_as, "ref": "save_playlist_as"},
+            {"label": "Save Playlist", "command": self.save_playlist, "ref": "save_playlist", "accelerator": "Ctrl+S"},
+            {"label": "Save Playlist As...", "command": self.save_playlist_as, "ref": "save_playlist_as", "accelerator": "Ctrl+Shift+S"},
             {"separator": True},
             {"label": "Quit", "command": self._on_quit, "accelerator": "Alt+F4"}
         ]
@@ -112,19 +113,20 @@ class MainWindow:
 
         # Playlist menu
         sort_submenu = [
-            {"label": "Shuffle", "command": self.shuffle_playlist},
-            {"label": "Sort by Title", "command": self.sort_playlist_by_title},
-            {"label": "Sort by Artist", "command": self.sort_playlist_by_artist}
+            {"label": "Shuffle", "command": self.shuffle_playlist, "accelerator": "Ctrl+H"},
+            {"label": "Sort by Title", "command": self.sort_playlist_by_title, "accelerator": "Ctrl+T"},
+            {"label": "Sort by Artist", "command": self.sort_playlist_by_artist, "accelerator": "Ctrl+R"}
         ]
 
         operations_submenu = [
-            {"label": "Move Up", "command": self.move_selected_up},
-            {"label": "Move Down", "command": self.move_selected_down},
+            {"label": "Move Up", "command": self.move_selected_up, "accelerator": "Ctrl+Up"},
+            {"label": "Move Down", "command": self.move_selected_down, "accelerator": "Ctrl+Down"},
             {"separator": True},
-            {"label": "Remove Selected", "command": self.remove_selected_from_playlist},
-            {"label": "Remove All", "command": self.clear_playlist},
+            {"label": "Remove Selected", "command": self.remove_selected_from_playlist, "accelerator": "Delete"},
+            {"label": "Clear", "command": self.clear_playlist, "accelerator": "Ctrl+C"},
             {"separator": True},
-            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info"}
+            {"label": "Track Information", "command": self.open_media_info, "ref": "track_info", "accelerator": "Ctrl+I"},
+            {"label": "Show Album booklet", "command": self.show_booklet, "ref": "track_booklet", "accelerator": "Ctrl+B"}
         ]
         self.menu_item_refs["track_info"] = operations_submenu[6]
 
@@ -142,15 +144,15 @@ class MainWindow:
             {"label": "Operations", "submenu": operations_submenu},
             {"label": "Repeat Mode", "submenu": repeat_submenu, "ref": "playlist_menu"}
         ]
-        self.menubar.add_menu("Playlist", playlist_items)
+        self.menubar.add_menu("Playback", playlist_items)
         self.menu_item_refs["playlist_menu"] = playlist_items
 
         # View menu
         view_items = [
-            {"label": "Show Playlist", "checkbutton": True, "variable": self.show_playlist_var,
-             "command": self.toggle_playlist_visibility},
+            {"label": "Show Playback", "checkbutton": True, "variable": self.show_playlist_var,
+             "command": self.toggle_playlist_visibility, "accelerator": "F9"},
             {"label": "Show Browser", "checkbutton": True, "variable": self.show_browser_var,
-             "command": self.toggle_browser_visibility},
+             "command": self.toggle_browser_visibility, "accelerator": "F10"},
             {"separator": True},
             {"label": "Always on Top", "checkbutton": True, "variable": self.always_on_top_var,
              "command": self.toggle_always_on_top}
@@ -168,19 +170,22 @@ class MainWindow:
         tools_items = [
             audio_device_item,
             {"separator": True},
-            {"label": "Preferences", "command": self.open_preferences}
+            {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
         self.menubar.add_menu("Tools", tools_items)
         self.menu_item_refs["audio_device"] = audio_device_item
 
         # Help menu
         help_items = [
-            {"label": "About", "command": self.open_about}
+            {"label": "About", "command": self.open_about, "accelerator": "F1"}
         ]
         self.menubar.add_menu("Help", help_items)
 
         # Initialize menu state
         self._update_menu_state()
+
+        # Bind keyboard accelerators
+        self._bind_keyboard_accelerators()
 
     def _build_layout(self):
         # Main frame
@@ -202,14 +207,14 @@ class MainWindow:
             metadata_callback=self._on_context_show_metadata,
             remove_callback=self._on_context_remove_song
         )
-        self.playlist_view.pack(fill=tk.BOTH, expand=True)
+        self.playlist_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Right: Browser view
         self.right_frame = ttk.Frame(self.main_frame, style="TFrame")
-        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
 
         self.browser_view = BrowserView(self.right_frame, self.state, self.theme, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
-        self.browser_view.pack(fill=tk.BOTH, expand=True)
+        self.browser_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Link browser view to playlist view for drag and drop
         self.browser_view.set_playlist_view(self.playlist_view)
@@ -665,15 +670,15 @@ class MainWindow:
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
 
     def open_media_info(self):
-        """Open media information dialog for the currently selected track."""
-        if self.state.current_index is None or not self.state.playlist:
+        """Open media information dialog for the currently selected track in playlist."""
+        # Check if there are any selected tracks in the playlist
+        if not self.playlist_view.tree.selection():
             # Create custom silent dialog instead of messagebox
             info_window = tk.Toplevel(self.root)
             info_window.title("Media Information")
-            info_window.geometry("300x100")
+            info_window.geometry("300x130")
             info_window.resizable(False, False)
             info_window.transient(self.root)
-            info_window.grab_set()
 
             # Hide window initially to prevent flickering during positioning
             info_window.withdraw()
@@ -681,8 +686,8 @@ class MainWindow:
             content_frame = ttk.Frame(info_window, padding=20)
             content_frame.pack(fill=tk.BOTH, expand=True)
 
-            ttk.Label(content_frame, text="No track is playing.").pack(pady=10)
-            ttk.Button(content_frame, text="OK", command=info_window.destroy).pack()
+            ttk.Label(content_frame, text="No track is selected").pack(pady=10)
+            ttk.Button(content_frame, text="OK", command=info_window.destroy, padding=(10, 5)).pack(pady=5)
 
             info_window.bind("<Return>", lambda e: info_window.destroy())
             info_window.bind("<Escape>", lambda e: info_window.destroy())
@@ -693,8 +698,48 @@ class MainWindow:
             info_window.deiconify()
             return
 
-        current_track = self.state.playlist[self.state.current_index]
-        MediaInfoWindow(self.root, current_track, theme_manager=self.theme)
+        # Get the first selected track (handle multiple selections by showing the first one)
+        selected_items = self.playlist_view.tree.selection()
+        first_selected_index = self.playlist_view.tree.index(selected_items[0])
+
+        if 0 <= first_selected_index < len(self.state.playlist):
+            track = self.state.playlist[first_selected_index]
+            MediaInfoWindow(self.root, track, theme_manager=self.theme)
+
+    def show_booklet(self):
+        # Check if there are any selected tracks in the playlist
+        if not self.playlist_view.tree.selection():
+            # Create custom silent dialog instead of messagebox
+            info_window = tk.Toplevel(self.root)
+            info_window.title("Album Booklet Information")
+            info_window.geometry("300x130")
+            info_window.resizable(False, False)
+            info_window.transient(self.root)
+
+            # Hide window initially to prevent flickering during positioning
+            info_window.withdraw()
+
+            content_frame = ttk.Frame(info_window, padding=20)
+            content_frame.pack(fill=tk.BOTH, expand=True)
+
+            ttk.Label(content_frame, text="No track is selected").pack(pady=10)
+            ttk.Button(content_frame, text="OK", command=info_window.destroy, padding=(10, 5)).pack(pady=5)
+
+            info_window.bind("<Return>", lambda e: info_window.destroy())
+            info_window.bind("<Escape>", lambda e: info_window.destroy())
+
+            center_window(info_window, self.root)
+
+            # Show window after positioning
+            info_window.deiconify()
+            return
+
+        selected_items = self.playlist_view.tree.selection()
+        first_selected_index = self.playlist_view.tree.index(selected_items[0])
+
+        if 0 <= first_selected_index < len(self.state.playlist):
+            track = self.state.playlist[first_selected_index]
+            BookletViewer(self.root, track)
 
     def open_about(self):
         # Create custom dialog using CustomTkinter
@@ -803,21 +848,19 @@ class MainWindow:
 
     # ---------- Playlist operations (menu) ----------
     def shuffle_playlist(self):
-        random.shuffle(self.state.playlist)
-        if self.state.current_index is not None:
-            current_path = self.state.playlist[self.state.current_index]
-            # find new index
-            try:
-                self.state.current_index = self.state.playlist.index(current_path)
-            except ValueError:
-                self.state.current_index = None
+        self.state.playlist, self.state.current_index = playback.shuffle_playlist(self.state.playlist, self.state.current_index)
         self.refresh_all()
+        self._set_temporary_status("Playlist shuffled")
 
     def clear_playlist(self):
-        if messagebox.askyesno("Clear Playlist", "Clear all entries from the playlist?", parent=self.root):
-            self.state.playlist.clear()
-            self.state.current_index = None
+        if not self.state.playlist:
+            return
+
+        if messagebox.askyesno("Clear Playlist", "Are you sure you want to clear the playlist?", parent=self.root):
+            self.state.playlist, self.state.current_index = playback.clear_playlist()
+            self.player.stop()
             self.refresh_all()
+            self._set_temporary_status("Playlist cleared")
 
     # ---------- Repeat Mode ----------
     def _set_repeat_mode(self, mode):
@@ -828,105 +871,90 @@ class MainWindow:
     # ---------- Playlist Operations ----------
     def remove_selected_from_playlist(self):
         """Remove selected song from playlist."""
-        if not self.playlist_view or not self.playlist_view.tree:
-            return
-        selected = self.playlist_view.tree.selection()
-        if not selected:
-            messagebox.showwarning("No Selection", "Please select a song to remove.", parent=self.root)
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices:
             return
 
-        for item in selected:
-            idx = self.playlist_view.tree.index(item)
-            if 0 <= idx < len(self.state.playlist):
-                if self.state.current_index == idx:
-                    self.state.current_index = None
-                del self.state.playlist[idx]
+        self.state.playlist, self.state.current_index = playback.remove_selected_from_playlist(
+            self.state.playlist, selected_indices, self.state.current_index
+        )
+
+        # Stop playback if current track was removed
+        if self.state.current_index is None:
+            self.player.stop()
 
         self.refresh_all()
-        self._set_temporary_status(f"Removed {len(selected)} song(s)")
+        self._set_temporary_status(f"Removed {len(selected_indices)} item(s) from playlist")
 
     def move_selected_up(self):
         """Move selected song up in playlist."""
-        if not self.playlist_view or not self.playlist_view.tree:
-            return
-        selected = self.playlist_view.tree.selection()
-        if not selected or len(selected) != 1:
-            messagebox.showwarning("Selection Error", "Please select exactly one song to move.", parent=self.root)
-            return
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices or 0 in selected_indices:
+            return  # Can't move up if first item is selected
 
-        idx = self.playlist_view.tree.index(selected[0])
-        if idx > 0 and idx < len(self.state.playlist):
-            self.state.playlist[idx], self.state.playlist[idx-1] = self.state.playlist[idx-1], self.state.playlist[idx]
-            if self.state.current_index == idx:
-                self.state.current_index = idx - 1
-            elif self.state.current_index == idx - 1:
-                self.state.current_index = idx
-            self.refresh_all()
+        # Move items up
+        new_playlist = playback.move_selected_up(
+            self.state.playlist,
+            selected_indices
+        )
+
+        # Update current index if it was moved
+        if self.state.current_index is not None:
+            if self.state.current_index in selected_indices:
+                self.state.current_index -= 1
+            elif self.state.current_index - 1 in selected_indices:
+                self.state.current_index += 1
+
+        self.state.playlist = new_playlist
+
+        # Update selection (shift indices up)
+        new_selection = [i-1 if i > 0 and i-1 not in selected_indices else i
+                        for i in selected_indices]
+        self.playlist_view.tree.selection_set(*[
+            self.playlist_view.tree.get_children()[i]
+            for i in new_selection
+            if 0 <= i < len(self.state.playlist)
+        ])
+        self.refresh_all()
 
     def move_selected_down(self):
         """Move selected song down in playlist."""
-        if not self.playlist_view or not self.playlist_view.tree:
-            return
-        selected = self.playlist_view.tree.selection()
-        if not selected or len(selected) != 1:
-            messagebox.showwarning("Selection Error", "Please select exactly one song to move.", parent=self.root)
-            return
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices or max(selected_indices) >= len(self.state.playlist) - 1:
+            return  # Can't move down if last item is selected
 
-        idx = self.playlist_view.tree.index(selected[0])
-        if idx >= 0 and idx < len(self.state.playlist) - 1:
-            self.state.playlist[idx], self.state.playlist[idx+1] = self.state.playlist[idx+1], self.state.playlist[idx]
-            if self.state.current_index == idx:
-                self.state.current_index = idx + 1
-            elif self.state.current_index == idx + 1:
-                self.state.current_index = idx
-            self.refresh_all()
+        # Move items down
+        new_playlist = playback.move_selected_down(
+            self.state.playlist,
+            selected_indices
+        )
+
+        # Update current index if it was moved
+        if self.state.current_index is not None:
+            if self.state.current_index in selected_indices:
+                self.state.current_index += 1
+            elif self.state.current_index + 1 in selected_indices:
+                self.state.current_index -= 1
+
+        self.state.playlist = new_playlist
+
+        # Update selection (shift indices down)
+        new_selection = [i+1 if i < len(self.state.playlist) - 1 and i+1 not in selected_indices else i
+                        for i in selected_indices]
+        self.playlist_view.tree.selection_set(*[
+            self.playlist_view.tree.get_children()[i]
+            for i in new_selection
+            if 0 <= i < len(self.state.playlist)
+        ])
+        self.refresh_all()
 
     def sort_playlist_by_title(self):
-        """Sort playlist by title (from metadata) or filename."""
-        if not self.state.playlist:
-            messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
-            return
-
-        from ui.utils import get_display_title
-
-        current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
-        self.state.playlist.sort(key=lambda x: get_display_title(x).lower())
-
-        if current_path:
-            try:
-                self.state.current_index = self.state.playlist.index(current_path)
-            except ValueError:
-                self.state.current_index = None
-
+        self.state.playlist, self.state.current_index = playback.sort_playlist_by_title(self.state.playlist, self.state.current_index)
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by title")
 
     def sort_playlist_by_artist(self):
-        """Sort playlist by artist (from metadata) or filename."""
-        if not self.state.playlist:
-            messagebox.showinfo("Empty Playlist", "Playlist is empty.", parent=self.root)
-            return
-
-        def get_artist(file_path):
-            """Get artist from metadata or return empty string."""
-            try:
-                audio = MutagenFile(file_path, easy=True)
-                if audio and audio.tags:
-                    artist = audio.get('artist', [''])[0]
-                    return artist.lower() if artist else ''
-            except Exception:
-                pass
-            return ''
-
-        current_path = self.state.playlist[self.state.current_index] if self.state.current_index is not None else None
-        self.state.playlist.sort(key=get_artist)
-
-        if current_path:
-            try:
-                self.state.current_index = self.state.playlist.index(current_path)
-            except ValueError:
-                self.state.current_index = None
-
+        self.state.playlist, self.state.current_index = playback.sort_playlist_by_artist(self.state.playlist, self.state.current_index)
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by artist")
 
@@ -948,12 +976,12 @@ class MainWindow:
     def toggle_browser_visibility(self):
         """Toggle browser visibility and mid_frame buttons."""
         if self.show_browser_var.get():
-            # Restore right frame and middle buttons
-            self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6,0))
+            # Show browser frame and middle buttons
+            self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
             self.browser_view.pack(fill=tk.BOTH, expand=True)
             self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
         else:
-            # Hide browser area entirely so playlist uses full width
+            # Hide browser frame and middle buttons
             self.browser_view.pack_forget()
             self.right_frame.pack_forget()
             self.mid_frame.pack_forget()
@@ -979,6 +1007,70 @@ class MainWindow:
         self.refresh_all()
 
     # ---------- Handlers for custom events from subcomponents ----------
+    def _on_global_click(self, event):
+        """Handle global clicks to clear playlist selection when clicking outside playlist."""
+        # Check if there are any selected items in the playlist
+        if not self.playlist_view.tree.selection():
+            return  # No selection to clear
+
+        # Get the widget that was clicked
+        widget = event.widget
+
+        # Check if the click is within the playlist treeview
+        if widget == self.playlist_view.tree:
+            return  # Click was on playlist, don't clear selection
+
+        # Check if the click is within the playlist view container (including scrollbar)
+        playlist_container = self.playlist_view
+        if widget == playlist_container:
+            return  # Click was within playlist container, don't clear selection
+
+        # Check if the click is on any child of the playlist view
+        current = widget
+        while current:
+            if current == playlist_container:
+                return  # Click was within playlist hierarchy, don't clear selection
+            try:
+                current = current.master
+            except:
+                break
+
+        # Check if the click is on the menu bar or its dropdowns
+        if hasattr(self, 'menubar'):
+            # Check if click is on menu bar buttons or their children
+            for menu_button in self.menubar.menu_buttons.values():
+                # Check if the clicked widget is the menu button itself
+                if widget == menu_button:
+                    return  # Click was on menu bar, don't clear selection
+
+                # Check if the clicked widget is a child of the menu button
+                current = widget
+                while current:
+                    if current == menu_button:
+                        return  # Click was on menu bar child, don't clear selection
+                    try:
+                        current = current.master
+                    except:
+                        break
+
+            # Check if click is within menu bar
+            if widget == self.menubar:
+                return  # Click was on menu bar, don't clear selection
+
+            # Check if click is on any dropdown menu
+            if hasattr(self.menubar, 'active_dropdown') and self.menubar.active_dropdown:
+                current = widget
+                while current:
+                    if current == self.menubar.active_dropdown:
+                        return  # Click was on dropdown menu, don't clear selection
+                    try:
+                        current = current.master
+                    except:
+                        break
+
+        # If we get here, the click was outside the playlist and menu system
+        self.playlist_view.clear_selection()
+
     def _on_browser_add_selected(self, event):
         """
         BrowserView emits <<BrowserAddSelected>> and stores the actual selected paths
@@ -989,9 +1081,8 @@ class MainWindow:
             return
         added = 0
         for p in sel_paths:
-            if p not in self.state.playlist:
-                self.state.playlist.append(p)
-                added += 1
+            self.state.playlist.append(p)
+            added += 1
         if added:
             self.refresh_all()
             self._set_temporary_status(f"Added {added} file(s) to playlist")
@@ -1019,13 +1110,11 @@ class MainWindow:
     def _on_playlist_select(self, index):
         """
         Called when the user selects a row in the playlist (single-click).
-        Keeps state.current_index in sync with UI selection.
+        Tracks selection but does NOT update current_index since that's for playing state.
         Does NOT start playback — double-click or menu actions do that.
         """
-        if index is None:
-            return
-        if 0 <= index < len(self.state.playlist):
-            self.state.current_index = index
+        # Selection is already tracked in the playlist view via state.selected_indices
+        # No need to update current_index here as that represents the playing song
 
     # ---------- Context Menu Callbacks ----------
     def _on_context_play_song(self, index):
@@ -1151,8 +1240,7 @@ class MainWindow:
         """
         Restore playing status and populate metadata line.
 
-        Uses mutagen to read tags (title, artist), duration and bitrate.
-        Caches results per-file for responsiveness.
+        Uses the centralized metadata module to read tags (title, artist), duration and bitrate.
         """
         idx = self.state.current_index
         if idx is None or idx >= len(self.state.playlist):
@@ -1163,16 +1251,12 @@ class MainWindow:
         path = self.state.playlist[idx]
         name = os.path.basename(path)
 
-        # Prefer tag title if available, else filename
-        meta = self._meta_cache.get(path)
-        if meta is None:
-            meta = self._read_metadata(path)
-            # store even empty dict to avoid repeated failed reads
-            self._meta_cache[path] = meta
+        # Get metadata using the centralized module
+        meta = get_metadata(path)
 
         title = meta.get("title") or name
         artist = meta.get("artist")
-        duration_s = meta.get("duration")
+        duration_s = meta.get("duration_s")
         bitrate = meta.get("bitrate")
         fmt = meta.get("format")
 
@@ -1181,7 +1265,7 @@ class MainWindow:
         else:
             self.status_var.set(f"{prefix}: {title}")
 
-        # Build metadata line parts
+        # Build metadata line parts (only duration, bitrate, format)
         parts = []
         if duration_s:
             parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
@@ -1192,84 +1276,67 @@ class MainWindow:
 
         self.meta_var.set(" • ".join(parts))
 
-    def _read_metadata(self, path):
-        """
-        Use mutagen to extract: title, artist, duration (s), bitrate (kbps), format.
-        Returns a dict with keys possibly missing.
-        """
-        md = {}
-        try:
-            f = MutagenFile(path, easy=True)
-            if f is None:
-                return md
-            # title/artist (easy tags)
-            title = None
-            artist = None
-            try:
-                title = f.get("title", [None])[0]
-                artist = f.get("artist", [None])[0]
-            except Exception:
-                # some formats expose tags differently; try generic tags
-                tags = getattr(f, "tags", None)
-                if tags:
-                    title = title or tags.get("TITLE") or tags.get("\xa9nam")
-                    artist = artist or tags.get("ARTIST") or tags.get("\xa9ART")
-                    # tags may be lists, extract first string
-                    if isinstance(title, (list, tuple)):
-                        title = title[0]
-                    if isinstance(artist, (list, tuple)):
-                        artist = artist[0]
+    # ---------- Keyboard Accelerators ----------
+    def _bind_keyboard_accelerators(self):
+        """Bind keyboard accelerators to their corresponding commands."""
+        # Alt+key shortcuts for main menu bar navigation
+        self.root.bind("<Alt-f>", lambda e: self._open_menu_by_key("Media"))
+        self.root.bind("<Alt-p>", lambda e: self._open_menu_by_key("Playback"))
+        self.root.bind("<Alt-v>", lambda e: self._open_menu_by_key("View"))
+        self.root.bind("<Alt-t>", lambda e: self._open_menu_by_key("Tools"))
+        self.root.bind("<Alt-h>", lambda e: self._open_menu_by_key("Help"))
 
-            # duration in seconds
-            duration = None
-            try:
-                duration = int(f.info.length) if getattr(f, "info", None) and getattr(f.info, "length", None) else None
-            except Exception:
-                duration = None
+        # Escape to close menus
+        self.root.bind("<Escape>", lambda e: self._close_active_menu())
 
-            # bitrate (some formats)
-            bitrate = None
-            try:
-                if getattr(f, "info", None) and getattr(f.info, "bitrate", None):
-                    # mutagen gives bits per second for many formats
-                    bitrate = int(getattr(f.info, "bitrate") // 1000)
-            except Exception:
-                bitrate = None
+        # Media menu accelerators
+        self.root.bind("<Control-o>", lambda e: self.open_file())
+        self.root.bind("<Control-m>", lambda e: self.open_files())
+        self.root.bind("<Control-f>", lambda e: self.open_folder())
+        self.root.bind("<Control-l>", lambda e: self.open_playlist())
+        self.root.bind("<Control-s>", lambda e: self.save_playlist())
+        self.root.bind("<Control-Shift-S>", lambda e: self.save_playlist_as())
 
-            # format: mime or extension
-            fmt = None
-            try:
-                # Try to infer format from class name or filename extension
-                cls_name = f.__class__.__name__.lower()
-                if "mp3" in cls_name:
-                    fmt = "mp3"
-                elif "flac" in cls_name:
-                    fmt = "flac"
-                elif "ogg" in cls_name:
-                    fmt = "ogg"
-                elif "m4a" in cls_name or "mp4" in cls_name:
-                    fmt = "m4a"
-                else:
-                    # fallback to file extension
-                    fmt = os.path.splitext(path)[1].lstrip(".").lower()
-            except Exception:
-                fmt = None
+        # Playback menu accelerators
+        self.root.bind("<Control-h>", lambda e: self.shuffle_playlist())
+        self.root.bind("<Control-t>", lambda e: self.sort_playlist_by_title())
+        self.root.bind("<Control-r>", lambda e: self.sort_playlist_by_artist())
+        self.root.bind("<Control-Up>", lambda e: self.move_selected_up())
+        self.root.bind("<Control-Down>", lambda e: self.move_selected_down())
+        self.root.bind("<Delete>", lambda e: self.remove_selected_from_playlist())
+        self.root.bind("<Control-c>", lambda e: self.clear_playlist())
+        self.root.bind("<Control-i>", lambda e: self.open_media_info())
+        self.root.bind("<Control-b>", lambda e: self.show_booklet())
 
-            if title:
-                md["title"] = str(title)
-            if artist:
-                md["artist"] = str(artist)
-            if duration:
-                md["duration"] = int(duration)
-            if bitrate:
-                md["bitrate"] = int(bitrate)
-            if fmt:
-                md["format"] = fmt
-        except Exception:
-            # don't let metadata errors break the UI
-            return md
+        # View menu accelerators
+        self.root.bind_all("<F9>", lambda e: self._toggle_playlist_visibility())
+        self.root.bind_all("<F10>", lambda e: self._toggle_browser_visibility())
 
-        return md
+        # Tools menu accelerators
+        self.root.bind("<Control-p>", lambda e: self.open_preferences())
+
+        # Help menu accelerators
+        self.root.bind("<F1>", lambda e: self.open_about())
+
+    def _open_menu_by_key(self, menu_label: str):
+        """Open a menu by its label using keyboard shortcut."""
+        if hasattr(self.menubar, '_toggle_menu'):
+            self.menubar._toggle_menu(menu_label)
+
+    def _close_active_menu(self):
+        """Close the currently active menu."""
+        if hasattr(self.menubar, '_close_active_menu'):
+            self.menubar._close_active_menu()
+
+    def _toggle_playlist_visibility(self):
+        """Toggle playlist visibility for keyboard accelerator."""
+        self.show_playlist_var.set(not self.show_playlist_var.get())
+        self.toggle_playlist_visibility()
+
+    def _toggle_browser_visibility(self):
+        """Toggle browser visibility for keyboard accelerator."""
+        self.show_browser_var.set(not self.show_browser_var.get())
+        self.toggle_browser_visibility()
 
     # ---------- Start UI mainloop ----------
     def start(self):
