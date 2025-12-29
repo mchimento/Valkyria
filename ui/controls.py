@@ -430,3 +430,18 @@ class ControlsBar(ttk.Frame):
     def _send_status(self, event_type):
         if callable(self.status_callback):
             self.status_callback(event_type)
+
+    def _on_play_on_double_change(self):
+        """Handle play on double-click setting change."""
+        new_value = self.play_on_double_var.get()
+
+        # Update both settings and state
+        if self.settings:
+            self.settings.play_on_double = new_value
+            try:
+                self.settings.save()
+            except Exception:
+                pass
+
+        # Update state as well since playlist view checks state.play_on_double
+        self.state.play_on_double = new_value
