@@ -425,6 +425,14 @@ class PlaylistView(ttk.Frame):
         """Start drag operation."""
         item = self.tree.identify_row(event.y)
         if item:
+            # Check if this item is already selected
+            current_selection = self.tree.selection()
+            if item in current_selection and len(current_selection) == 1:
+                # Single selected item clicked - remove selection
+                self.tree.selection_remove(item)
+                self.state.selected_indices = []
+                return "break"  # Prevent default selection behavior
+
             self.state.dragged_index = self.tree.index(item)
 
     def _on_mouse_motion(self, event):
