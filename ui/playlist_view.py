@@ -32,6 +32,7 @@ class PlaylistView(ttk.Frame):
         # Column resize tracking
         self._resize_indicators = []  # List to hold multiple indicators
         self._last_hover_region = None
+        self._is_resizing = False  # Track if column is being resized
 
         self._setup_ui()
         self._setup_bindings()
@@ -145,6 +146,11 @@ class PlaylistView(ttk.Frame):
         # Treeview hover effects
         self.tree.bind("<Motion>", self._on_tree_motion)
         self.tree.bind("<Leave>", self._on_tree_leave)
+
+        # Column resize tracking
+        self.tree.bind("<Button-1>", self._on_resize_start)
+        self.tree.bind("<B1-Motion>", self._on_resize_motion)
+        self.tree.bind("<ButtonRelease-1>", self._on_resize_end)
 
     def _apply_modern_style(self):
         """Apply modern, theme-aware styling."""
@@ -754,6 +760,10 @@ class PlaylistView(ttk.Frame):
             self._hide_resize_indicators()
             return
 
+        # Don't show indicators if column is being resized
+        if self._is_resizing:
+            return
+
         # Get column boundaries
         columns = self.tree.cget("columns")
         if not columns:
@@ -789,6 +799,32 @@ class PlaylistView(ttk.Frame):
             indicator.destroy()
         self._resize_indicators.clear()
         self._last_hover_region = None
+
+    def _on_resize_start(self, event):
+        """Handle column resize start."""
+        # Check if clicking on column boundary (resize area)
+        if event.y <= 20:  # In header area
+            columns = self.tree.cget("columns")
+            current_x = 0
+            for col in columns:
+                col_width = self.tree.column(col, "width")
+                # Check if click is near column boundary (within 5 pixels)
+                if current_x + col_width - 5 <= event.x <= current_x + col_width + 5:
+                    self._is_resizing = True
+                    return
+                current_x += col_width
+
+    def _on_resize_motion(self, event):
+        """Handle column resize motion."""
+        if self._is_resizing:
+            # Hide indicators during resize
+            self._hide_resize_indicators()
+
+    def _on_resize_end(self, event):
+        """Handle column resize end."""
+        self._is_resizing = False
+        # Show indicators again after resize ends
+        # This will be handled by the next motion event
 
     def _on_tree_motion(self, event):
         """Handle mouse motion over treeview items for hover effect."""
