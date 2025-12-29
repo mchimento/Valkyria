@@ -81,8 +81,8 @@ class BrowserView(ttk.Frame):
 
         # Drag tooltip for showing song names during drag
         self.drag_tooltip = tk.Toplevel(self)
-        self.drag_tooltip.withdraw()  # Hide initially
-        self.drag_tooltip.overrideredirect(True)  # Remove window decorations
+        self.drag_tooltip.withdraw()
+        self.drag_tooltip.overrideredirect(True)
         self.drag_tooltip_label = tk.Label(
             self.drag_tooltip,
             bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
@@ -99,15 +99,12 @@ class BrowserView(ttk.Frame):
 
     def _setup_bindings(self):
         """Setup event bindings."""
-        # Delete key
         self.tree.bind('<Delete>', self.remove_selected_from_browser)
 
-        # Drag and drop
         self.tree.bind("<ButtonPress-1>", self._on_drag_start)
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
 
-        # Custom scrollbar interaction
         self.scrollbar_canvas.bind("<Button-1>", self._on_scrollbar_click)
         self.scrollbar_canvas.bind("<B1-Motion>", self._on_scrollbar_drag)
         self.scrollbar_canvas.bind("<Enter>", self._on_scrollbar_enter)
@@ -118,13 +115,11 @@ class BrowserView(ttk.Frame):
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
 
-        # Update header label colors
         self.header_label.config(
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212")
         )
 
-        # Update scrollbar colors
         self.scrollbar_canvas.config(bg=self.theme.palette.get("bg", "#121212"))
         self.scrollbar_canvas.itemconfig(
             self.scroll_track,
@@ -135,7 +130,6 @@ class BrowserView(ttk.Frame):
             fill=self.theme.palette.get("scrollbar_thumb", "#535353")
         )
 
-        # Update drag tooltip colors
         self.drag_tooltip_label.config(
             bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
             fg=self.theme.palette.get("tooltip_fg", "#FFFFFF")
