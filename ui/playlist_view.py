@@ -190,6 +190,12 @@ class PlaylistView(ttk.Frame):
         )
 
         style.map(
+            "Playlist.Treeview.Heading",
+            background=[("active", bg)],  # Remove hover effect
+            foreground=[("active", fg)]
+        )
+
+        style.map(
             "Playlist.Treeview",
             background=[("selected", select_bg)],
             foreground=[("selected", select_fg)]
@@ -868,7 +874,7 @@ class PlaylistView(ttk.Frame):
         """Show a vertical line at the column boundary."""
         indicator = tk.Frame(
             self.tree,
-            background=self.theme.palette.get("accent", "#BB86FC"),
+            background=self.theme.palette.get("resize_column_color", "#BB86FC"),
             width=2
         )
 
