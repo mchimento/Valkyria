@@ -228,6 +228,8 @@ class BrowserView(ttk.Frame):
         if not self.drag_start_pos:
             return
 
+        paths = []  # Initialize paths here to make it accessible throughout the method
+
         # Check threshold if not already dragging
         if not self.drag_data:
             dx = abs(event.x - self.drag_start_pos[0])
@@ -245,7 +247,6 @@ class BrowserView(ttk.Frame):
             else:
                 self.internal_drag_index = None
 
-            paths = []
             for s in sels:
                 idx = self.tree.index(s)
                 if 0 <= idx < len(self.state.browser_files):
@@ -255,14 +256,30 @@ class BrowserView(ttk.Frame):
                 self.drag_data = {"files": paths}
                 self.winfo_toplevel().configure(cursor="fleur")
 
-                # Show drag tooltip with song names
-                if not self.drag_tooltip_visible:
-                    self._show_drag_tooltip(paths, event.x_root, event.y_root)
-
         if not self.drag_data:
             return
 
         x_root, y_root = event.x_root, event.y_root
+
+        # Get paths from drag_data for tooltip
+        paths = self.drag_data.get("files", [])
+
+        # Check if dragging outside browser tree bounds (external drag)
+        tree_x = self.tree.winfo_rootx()
+        tree_y = self.tree.winfo_rooty()
+        tree_w = self.tree.winfo_width()
+        tree_h = self.tree.winfo_height()
+
+        is_inside_browser = (tree_x <= x_root <= tree_x + tree_w and
+                            tree_y <= y_root <= tree_y + tree_h)
+
+        # Show drag tooltip only when dragging outside browser (external drag)
+        if not is_inside_browser and not self.drag_tooltip_visible:
+            self._show_drag_tooltip(paths, x_root, y_root)
+        elif is_inside_browser and self.drag_tooltip_visible:
+            # Hide tooltip when dragging back inside browser
+            self.drag_tooltip.withdraw()
+            self.drag_tooltip_visible = False
 
         # Update drag tooltip position
         if self.drag_tooltip_visible:
