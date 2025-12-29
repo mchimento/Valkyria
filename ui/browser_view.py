@@ -63,10 +63,14 @@ class BrowserView(ttk.Frame):
 
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
-        if "odd" in self.theme.palette:
-            self.tree.tag_configure("odd", background=self.theme.palette["odd"])
         if "even" in self.theme.palette:
             self.tree.tag_configure("even", background=self.theme.palette["even"])
+        if "odd" in self.theme.palette:
+            self.tree.tag_configure("odd", background=self.theme.palette["odd"])
+
+        # Configure hover tag last to ensure it takes precedence
+        hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
+        self.tree.tag_configure("hover", background=hover_bg)
 
         self.tree.pack(fill="both", expand=True)
 
@@ -105,6 +109,10 @@ class BrowserView(ttk.Frame):
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
         self.tree.bind("<ButtonRelease-1>", self._on_drag_release)
 
+        # Treeview hover effects
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", self._on_tree_leave)
+
         self.scrollbar_canvas.bind("<Button-1>", self._on_scrollbar_click)
         self.scrollbar_canvas.bind("<B1-Motion>", self._on_scrollbar_drag)
         self.scrollbar_canvas.bind("<Enter>", self._on_scrollbar_enter)
@@ -115,10 +123,15 @@ class BrowserView(ttk.Frame):
         if "striped_bg" in self.theme.palette:
             self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
 
+        # Update header label colors
         self.header_label.config(
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212")
         )
+
+        # Update hover tag color last to ensure it takes precedence
+        hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
+        self.tree.tag_configure("hover", background=hover_bg)
 
         self.scrollbar_canvas.config(bg=self.theme.palette.get("bg", "#121212"))
         self.scrollbar_canvas.itemconfig(
@@ -448,3 +461,33 @@ class BrowserView(ttk.Frame):
             self.scroll_thumb,
             fill=self.theme.palette.get("scrollbar_thumb", "#535353")
         )
+
+    def _on_tree_motion(self, event):
+        """Handle mouse motion over treeview items for hover effect."""
+        item = self.tree.identify_row(event.y)
+        if item:
+            # Remove hover from all items first
+            children = self.tree.get_children()
+            for child in children:
+                tags = list(self.tree.item(child, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self.tree.item(child, tags=tuple(tags))
+
+            # Add hover to current item (place at end to take precedence)
+            tags = list(self.tree.item(item, "tags"))
+            if "hover" not in tags:
+                tags.append("hover")
+                self.tree.item(item, tags=tuple(tags))
+        else:
+            # Remove hover from all items if not over any item
+            self._on_tree_leave(event)
+
+    def _on_tree_leave(self, event):
+        """Handle mouse leaving treeview area."""
+        children = self.tree.get_children()
+        for child in children:
+            tags = list(self.tree.item(child, "tags"))
+            if "hover" in tags:
+                tags.remove("hover")
+                self.tree.item(child, tags=tuple(tags))
