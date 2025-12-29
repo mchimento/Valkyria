@@ -439,7 +439,7 @@ class BrowserView(ttk.Frame):
         """Handle mouse entering scrollbar area."""
         self.scrollbar_canvas.itemconfig(
             self.scroll_thumb,
-            fill=self.theme.palette.get("accent_hover", "#985EFF")
+            fill=self.theme.palette.get("scrollbar_hover", "#525252")
         )
 
     def _on_scrollbar_leave(self, event):

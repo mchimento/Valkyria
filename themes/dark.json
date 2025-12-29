@@ -35,6 +35,7 @@
   "select_bg": "#BB86FC",
   "select_fg": "#1E1E1E",
   "hover_bg": "#985EFF",
-  "scrollbar_track": "#404040",
-  "scrollbar_thumb": "#BB86FC"
+  "scrollbar_track": "#1E1E1E",
+  "scrollbar_thumb": "#525252",
+  "scrollbar_hover": "#999292"
 }
