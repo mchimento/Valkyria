@@ -635,9 +635,8 @@ class PlaylistView(ttk.Frame):
         # Handle single-click selection if no drag occurred
         if self._clicked_item and self.state.dragged_index is not None:
             current_selection = self.tree.selection()
-            # Only change multi-selection to single if it wasn't a multi-drag operation
-            was_multi_drag = hasattr(self, '_original_selection_indices') and len(getattr(self, '_original_selection_indices', [])) > 1
-            if not was_multi_drag and self._clicked_item in current_selection and len(current_selection) > 1:
+            drag_occurred = hasattr(self, '_mouse_moved')
+            if not drag_occurred and self._clicked_item in current_selection and len(current_selection) > 1:
                 # Change selection to just the clicked item
                 self.tree.selection_set(self._clicked_item)
                 self.state.selected_indices = [self.tree.index(self._clicked_item)]
