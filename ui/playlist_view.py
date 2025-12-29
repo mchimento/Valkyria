@@ -29,6 +29,10 @@ class PlaylistView(ttk.Frame):
         # Track clicked item for distinguishing click vs drag
         self._clicked_item = None
 
+        # Column resize tracking
+        self._resize_indicators = []  # List to hold multiple indicators
+        self._last_hover_region = None
+
         self._setup_ui()
         self._setup_bindings()
         self._apply_modern_style()
@@ -89,12 +93,12 @@ class PlaylistView(ttk.Frame):
         self.tree.heading("Title", text="Title", anchor="w")
         self.tree.heading("Artist", text="Artist", anchor="w")
         self.tree.heading("Album", text="Album", anchor="w")
-        self.tree.heading("Duration", text="Duration", anchor="e")
+        self.tree.heading("Duration", text="Duration", anchor="w")
 
         self.tree.column("Title", width=200, minwidth=150, stretch=True, anchor="w")
         self.tree.column("Artist", width=80, minwidth=50, stretch=True, anchor="w")
         self.tree.column("Album", width=100, minwidth=60, stretch=True, anchor="w")
-        self.tree.column("Duration", width=100, minwidth=50, stretch=False, anchor="e")
+        self.tree.column("Duration", width=100, minwidth=50, stretch=False, anchor="center")
 
         self.tree.pack(fill="both", expand=True, padx=(0, 10))
 
@@ -738,8 +742,54 @@ class PlaylistView(ttk.Frame):
             fill=self.theme.palette.get("scrollbar_thumb", "#BB86FC")
         )
 
+    def _show_resize_indicator(self, x, y):
+        """Show visual indicators for all column boundaries when hovering over headers."""
+        # Check if we're in the header area
+        if y > 20:
+            self._hide_resize_indicators()
+            return
+
+        # Get column boundaries
+        columns = self.tree.cget("columns")
+        if not columns:
+            return
+
+        # Clear existing indicators
+        self._hide_resize_indicators()
+
+        # Calculate cumulative widths and show indicators for all column boundaries
+        current_x = 0
+        for col in columns:
+            col_width = self.tree.column(col, "width")
+            # Show indicator at the right edge of each column
+            self._show_resize_line(current_x + col_width)
+            current_x += col_width
+
+    def _show_resize_line(self, x_pos):
+        """Show a vertical line at the column boundary."""
+        indicator = tk.Frame(
+            self.tree,
+            background=self.theme.palette.get("accent", "#BB86FC"),
+            width=2
+        )
+
+        # Position the line at the column boundary
+        indicator.place(x=x_pos, y=0, height=20)  # Only in header area
+        indicator.lift()
+        self._resize_indicators.append(indicator)
+
+    def _hide_resize_indicators(self):
+        """Hide all resize indicators."""
+        for indicator in self._resize_indicators:
+            indicator.destroy()
+        self._resize_indicators.clear()
+        self._last_hover_region = None
+
     def _on_tree_motion(self, event):
         """Handle mouse motion over treeview items for hover effect."""
+        # Check for column resize hover first
+        self._show_resize_indicator(event.x, event.y)
+
         item = self.tree.identify_row(event.y)
         if item:
             # Remove hover from all items first
@@ -756,20 +806,28 @@ class PlaylistView(ttk.Frame):
                 tags.append("hover")
                 self.tree.item(item, tags=tuple(tags))
         else:
-            # Remove hover from all items if not over any item
-            self._on_tree_leave(event)
+            # Remove hover from all items
+            children = self.tree.get_children()
+            for child in children:
+                tags = list(self.tree.item(child, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self.tree.item(child, tags=tuple(tags))
 
     def get_selected_indices(self):
         """Return a list of indices of selected items."""
         return [self.tree.index(item) for item in self.tree.selection()]
 
     def clear_selection(self):
-        """Clear all selected items in the playlist."""
+        """Clear all selected items in playlist."""
         self.tree.selection_remove(self.tree.selection())
         self.state.selected_indices = []
 
     def _on_tree_leave(self, event):
         """Handle mouse leaving treeview area."""
+        # Hide resize indicators when leaving tree
+        self._hide_resize_indicators()
+
         children = self.tree.get_children()
         for child in children:
             tags = list(self.tree.item(child, "tags"))
