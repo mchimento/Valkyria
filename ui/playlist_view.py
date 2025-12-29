@@ -91,9 +91,9 @@ class PlaylistView(ttk.Frame):
         )
 
         self.tree.heading("Title", text="Title", anchor="w")
-        self.tree.heading("Artist", text="Artist", anchor="w")
-        self.tree.heading("Album", text="Album", anchor="w")
-        self.tree.heading("Duration", text="Duration", anchor="w")
+        self.tree.heading("Artist", text="  Artist", anchor="w")
+        self.tree.heading("Album", text="  Album", anchor="w")
+        self.tree.heading("Duration", text="  Duration", anchor="w")
 
         self.tree.column("Title", width=200, minwidth=150, stretch=True, anchor="w")
         self.tree.column("Artist", width=80, minwidth=50, stretch=True, anchor="w")
@@ -261,11 +261,16 @@ class PlaylistView(ttk.Frame):
 
         # Insert all at once
         for i, icon, title, artist, album, duration, filepath, tags in items_to_insert:
+            # Add padding to column values
+            padded_artist = f"  {artist}"  # Add 2 spaces padding
+            padded_album = f"  {album}"   # Add 2 spaces padding
+            padded_duration = f"  {duration}"  # Add 2 spaces padding
+
             self.tree.insert(
                 '',
                 tk.END,
                 text=icon,
-                values=(title, artist, album, duration),
+                values=(title, padded_artist, padded_album, padded_duration),
                 tags=tuple(tags)
             )
 
