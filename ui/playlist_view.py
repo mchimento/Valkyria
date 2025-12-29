@@ -445,28 +445,38 @@ class PlaylistView(ttk.Frame):
         if item:
             current_selection = self.tree.selection()
             if item in current_selection and len(current_selection) == 1:
-                self.tree.selection_remove(item)
-                self.state.selected_indices = []
+                self._single_click_timer = self.after(100, lambda: self._handle_single_click(item))
+                self._clicked_item = item
+                self.state.dragged_index = self.tree.index(item)
                 return "break"
 
-            # If clicking on an item that's already part of a multi-selection,
-            # preserve multi-selection for potential drag, but remember the clicked item
             if item in current_selection and len(current_selection) > 1:
-                # Store the clicked item for potential single-click selection on release
                 self._clicked_item = item
-                # Keep the current multi-selection intact for dragging
                 self.state.dragged_index = self.tree.index(item)
-                # Store original selection for current_index tracking
                 self._original_selection_indices = [self.tree.index(item) for item in current_selection]
                 self._original_current_in_selection = self.state.current_index in self._original_selection_indices
                 return "break"
 
             self.state.dragged_index = self.tree.index(item)
 
+    def _handle_single_click(self, item):
+        """Handle a confirmed single click by removing selection."""
+        if item and item in self.tree.selection():
+            self.tree.selection_remove(item)
+            self.state.selected_indices = []
+
     def _on_mouse_motion(self, event):
         """Handle drag motion with live swapping."""
         if self.state.dragged_index is None:
             return
+
+        # Cancel single-click timer if mouse moves (indicating drag intent)
+        if hasattr(self, '_single_click_timer'):
+            self.after_cancel(self._single_click_timer)
+            delattr(self, '_single_click_timer')
+            # Mark that mouse moved (drag started)
+            self._mouse_moved = True
+
         self._clicked_item = None
 
         target_row = self.tree.identify_row(event.y)
@@ -568,6 +578,13 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_release(self, event):
         """End drag operation."""
+        # Cancel single-click timer only if there was mouse movement (drag)
+        # If there was no movement, let the timer handle the single click
+        if hasattr(self, '_single_click_timer') and hasattr(self, '_mouse_moved'):
+            self.after_cancel(self._single_click_timer)
+            delattr(self, '_single_click_timer')
+            delattr(self, '_mouse_moved')
+
         # Handle single-click selection if no drag occurred
         if self._clicked_item and self.state.dragged_index is not None:
             current_selection = self.tree.selection()
