@@ -240,6 +240,7 @@ class MainWindow:
             {"label": "Show Album booklet", "command": self.show_booklet, "ref": "track_booklet", "accelerator": "Ctrl+B"}
         ]
         self.menu_item_refs["track_info"] = operations_submenu[6]
+        self.menu_item_refs["track_booklet"] = operations_submenu[7]
 
         repeat_submenu = [
             {"label": "No Repeat", "radiobutton": True, "variable": self.repeat_mode_var,
@@ -519,6 +520,10 @@ class MainWindow:
         if "track_info" in self.menu_item_refs:
             self.menu_item_refs["track_info"]["state"] = state
 
+        # Update Show Album booklet item - disable when no songs in playlist
+        if "track_booklet" in self.menu_item_refs:
+            self.menu_item_refs["track_booklet"]["state"] = state
+
         # Update Playlist menu state
         if "playlist_menu" in self.menu_item_refs:
             playlist_menu_item = self.menu_item_refs["playlist_menu"]
@@ -540,6 +545,9 @@ class MainWindow:
 
             if "track_info" in self.menu_item_refs:
                 self.menu_item_refs["track_info"]["state"] = state
+            
+            if "track_booklet" in self.menu_item_refs:
+                self.menu_item_refs["track_booklet"]["state"] = state
         except Exception:
             # Fail silently; menu state is not critical
             pass
@@ -550,6 +558,8 @@ class MainWindow:
             state = "normal" if enabled else "disabled"
             if "track_info" in self.menu_item_refs:
                 self.menu_item_refs["track_info"]["state"] = state
+            if "track_booklet" in self.menu_item_refs:
+                self.menu_item_refs["track_booklet"]["state"] = state
         except Exception:
             pass
 
