@@ -11,7 +11,7 @@ from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 from app.paths import get_resource_path
 from audio.metadata import get_metadata, get_display_title, get_best_artwork
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 from audio import m3u as m3u_module, playback
 from ui.playlist_view import PlaylistView
@@ -83,6 +83,67 @@ class MainWindow:
         self.current_artwork_image = None
         self.current_artwork_photo = None
 
+    def _create_placeholder_image(self):
+        """Create a placeholder image with music note symbol."""
+        import platform
+
+        placeholder_image = Image.new('RGBA', (100, 100), (0, 0, 0, 0))  # transparent background
+        draw = ImageDraw.Draw(placeholder_image)
+
+        # Get theme color for the symbol
+        text_color = self.palette.get('status_meta_fg', '#E0E0E0')
+
+        # Try different fonts based on platform
+        system = platform.system().lower()
+        font = None
+
+        # Try platform-specific fonts first
+        if system == "windows":
+            font_paths = [
+                r"C:\Windows\Fonts\seguisym.ttf",  # Segoe UI Symbol
+                r"C:\Windows\Fonts\arial.ttf",     # Arial
+                r"C:\Windows\Fonts\tahoma.ttf",    # Tahoma
+            ]
+        elif system == "darwin":  # macOS
+            font_paths = [
+                "/System/Library/Fonts/Apple Symbols.ttf",
+                "/Library/Fonts/Arial.ttf",
+                "/System/Library/Fonts/Arial.ttf",
+            ]
+        else:  # Linux and others
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            ]
+
+        # Try font paths
+        for font_path in font_paths:
+            try:
+                font = ImageFont.truetype(font_path, 48)
+                break
+            except (OSError, IOError):
+                continue
+
+        # If no font path worked, try common font names
+        if font is None:
+            common_fonts = ["Arial", "Helvetica", "DejaVu Sans", "Liberation Sans", "FreeSans"]
+            for font_name in common_fonts:
+                try:
+                    font = ImageFont.truetype(font_name, 48)
+                    break
+                except (OSError, IOError):
+                    continue
+
+        # Ultimate fallback
+        if font is None:
+            font = ImageFont.load_default()
+
+        draw.text((50, 45), "♫", fill=text_color, font=font, anchor="mm")  # Two quavers
+
+        ctk_image = ctk.CTkImage(placeholder_image, size=(100, 100))
+        return ctk_image, placeholder_image
+
     def _update_artwork(self, filepath):
         """Update the artwork display for a given file."""
         try:
@@ -100,44 +161,31 @@ class MainWindow:
                 ctk_image = ctk.CTkImage(image, size=(100, 100))
 
                 # Update the label to show the image
-                self.artwork_label.configure(image=ctk_image)
+                self.artwork_label.configure(image=ctk_image, text="")
                 self.artwork_label.image = ctk_image  # Keep a reference
 
                 # Store reference to prevent garbage collection
                 self.current_artwork_photo = ctk_image
                 self.current_artwork_image = image
             else:
-                # No artwork found, show music note placeholder
-                try:
-                    self.artwork_label.configure(image=None)
-                    self.artwork_label.image = None
-                except Exception:
-                    pass
+                # No artwork found, create music note placeholder image
+                ctk_image, placeholder_image = self._create_placeholder_image()
 
-                # Now set the music note
-                try:
-                    self.artwork_label.configure(text="♪")
-                except Exception:
-                    pass
+                self.artwork_label.configure(image=ctk_image, text="")
+                self.artwork_label.image = ctk_image
 
-                self.current_artwork_image = None
-                self.current_artwork_photo = None
+                self.current_artwork_photo = ctk_image
+                self.current_artwork_image = placeholder_image
 
         except Exception:
-            try:
-                self.artwork_label.configure(image=None)
-                self.artwork_label.image = None
-            except Exception:
-                pass
+            # On error, also show music note placeholder
+            ctk_image, placeholder_image = self._create_placeholder_image()
 
-            # Now set the music note
-            try:
-                self.artwork_label.configure(text="♪")
-            except Exception:
-                pass
+            self.artwork_label.configure(image=ctk_image, text="")
+            self.artwork_label.image = ctk_image
 
-            self.current_artwork_image = None
-            self.current_artwork_photo = None
+            self.current_artwork_photo = ctk_image
+            self.current_artwork_image = placeholder_image
 
     # ---------- Build UI ----------
     def _build_menu(self):
@@ -358,7 +406,7 @@ class MainWindow:
             font=ctk.CTkFont(size=40),
             text_color=initial_meta_fg,
             fg_color="transparent",
-            anchor="nw"
+            anchor="center"
         )
         self.artwork_label.pack(side=tk.TOP, fill=tk.BOTH)
 
@@ -637,9 +685,6 @@ class MainWindow:
         self.palette = self.theme.palette
         self.tooltip_manager.palette = self.palette
 
-        # Note: theme.apply_to() already sets root window background
-        # We close dropdown menus first to prevent errors when it tries to update child widgets
-
         # Determine theme mode for color calculations
         is_dark = self.settings.theme.lower() == 'dark'
 
@@ -653,7 +698,6 @@ class MainWindow:
         except:
             pass
 
-        # Update TFrame style to fix padding areas (main_frame padding=6)
         try:
             style = ttk.Style(self.root)
             style.configure("TFrame", background=root_bg)
@@ -665,7 +709,6 @@ class MainWindow:
         btn_fg = self.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
 
-        # Find all buttons in the nested frame structure
         def update_buttons_in_frame(frame):
             for widget in frame.winfo_children():
                 if isinstance(widget, ctk.CTkButton):
@@ -708,19 +751,17 @@ class MainWindow:
             frame_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
 
             # Update parent frame background - ensure it matches root background
-            # Both fg_color and bg_color must match root for seamless edges
             self.status_frame.configure(
                 fg_color=frame_bg,
                 bg_color=frame_bg  # Critical: bg_color affects frame edges/corners
             )
 
             # Update status bar frame with subtle border for better visibility
-            # bg_color is critical for rounded corners - must match parent frame
             self.status_bg.configure(
-                fg_color=status_bg_color,  # Use status_bg for better visibility
+                fg_color=status_bg_color,
                 bg_color=frame_bg,  # This controls corner colors - must match parent
                 border_color=status_border_color,  # Subtle border for separation
-                border_width=1  # Add border for better visibility
+                border_width=1
             )
 
             # Update status and meta labels
@@ -746,6 +787,10 @@ class MainWindow:
 
         # Trigger refresh to redraw
         self.refresh_all()
+
+        # Update artwork if there's a current track to refresh placeholder colors
+        if self.state.current_index is not None and 0 <= self.state.current_index < len(self.state.playlist):
+            self._update_artwork(self.state.playlist[self.state.current_index])
 
     def open_preferences(self):
         def on_apply(selected_theme):
