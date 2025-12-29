@@ -547,7 +547,28 @@ class PlaylistView(ttk.Frame):
                         # Song was somehow removed from playlist
                         self.state.current_index = None
 
-            self.refresh()
+            # Efficiently update treeview without re-fetching metadata
+            children = self.tree.get_children()
+            current_items = []
+            for iid in children:
+                values = self.tree.item(iid, 'values')
+                text = self.tree.item(iid, 'text')
+                current_items.append((text, values))
+
+            # Clear tree
+            self.tree.delete(*children)
+
+            # Re-insert in new order
+            for i, (text, values) in enumerate(current_items):
+                # Update tags based on new position
+                tags = ["odd" if i % 2 == 1 else "even"]
+                if self.state.current_index is not None and i == self.state.current_index:
+                    tags.append("playing")
+
+                self.tree.insert('', tk.END, text=text, values=values, tags=tuple(tags))
+
+            # Update scrollbar
+            self._update_scrollbar()
 
             # Manually restore selection based on new positions
             children = self.tree.get_children()
