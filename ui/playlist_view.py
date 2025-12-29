@@ -491,6 +491,15 @@ class PlaylistView(ttk.Frame):
         is_multi_drag = dragged_item in current_selection and len(current_selection) > 1
 
         if is_multi_drag:
+            # Check if target is within selected items - if so, don't move
+            if target_row in current_selection:
+                return
+
+            # Prevent multiple updates during the same drag operation
+            if hasattr(self, '_last_multi_drag_target') and self._last_multi_drag_target == target_index:
+                return
+            self._last_multi_drag_target = target_index
+
             # Use stored original selection values from drag start
             original_current_in_selection = getattr(self, '_original_current_in_selection', False)
             original_selection_indices = getattr(self, '_original_selection_indices', [])
@@ -601,6 +610,8 @@ class PlaylistView(ttk.Frame):
             delattr(self, '_original_selection_indices')
         if hasattr(self, '_original_current_in_selection'):
             delattr(self, '_original_current_in_selection')
+        if hasattr(self, '_last_multi_drag_target'):
+            delattr(self, '_last_multi_drag_target')
 
         self.state.dragged_index = None
         if self.state.current_index is not None:
