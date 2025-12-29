@@ -32,9 +32,9 @@
   "slider_bg": "#404040",
   "slider_hover": "#985EFF",
   "slider_progress": "#BB86FC",
-  "select_bg": "#BB86FC",
+  "select_bg": "#A279EB",
   "select_fg": "#1E1E1E",
-  "hover_bg": "#985EFF",
+  "hover_bg": "#525252",
   "scrollbar_track": "#1E1E1E",
   "scrollbar_thumb": "#525252",
   "scrollbar_hover": "#999292"
