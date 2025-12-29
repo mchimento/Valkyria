@@ -5,12 +5,15 @@ and wires them to the AppState, ThemeManager, AudioPlayer and Settings.
 
 import logging
 import os
+import io
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
+from app.paths import get_resource_path
+from audio.metadata import get_metadata, get_display_title, get_best_artwork
+from PIL import Image, ImageTk
 
 from audio import m3u as m3u_module, playback
-from audio.metadata import get_display_title, get_metadata
 from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
@@ -75,6 +78,66 @@ class MainWindow:
 
         # Ensure player stopped on exit and save geometry
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
+
+        # Store current artwork image reference
+        self.current_artwork_image = None
+        self.current_artwork_photo = None
+
+    def _update_artwork(self, filepath):
+        """Update the artwork display for a given file."""
+        try:
+            # Get artwork data using the fallback hierarchy
+            artwork_data = get_best_artwork(filepath)
+
+            if artwork_data:
+                # Load image from bytes
+                image = Image.open(io.BytesIO(artwork_data))
+
+                # Resize to fit the artwork frame (100x100)
+                image = image.resize((100, 100), Image.Resampling.LANCZOS)
+
+                # Convert to CTkImage for CustomTkinter compatibility
+                ctk_image = ctk.CTkImage(image, size=(100, 100))
+
+                # Update the label to show the image
+                self.artwork_label.configure(image=ctk_image)
+                self.artwork_label.image = ctk_image  # Keep a reference
+
+                # Store reference to prevent garbage collection
+                self.current_artwork_photo = ctk_image
+                self.current_artwork_image = image
+            else:
+                # No artwork found, show music note placeholder
+                try:
+                    self.artwork_label.configure(image=None)
+                    self.artwork_label.image = None
+                except Exception:
+                    pass
+
+                # Now set the music note
+                try:
+                    self.artwork_label.configure(text="♪")
+                except Exception:
+                    pass
+
+                self.current_artwork_image = None
+                self.current_artwork_photo = None
+
+        except Exception:
+            try:
+                self.artwork_label.configure(image=None)
+                self.artwork_label.image = None
+            except Exception:
+                pass
+
+            # Now set the music note
+            try:
+                self.artwork_label.configure(text="♪")
+            except Exception:
+                pass
+
+            self.current_artwork_image = None
+            self.current_artwork_photo = None
 
     # ---------- Build UI ----------
     def _build_menu(self):
@@ -160,11 +223,8 @@ class MainWindow:
         self.menubar.add_menu("View", view_items)
 
         # Tools menu
-        # Audio device submenu will be built dynamically
         self.audio_device_items = []
         self._build_audio_device_menu_items()
-
-        # Create audio device menu item with reference to the list
         audio_device_item = {"label": "Audio Device", "submenu": self.audio_device_items}
 
         tools_items = [
@@ -279,32 +339,56 @@ class MainWindow:
         # Status text with larger, more prominent styling
         self.status_var = tk.StringVar(value="")
         initial_status_fg = self.palette.get('status_fg', '#202020' if not is_dark else '#FFFFFF')
+        initial_meta_fg = self.palette.get('status_meta_fg', '#505050' if not is_dark else '#E0E0E0')
+
+        # Create content frame for horizontal layout
+        self.status_content = ctk.CTkFrame(self.status_bg, fg_color="transparent", height=120)
+        self.status_content.pack(fill=tk.X, padx=12, pady=10)
+        self.status_content.pack_propagate(False)  # Prevent frame from resizing based on content
+
+        # Artwork frame on the left
+        self.artwork_frame = ctk.CTkFrame(self.status_content, fg_color="transparent", width=100, height=100)
+        self.artwork_frame.pack(side=tk.LEFT, padx=(0, 12))
+        self.artwork_frame.pack_propagate(False)  # Prevent frame from shrinking
+
+        # Artwork label (will display the image)
+        self.artwork_label = ctk.CTkLabel(
+            self.artwork_frame,
+            text="",
+            font=ctk.CTkFont(size=24),
+            text_color=initial_meta_fg,
+            fg_color="transparent",
+            anchor="nw"
+        )
+        self.artwork_label.pack(side=tk.TOP, fill=tk.BOTH)
+
+        self.text_frame = ctk.CTkFrame(self.status_content, fg_color="transparent")
+        self.text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(0, 0))
+
         self.status_label = ctk.CTkLabel(
-            self.status_bg,
+            self.text_frame,
             textvariable=self.status_var,
             anchor="w",
             font=ctk.CTkFont(size=15, weight="bold"),
             text_color=initial_status_fg,
             bg_color=initial_status_bg,
-            justify="left",
-            height=45
+            justify="left"
         )
-        self.status_label.pack(side=tk.TOP, fill=tk.X, padx=12, pady=6)
+        self.status_label.pack(side=tk.TOP, fill=tk.X, pady=(15, 40))
 
-        # Meta info with subtle but more visible styling
+        # Meta info
         self.meta_var = tk.StringVar(value="")
-        initial_meta_fg = self.palette.get('status_meta_fg', '#505050' if not is_dark else '#E0E0E0')
         self.meta_label = ctk.CTkLabel(
-            self.status_bg,
+            self.text_frame,
             textvariable=self.meta_var,
             anchor="w",
             font=ctk.CTkFont(size=14),
             text_color=initial_meta_fg,
             bg_color=initial_status_bg,
             justify="left",
-            height=34
+            height=1
         )
-        self.meta_label.pack(side=tk.TOP, fill=tk.X, padx=12, pady=(0, 8))
+        self.meta_label.pack(side=tk.TOP, fill=tk.X, pady=(0, 2))
 
         # Bottom: Controls bar
         self.controls = ControlsBar(
@@ -325,7 +409,6 @@ class MainWindow:
         if event_type == "play":
             self._restore_status()
             self._update_menu_state()
-            # Track info should be available while playing
             self._set_track_info_enabled(True)
         elif event_type == "pause":
             if self.status_var.get().startswith("Pause:"):
@@ -333,19 +416,27 @@ class MainWindow:
             else:
                 self._restore_status(prefix="Pause")
             self._update_menu_state()
-            # Track info should remain available while paused
             self._set_track_info_enabled(True)
         elif event_type == "stop":
             if self.status_var.get():
                 self.status_var.set("")
             self.meta_var.set("")
+
+            if hasattr(self, "_status_restore_job"):
+                self.root.after_cancel(self._status_restore_job)
+                self._status_restore_job = None
+
+            self.state.current_index = None
+
+            try:
+                self.artwork_frame.pack_forget()
+            except Exception:
+                pass
+            self.refresh_all()
             self._update_menu_state()
-            # Disable Track Information when nothing is playing/paused
             self._set_track_info_enabled(False)
         elif event_type in ("prev", "next"):
             self._restore_status()
-            # Do not change Track Information availability on prev/next;
-            # just keep playlist/menu state in sync.
             self._update_menu_state()
         elif event_type == "browsed_files" or event_type == "browsed_folder":
             self._set_temporary_status(f"Added {count} file(s) to Songs list")
@@ -879,7 +970,6 @@ class MainWindow:
             self.state.playlist, selected_indices, self.state.current_index
         )
 
-        # Stop playback if current track was removed
         if self.state.current_index is None:
             self.player.stop()
 
@@ -1153,8 +1243,6 @@ class MainWindow:
             self.refresh_all()
             self._set_temporary_status("Removed song from playlist")
 
-
-
     # ---------- Helper to load folder into playlist (open_folder) ----------
     def _load_files_into_playlist(self, folder):
         if not os.path.isdir(folder):
@@ -1221,6 +1309,8 @@ class MainWindow:
                 # end of playlist: stop player
                 try:
                     self.player.stop()
+                    # Ensure status is updated to clear artwork when playlist ends
+                    self._controls_status_event("stop")
                 except Exception:
                     pass
 
@@ -1246,7 +1336,20 @@ class MainWindow:
         if idx is None or idx >= len(self.state.playlist):
             self.status_var.set("")
             self.meta_var.set("")
+            self.artwork_label.configure(image=None)
+            self.artwork_label.image = None
+            # Hide artwork frame when no track is active
+            try:
+                self.artwork_frame.pack_forget()
+            except Exception:
+                pass
             return
+
+        # Show artwork frame when there is a current track
+        try:
+            self.artwork_frame.pack(side=tk.LEFT, padx=(0, 12), before=self.text_frame)
+        except Exception:
+            pass
 
         path = self.state.playlist[idx]
         name = os.path.basename(path)
@@ -1259,6 +1362,9 @@ class MainWindow:
         duration_s = meta.get("duration_s")
         bitrate = meta.get("bitrate")
         fmt = meta.get("format")
+
+        # Update artwork display
+        self._update_artwork(path)
 
         if artist:
             self.status_var.set(f"{prefix}: {title} — {artist}")

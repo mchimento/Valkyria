@@ -374,7 +374,6 @@ class MetadataExtractor:
         except Exception:
             pass
 
-        # Optionally check for folder images (like VLC does)
         if include_folder_images:
             try:
                 folder = os.path.dirname(filepath)
@@ -413,6 +412,64 @@ class MetadataExtractor:
                 pass
 
         return booklet_images
+
+def get_best_artwork(filepath):
+    """
+    Get the best artwork image for a file using fallback hierarchy.
+    
+    Args:
+        filepath (str): Path to the audio file
+        
+    Returns:
+        bytes: Image data for the best artwork, or None if no artwork found
+    """
+    try:
+        # Get all available images using the comprehensive extraction function
+        images = metadata_extractor.get_booklet_images(filepath, include_folder_images=True)
+
+        if not images:
+            return None
+
+        # Priority order for artwork selection
+        # 1. Front cover (APIC type 3) from embedded metadata
+        # 2. Any embedded artwork (APIC, FLAC Picture, MP4 Cover, GEOB Image)
+        # 3. Folder artwork with priority names (cover.jpg, album.jpg, etc.)
+        # 4. Any other image (including other folder images)
+
+        # First, look for front cover (type 3) in embedded images
+        for img_data, description, img_type in images:
+            if "APIC" in img_type and "Type 3" in img_type:
+                return img_data
+
+        # Then look for any embedded artwork
+        for img_data, description, img_type in images:
+            if any(embedded_type in img_type for embedded_type in ["APIC", "FLAC Picture", "MP4 Cover", "GEOB Image"]):
+                return img_data
+
+        # Then look for folder artwork with priority names
+        priority_names = ['cover.jpg', 'cover.png', 'front.jpg', 'front.png',
+                        'album.jpg', 'album.png', 'albumart.jpg', 'albumart.png',
+                        'folder.jpg', 'folder.png']
+
+        for img_data, description, img_type in images:
+            if "Folder Image" in img_type:
+                desc_lower = description.lower()
+                if any(name in desc_lower for name in priority_names):
+                    return img_data
+
+        # Then look for any folder image
+        for img_data, description, img_type in images:
+            if "Folder Image" in img_type:
+                return img_data
+
+        # Finally, return any available image
+        if images:
+            return images[0][0]
+
+    except Exception as e:
+        pass
+
+    return None
 
 # Global instance for use across the application
 metadata_extractor = MetadataExtractor()
