@@ -265,7 +265,12 @@ class ControlsBar(ttk.Frame):
 
     def _on_mute_toggle(self):
         """Toggle mute state."""
-        current_state = self.player.get_mute_state()
+        # Use local state when no media is playing, otherwise query player
+        if self.player.is_playing() or self.player.is_paused():
+            current_state = self.player.get_mute_state()
+        else:
+            current_state = self.is_muted
+
         new_state = not current_state
 
         # Update player
