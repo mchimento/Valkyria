@@ -257,6 +257,7 @@ class MainWindow:
             if bpm_value is not None:
                 # Store temporary BPM value
                 self.current_temp_bpm = bpm_value
+                self.temporary_bpm_files.add(filepath)  # Track this file as having temporary BPM
 
                 # Update metadata cache temporarily (don't write to file)
                 metadata_extractor._cache[filepath]['bpm'] = bpm_value
@@ -280,6 +281,8 @@ class MainWindow:
         """Reset BPM button back to analyze state."""
         self.bpm_button_state = "analyze"
         self.btn_bpm.configure(state="normal", text="Analyze BPM")
+        self.current_temp_bpm = None
+        # Don't clear temporary_bpm_files here as other files might still have temporary BPMs
 
     def _update_meta_with_temp_bpm(self):
         """Update the meta label to include temporary BPM without calling _restore_status."""
@@ -332,6 +335,7 @@ class MainWindow:
             if success:
                 # Clear temporary BPM since it's now saved
                 self.current_temp_bpm = None
+                self.temporary_bpm_files.discard(filepath)  # Remove from temporary tracking
 
                 # Update metadata cache to reflect saved BPM
                 metadata_extractor.update_cache(filepath)
@@ -640,6 +644,7 @@ class MainWindow:
 
         # Store current temporary BPM value and button state
         self.current_temp_bpm = None
+        self.temporary_bpm_files = set()  # Track files with temporary BPMs
         self.bpm_button_state = "analyze"  # Can be "analyze", "analyzing", "save", "saving"
 
         # Bottom: Controls bar
@@ -1675,9 +1680,18 @@ class MainWindow:
             self.btn_bpm.configure(state="normal", text="Analyze BPM")
             self.current_temp_bpm = None
         else:
-            # Hide BPM control frame when BPM is present
-            self.bpm_control_frame.pack_forget()
-            self.current_temp_bpm = None
+            # Check if this BPM is a temporary one (needs saving)
+            if path in self.temporary_bpm_files:
+                # This is a temporary BPM, show save button
+                self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
+                self.bpm_button_state = "save"
+                self.btn_bpm.configure(state="normal", text="Save BPM")
+                # Restore the temporary BPM value
+                self.current_temp_bpm = metadata_extractor._cache[path].get('bpm')
+            else:
+                # Hide BPM control frame when BPM is permanently saved
+                self.bpm_control_frame.pack_forget()
+                self.current_temp_bpm = None
 
     # ---------- Keyboard Accelerators ----------
     def _bind_keyboard_accelerators(self):
