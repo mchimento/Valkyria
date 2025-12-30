@@ -1508,7 +1508,28 @@ class MainWindow:
             return
         if 0 <= index < len(self.state.playlist):
             track = self.state.playlist[index]
-            MediaInfoWindow(self.root, track, theme_manager=self.theme)
+            MediaInfoWindow(self.root, track, theme_manager=self.theme, 
+                         metadata_saved_callback=self._on_metadata_saved_from_info_window)
+
+    def _on_metadata_saved_from_info_window(self, filepath):
+        """Handle metadata saved from media info window by refreshing relevant UI components."""
+        try:
+            # Update metadata cache for the modified file
+            metadata_extractor.update_cache(filepath)
+            
+            # Check if this is the currently playing file
+            if (self.state.current_index is not None and 
+                self.state.current_index < len(self.state.playlist) and
+                self.state.playlist[self.state.current_index] == filepath):
+                # Refresh status display for current track
+                self._restore_status()
+            
+            # Refresh playlist to show updated metadata
+            if self.playlist_view:
+                self.playlist_view.refresh_metadata_for_file(filepath)
+                
+        except Exception as e:
+            logger.error(f"Error refreshing after metadata save: {e}")
 
     def _on_context_remove_song(self, index):
         """Remove the song at the given index from playlist via context menu."""

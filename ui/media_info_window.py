@@ -5,15 +5,17 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
+import threading
 from pathlib import Path
-from audio.metadata import get_file_info, save_metadata, metadata_extractor, get_display_bpm
+from audio.metadata import get_file_info, save_metadata, metadata_extractor, get_display_bpm, analyze_bpm, write_bpm
 from ui.utils import center_window
 
 
 class MediaInfoWindow:
-    def __init__(self, parent, file_path, theme_manager=None):
+    def __init__(self, parent, file_path, theme_manager=None, metadata_saved_callback=None):
         self.file_path = file_path
         self.theme_manager = theme_manager
+        self.metadata_saved_callback = metadata_saved_callback
 
         # Create window
         self.window = tk.Toplevel(parent)
@@ -53,6 +55,7 @@ class MediaInfoWindow:
         self.codec_text = None
         self.close_btn = None
         self.save_btn = None
+        self.bpm_btn = None
 
         # Populate tabs
         self._populate_general_tab(general_frame)
@@ -166,6 +169,9 @@ class MediaInfoWindow:
 
         if self.save_btn:
             self.save_btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=bg)
+
+        if self.bpm_btn:
+            self.bpm_btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=bg)
 
         # Update notebook (tab bar) styling
         self._update_notebook_style()
@@ -478,11 +484,50 @@ class MediaInfoWindow:
 
         info = self.file_info['metadata']
 
+        # Get theme colors for buttons
+        if self.theme_manager:
+            palette = self.theme_manager.palette
+            btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+            btn_fg = palette.get("button_fg_color", "#ffffff")
+            btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+            bg = palette.get("bg", "#ffffff")
+        else:
+            btn_bg = "#0078d4"
+            btn_fg = "#ffffff"
+            btn_hover = "#106ebe"
+            bg = "#ffffff"
+
         for i, (label_text, key) in enumerate(tags):
             ttk.Label(container, text=f"{label_text}:").grid(row=i, column=0, sticky="w", pady=5)
 
-            entry = ttk.Entry(container)
-            entry.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=5)
+            if key == 'bpm':
+                # Create a frame for BPM entry and button
+                bpm_frame = ttk.Frame(container)
+                bpm_frame.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=5)
+
+                entry = ttk.Entry(bpm_frame)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+                # Add BPM calculation button
+                bpm_btn = ctk.CTkButton(
+                    bpm_frame,
+                    text="Calculate BPM",
+                    command=self._calculate_bpm,
+                    font=("Segoe UI", 9),
+                    width=100,
+                    height=28,
+                    fg_color=btn_bg,
+                    text_color=btn_fg,
+                    hover_color=btn_hover,
+                    bg_color=bg
+                )
+                bpm_btn.pack(side=tk.RIGHT, padx=(5, 0))
+
+                # Store reference for theme updates
+                self.bpm_btn = bpm_btn
+            else:
+                entry = ttk.Entry(container)
+                entry.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=5)
 
             # Pre-fill if value exists
             # Map common keys if needed, but mutagen easy=True handles these well
@@ -495,8 +540,15 @@ class MediaInfoWindow:
                 entry.raw_value = str(val)
             else:
                 entry.insert(0, str(val))
+                # Clear raw_value for BPM if no existing value
+                if key == 'bpm':
+                    entry.raw_value = None
 
             self.entries[key] = entry
+
+        # Add binding to clear raw_value when BPM entry is manually edited
+        if 'bpm' in self.entries:
+            self.entries['bpm'].bind('<KeyRelease>', lambda e: self._on_bpm_entry_edit())
 
         # Save Button with modern styling
         if self.theme_manager:
@@ -535,7 +587,15 @@ class MediaInfoWindow:
             metadata_to_save = {}
             for key, entry in self.entries.items():
                 val = entry.get().strip()
-                if val:
+                # For BPM, use raw value if available (from calculation), otherwise use display value
+                if key == 'bpm' and hasattr(entry, 'raw_value'):
+                    # If entry is empty, don't use raw_value (allow removal)
+                    if val:
+                        metadata_to_save[key] = entry.raw_value
+                    else:
+                        metadata_to_save[key] = val  # Empty string to remove BPM
+                else:
+                    # Include empty values to allow metadata removal
                     metadata_to_save[key] = val
 
             success = save_metadata(self.file_path, metadata_to_save)
@@ -543,8 +603,74 @@ class MediaInfoWindow:
                 messagebox.showinfo("Success", "Metadata saved successfully!", parent=self.window)
                 # Refresh file info to show updates
                 self.file_info = self._get_file_info()
+
+                # Call the callback to notify main window of changes
+                if self.metadata_saved_callback:
+                    try:
+                        self.metadata_saved_callback(self.file_path)
+                    except Exception:
+                        pass
             else:
                 messagebox.showerror("Error", "Could not load file for writing.", parent=self.window)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save metadata: {e}", parent=self.window)
+
+    def _calculate_bpm(self):
+        """Calculate BPM for the current file in a background thread."""
+        try:
+            # Disable button during analysis
+            if self.bpm_btn:
+                self.bpm_btn.configure(state="disabled", text="Calculating...")
+
+            # Start BPM analysis in background thread
+            thread = threading.Thread(target=self._calculate_bpm_worker, daemon=True)
+            thread.start()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start BPM analysis: {e}", parent=self.window)
+            # Reset button state
+            if self.bpm_btn:
+                self.bpm_btn.configure(state="normal", text="Calculate BPM")
+
+    def _calculate_bpm_worker(self):
+        """Worker function to calculate BPM in background."""
+        try:
+            analyzed_bpm = analyze_bpm(self.file_path)
+
+            # Update UI in main thread
+            self.window.after(0, self._on_bpm_calculation_complete, analyzed_bpm)
+
+        except Exception as e:
+            self.window.after(0, self._on_bpm_calculation_error, str(e))
+
+    def _on_bpm_calculation_complete(self, bpm_value):
+        """Handle BPM calculation completion."""
+        try:
+            if bpm_value is not None:
+                # Update the BPM entry field
+                if hasattr(self, 'entries') and 'bpm' in self.entries:
+                    entry = self.entries['bpm']
+                    if entry:
+                        entry.delete(0, tk.END)
+                        # Show display value but store raw value
+                        display_val = get_display_bpm(bpm_value)
+                        entry.insert(0, str(display_val))
+                        entry.raw_value = str(bpm_value)
+            else:
+                messagebox.showwarning("BPM Analysis", "Could not calculate BPM for this file.", parent=self.window)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to process BPM result: {e}", parent=self.window)
+
+        # Reset button state
+        if self.bpm_btn:
+            self.bpm_btn.configure(state="normal", text="Calculate BPM")
+
+    def _on_bpm_calculation_error(self, error_message):
+        """Handle BPM calculation error."""
+        messagebox.showerror("BPM Analysis Error", f"Failed to calculate BPM: {error_message}", parent=self.window)
+
+        # Reset button state
+        if self.bpm_btn:
+            self.bpm_btn.configure(state="normal", text="Calculate BPM")

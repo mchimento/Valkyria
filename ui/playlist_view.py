@@ -263,6 +263,9 @@ class PlaylistView(ttk.Frame):
                     filepath = self.state.playlist[i]
                     metadata = self._get_metadata(filepath)
                     bpm = metadata.get("bpm", "")
+                    # Convert None to empty string for display
+                    if bpm is None:
+                        bpm = ""
 
                     # Use display BPM function for normalized display
                     display_bpm = get_display_bpm(bpm)
@@ -279,6 +282,39 @@ class PlaylistView(ttk.Frame):
         finally:
             # Re-enable selection event
             self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
+
+    def refresh_metadata_for_file(self, filepath):
+        """Refresh metadata display for a specific file in the playlist."""
+        try:
+            # Find the file in the playlist
+            for i, playlist_file in enumerate(self.state.playlist):
+                if playlist_file == filepath:
+                    # Get updated metadata
+                    metadata = self._get_metadata(filepath)
+                    title = metadata.get("title", get_display_title(filepath))
+                    artist = metadata.get("artist", "")
+                    album = metadata.get("album", "")
+                    duration = metadata.get("duration", "")
+                    bpm = metadata.get("bpm", "")
+                    # Convert None to empty string for display
+                    if bpm is None:
+                        bpm = ""
+
+                    # Update tree item
+                    children = self.tree.get_children()
+                    if i < len(children):
+                        item_id = children[i]
+                        # Add padding to column values to match main refresh method
+                        padded_artist = f"  {artist}"  # Add 2 spaces padding
+                        padded_album = f"  {album}"   # Add 2 spaces padding
+                        padded_duration = f"  {duration}"  # Add 2 spaces padding
+                        padded_bpm = f"  {bpm}" if bpm else ""  # Add 2 spaces padding if BPM exists
+                        values = (title, padded_artist, padded_album, padded_duration, padded_bpm)
+                        self.tree.item(item_id, values=values)
+                    break
+        except Exception as e:
+            # Fail silently - refresh is not critical
+            pass
 
     def refresh(self, preserve_selection=False):
         """Efficiently refresh the playlist display."""
@@ -300,6 +336,9 @@ class PlaylistView(ttk.Frame):
             album = metadata.get("album", "")
             duration = metadata.get("duration", "")
             bpm = metadata.get("bpm", "")
+            # Convert None to empty string for display
+            if bpm is None:
+                bpm = ""
 
             # Determine tags based on state
             tags = ["odd" if i % 2 == 1 else "even"]
