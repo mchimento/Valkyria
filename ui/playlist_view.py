@@ -560,6 +560,13 @@ class PlaylistView(ttk.Frame):
                 return "break"
 
             self.state.dragged_index = self.tree.index(item)
+        else:
+            # Click in empty area - clear selection but don't affect songs
+            self.tree.selection_remove(self.tree.selection())
+            self.state.selected_indices = []
+            self._clicked_item = None
+            self.state.dragged_index = None
+            return "break"
 
     def _handle_single_click(self, item):
         """Handle a confirmed single click by removing selection."""
