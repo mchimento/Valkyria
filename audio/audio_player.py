@@ -40,6 +40,8 @@ if sys.platform == 'win32':
 
 import vlc
 from typing import Optional, Callable
+import threading
+import audio.metadata as metadata_module
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,7 @@ class AudioPlayer:
                 media = self.instance.media_new(path)
                 self.player.set_media(media)
                 self.player.play()
+
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
 

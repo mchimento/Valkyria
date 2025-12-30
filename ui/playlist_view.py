@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import os
-from audio.metadata import get_metadata, get_display_title
+from audio.metadata import get_metadata, get_display_title, metadata_extractor, get_display_bpm
 from ui.playlist_context_menu import PlaylistContextMenu
 
 
@@ -37,6 +37,18 @@ class PlaylistView(ttk.Frame):
         self._setup_ui()
         self._setup_bindings()
         self._apply_modern_style()
+
+        # Register BPM listener to refresh playlist when bpm is written
+        try:
+            metadata_extractor.register_bpm_listener(self._on_bpm_updated)
+        except Exception:
+            pass
+
+        # Unregister on destroy
+        try:
+            self.bind('<Destroy>', lambda e: metadata_extractor.unregister_bpm_listener(self._on_bpm_updated) if e.widget is self else None)
+        except Exception:
+            pass
 
         # Drop indicator for external drag-drop
         self.drop_indicator = tk.Frame(self.tree, background=self.theme.palette.get("accent", "#BB86FC"), height=3)
@@ -85,7 +97,7 @@ class PlaylistView(ttk.Frame):
 
         self.tree = ttk.Treeview(
             tree_frame,
-            columns=("Title", "Artist", "Album", "Duration"),
+            columns=("Title", "Artist", "Album", "Duration", "BPM"),
             show="headings",  # Show column headings
             selectmode="extended",  # Allow multi-select
             yscrollcommand=self._on_tree_scroll
@@ -95,11 +107,13 @@ class PlaylistView(ttk.Frame):
         self.tree.heading("Artist", text="  Artist", anchor="w")
         self.tree.heading("Album", text="  Album", anchor="w")
         self.tree.heading("Duration", text="  Duration", anchor="w")
+        self.tree.heading("BPM", text="  BPM", anchor="center")
 
         self.tree.column("Title", width=200, minwidth=150, stretch=True, anchor="w")
         self.tree.column("Artist", width=80, minwidth=50, stretch=True, anchor="w")
         self.tree.column("Album", width=100, minwidth=60, stretch=True, anchor="w")
         self.tree.column("Duration", width=100, minwidth=50, stretch=False, anchor="center")
+        self.tree.column("BPM", width=60, minwidth=40, stretch=False, anchor="center")
 
         self.tree.pack(fill="both", expand=True, padx=(0, 10))
 
@@ -235,6 +249,37 @@ class PlaylistView(ttk.Frame):
 
     # ========== Refresh and Rendering ==========
 
+    def refresh_bpm_display_only(self):
+        """Refresh only BPM column values without disturbing playback or selection."""
+        try:
+            # Temporarily disable selection event to prevent playback interference
+            self.tree.unbind("<<TreeviewSelect>>")
+
+            # Get all current items
+            children = self.tree.get_children()
+
+            for i, item in enumerate(children):
+                if i < len(self.state.playlist):
+                    filepath = self.state.playlist[i]
+                    metadata = self._get_metadata(filepath)
+                    bpm = metadata.get("bpm", "")
+
+                    # Use display BPM function for normalized display
+                    display_bpm = get_display_bpm(bpm)
+                    padded_bpm = f"  {display_bpm}" if display_bpm else ""
+
+                    # Get current values and update only the BPM column
+                    current_values = list(self.tree.item(item, 'values'))
+                    if len(current_values) >= 5:  # Ensure we have all columns
+                        current_values[4] = padded_bpm  # Update BPM column (index 4)
+                        self.tree.item(item, values=current_values)
+        except Exception:
+            # Fall back to full refresh if targeted update fails
+            self.refresh(preserve_selection=True)
+        finally:
+            # Re-enable selection event
+            self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
+
     def refresh(self, preserve_selection=False):
         """Efficiently refresh the playlist display."""
         # Store current selection
@@ -254,6 +299,7 @@ class PlaylistView(ttk.Frame):
             artist = metadata.get("artist", "")
             album = metadata.get("album", "")
             duration = metadata.get("duration", "")
+            bpm = metadata.get("bpm", "")
 
             # Determine tags based on state
             tags = ["odd" if i % 2 == 1 else "even"]
@@ -264,20 +310,23 @@ class PlaylistView(ttk.Frame):
                 icon = "▶"
                 tags.append("playing")
 
-            items_to_insert.append((i, icon, title, artist, album, duration, filepath, tags))
+            items_to_insert.append((i, icon, title, artist, album, duration, bpm, filepath, tags))
 
         # Insert all at once
-        for i, icon, title, artist, album, duration, filepath, tags in items_to_insert:
+        for i, icon, title, artist, album, duration, bpm, filepath, tags in items_to_insert:
             # Add padding to column values
             padded_artist = f"  {artist}"  # Add 2 spaces padding
             padded_album = f"  {album}"   # Add 2 spaces padding
             padded_duration = f"  {duration}"  # Add 2 spaces padding
+            # Use display BPM function for normalized display
+            display_bpm = get_display_bpm(bpm)
+            padded_bpm = f"  {display_bpm}" if display_bpm else ""  # Add 2 spaces padding if BPM exists
 
             self.tree.insert(
                 '',
                 tk.END,
                 text=icon,
-                values=(title, padded_artist, padded_album, padded_duration),
+                values=(title, padded_artist, padded_album, padded_duration, padded_bpm),
                 tags=tuple(tags)
             )
 
@@ -299,6 +348,15 @@ class PlaylistView(ttk.Frame):
         else:
             self.scrollbar_canvas.pack(side="right", fill="y")
             self.tree.pack(fill="both", expand=True, padx=(0, 10))
+
+    def _on_bpm_updated(self, filepath):
+        try:
+            # If the updated file is in the current playlist, refresh BPM display only
+            if filepath in self.state.playlist:
+                if self.winfo_exists():
+                    self.after(50, lambda: self.refresh_bpm_display_only())
+        except Exception:
+            pass
 
     def _get_metadata(self, filepath):
         """Get metadata for a file using the centralized metadata module."""

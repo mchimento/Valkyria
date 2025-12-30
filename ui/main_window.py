@@ -9,8 +9,9 @@ import io
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
+import threading
 from app.paths import get_resource_path
-from audio.metadata import get_metadata, get_display_title, get_best_artwork
+from audio.metadata import get_metadata, get_display_title, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 from audio import m3u as m3u_module, playback
@@ -83,6 +84,9 @@ class MainWindow:
         self.current_artwork_image = None
         self.current_artwork_photo = None
 
+        # Register as BPM listener to refresh status when BPM is calculated
+        metadata_extractor.register_bpm_listener(self._on_bpm_updated)
+
     def _create_placeholder_image(self):
         """Create a placeholder image with music note symbol."""
         import platform
@@ -144,6 +148,20 @@ class MainWindow:
         ctk_image = ctk.CTkImage(placeholder_image, size=(100, 100))
         return ctk_image, placeholder_image
 
+    def _on_bpm_updated(self, filepath):
+        """Handle BPM update notifications by refreshing status if current track matches."""
+        try:
+            # Check if the updated file is currently playing track
+            idx = self.state.current_index
+            if idx is not None and idx < len(self.state.playlist):
+                current_path = self.state.playlist[idx]
+                if current_path == filepath:
+                    # Use _update_meta_with_temp_bpm instead of _restore_status to preserve button states
+                    self._update_meta_with_temp_bpm()
+        except Exception:
+            # Fail silently - BPM updates are not critical
+            pass
+
     def _update_artwork(self, filepath):
         """Update the artwork display for a given file."""
         try:
@@ -186,6 +204,155 @@ class MainWindow:
 
             self.current_artwork_photo = ctk_image
             self.current_artwork_image = placeholder_image
+
+    def _on_bpm_button_click(self):
+        """Handle single BPM button click based on current state."""
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+
+            filepath = self.state.playlist[idx]
+
+            if self.bpm_button_state == "analyze":
+                # Start BPM analysis
+                self.bpm_button_state = "analyzing"
+                self.btn_bpm.configure(state="disabled", text="Analyzing...")
+
+                # Start BPM analysis in background thread
+                thread = threading.Thread(target=self._analyze_bpm_worker, args=(filepath,), daemon=True)
+                thread.start()
+
+            elif self.bpm_button_state == "save":
+                # Save BPM to file
+                if self.current_temp_bpm is not None:
+                    self.bpm_button_state = "saving"
+                    self.btn_bpm.configure(state="disabled", text="Saving...")
+
+                    # Start save operation in background thread
+                    thread = threading.Thread(target=self._save_bpm_worker, args=(filepath, self.current_temp_bpm), daemon=True)
+                    thread.start()
+
+        except Exception as e:
+            logger.error(f"Error in BPM button click: {e}")
+            # Reset to analyze state on error
+            self.bpm_button_state = "analyze"
+            self.btn_bpm.configure(state="normal", text="Analyze BPM")
+
+    def _analyze_bpm_worker(self, filepath):
+        """Worker function to analyze BPM in background."""
+        try:
+            analyzed_bpm = analyze_bpm(filepath)
+
+            # Update UI in main thread
+            self.root.after(0, self._on_bpm_analysis_complete, filepath, analyzed_bpm)
+
+        except Exception as e:
+            logger.error(f"Error in BPM analysis worker: {e}")
+            self.root.after(0, self._reset_bpm_button_to_analyze)
+
+    def _on_bpm_analysis_complete(self, filepath, bpm_value):
+        """Handle BPM analysis completion."""
+        try:
+            if bpm_value is not None:
+                # Store temporary BPM value
+                self.current_temp_bpm = bpm_value
+
+                # Update metadata cache temporarily (don't write to file)
+                metadata_extractor._cache[filepath]['bpm'] = bpm_value
+
+                # Update meta label to include the temporary BPM
+                self._update_meta_with_temp_bpm()
+
+                # Change button to Save state
+                self.bpm_button_state = "save"
+                self.btn_bpm.configure(state="normal", text="Save BPM")
+            else:
+                # Analysis failed, reset to analyze state
+                self._reset_bpm_button_to_analyze()
+                self._set_temporary_status("BPM analysis failed")
+
+        except Exception as e:
+            logger.error(f"Error handling BPM analysis completion: {e}")
+            self._reset_bpm_button_to_analyze()
+
+    def _reset_bpm_button_to_analyze(self):
+        """Reset BPM button back to analyze state."""
+        self.bpm_button_state = "analyze"
+        self.btn_bpm.configure(state="normal", text="Analyze BPM")
+
+    def _update_meta_with_temp_bpm(self):
+        """Update the meta label to include temporary BPM without calling _restore_status."""
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+
+            path = self.state.playlist[idx]
+            meta = get_metadata(path)
+
+            duration_s = meta.get("duration_s")
+            bitrate = meta.get("bitrate")
+            bpm = meta.get("bpm")  # This will now include the temporary BPM from cache
+
+            # Build metadata line parts (duration, bitrate, bpm, format)
+            parts = []
+            if duration_s:
+                parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
+            if bitrate:
+                parts.append(f"{bitrate} kbps")
+            if bpm:
+                bpm_str = f" • {bpm} BPM"
+            else:
+                bpm_str =  " • BPM info missing"
+
+            self.meta_var.set(" • ".join(parts) + bpm_str)
+
+            # Notify BPM listeners to update playlist
+            metadata_extractor._notify_bpm_listeners(path)
+
+        except Exception as e:
+            logger.error(f"Error updating meta with temporary BPM: {e}")
+
+    def _save_bpm_worker(self, filepath, bpm_value):
+        """Worker function to save BPM to file metadata."""
+        try:
+            success = write_bpm(filepath, bpm_value)
+
+            # Update UI in main thread
+            self.root.after(0, self._on_bpm_save_complete, filepath, bpm_value, success)
+
+        except Exception as e:
+            logger.error(f"Error in BPM save worker: {e}")
+            self.root.after(0, self._reset_bpm_button_to_analyze)
+
+    def _on_bpm_save_complete(self, filepath, bpm_value, success):
+        """Handle BPM save completion."""
+        try:
+            if success:
+                # Clear temporary BPM since it's now saved
+                self.current_temp_bpm = None
+
+                # Update metadata cache to reflect saved BPM
+                metadata_extractor.update_cache(filepath)
+
+                # Update UI to show the saved BPM
+                self._restore_status()
+
+                # Hide BPM control frame since BPM is now saved
+                self.bpm_control_frame.pack_forget()
+
+                # Show success message
+                self._set_temporary_status(f"BPM value saved to file")
+            else:
+                # Save failed, reset to save state
+                self.bpm_button_state = "save"
+                self.btn_bpm.configure(state="normal", text="Save BPM")
+                self._set_temporary_status("Failed to save BPM to file")
+
+        except Exception as e:
+            logger.error(f"Error handling BPM save completion: {e}")
+            self._reset_bpm_button_to_analyze()
 
     # ---------- Build UI ----------
     def _build_menu(self):
@@ -425,10 +592,14 @@ class MainWindow:
         )
         self.status_label.pack(side=tk.TOP, fill=tk.X, pady=(15, 40))
 
-        # Meta info
+        # Meta info frame - container for metadata and BPM controls
+        self.meta_frame = ctk.CTkFrame(self.text_frame, fg_color="transparent")
+        self.meta_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 2))
+
+        # Meta info label
         self.meta_var = tk.StringVar(value="")
         self.meta_label = ctk.CTkLabel(
-            self.text_frame,
+            self.meta_frame,
             textvariable=self.meta_var,
             anchor="w",
             font=ctk.CTkFont(size=14),
@@ -437,7 +608,39 @@ class MainWindow:
             justify="left",
             height=1
         )
-        self.meta_label.pack(side=tk.TOP, fill=tk.X, pady=(0, 2))
+        self.meta_label.pack(side=tk.LEFT, fill=tk.X)
+
+        # BPM control frame (initially hidden)
+        self.bpm_control_frame = ctk.CTkFrame(self.meta_frame, fg_color="transparent")
+        self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
+        self.bpm_control_frame.pack_forget()  # Initially hidden
+
+        # BPM buttons container
+        self.bpm_buttons_frame = ctk.CTkFrame(self.bpm_control_frame, fg_color="transparent")
+        self.bpm_buttons_frame.pack(side=tk.LEFT)
+
+        # Get button colors from theme palette
+        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
+        btn_fg = self.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
+
+        # Single BPM button (starts as Analyze, becomes Save after analysis)
+        self.btn_bpm = ctk.CTkButton(
+            self.bpm_buttons_frame,
+            text="Analyze BPM",
+            command=self._on_bpm_button_click,
+            width=100,
+            height=28,
+            font=ctk.CTkFont(size=11),
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=btn_hover
+        )
+        self.btn_bpm.pack(side=tk.LEFT)
+
+        # Store current temporary BPM value and button state
+        self.current_temp_bpm = None
+        self.bpm_button_state = "analyze"  # Can be "analyze", "analyzing", "save", "saving"
 
         # Bottom: Controls bar
         self.controls = ControlsBar(
@@ -481,6 +684,13 @@ class MainWindow:
                 self.artwork_frame.pack_forget()
             except Exception:
                 pass
+
+            # Hide BPM control frame when stopping
+            try:
+                self.bpm_control_frame.pack_forget()
+            except Exception:
+                pass
+
             self.refresh_all()
             self._update_menu_state()
             self._set_track_info_enabled(False)
@@ -545,7 +755,7 @@ class MainWindow:
 
             if "track_info" in self.menu_item_refs:
                 self.menu_item_refs["track_info"]["state"] = state
-            
+
             if "track_booklet" in self.menu_item_refs:
                 self.menu_item_refs["track_booklet"]["state"] = state
         except Exception:
@@ -806,14 +1016,29 @@ class MainWindow:
         def on_apply(selected_theme):
             # Update settings with lowercase theme
             self.settings.theme = selected_theme
-
-            # Reload theme
+            # Apply theme to all components
             self.theme.reload()
-
-            # Use centralized update method
+            # Update main window and all child components
             self.update_theme_colors()
+            # Update playlist and browser themes
+            self.playlist_view.update_theme()
+            self.browser_view.update_theme()
+            # Update controls theme
+            self.controls.update_theme()
 
-        PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply)
+        def on_bpm_preference_change():
+            # Refresh only BPM display to avoid interfering with playback
+            if self.playlist_view:
+                self.playlist_view.refresh_bpm_display_only()
+            # Refresh any open media info windows
+            for window in self.root.winfo_children():
+                if isinstance(window, tk.Toplevel) and hasattr(window, '_refresh_bpm'):
+                    try:
+                        window._refresh_bpm()
+                    except Exception:
+                        pass
+
+        PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply, on_bpm_preference_change=on_bpm_preference_change)
 
     def open_media_info(self):
         """Open media information dialog for the currently selected track in playlist."""
@@ -1417,6 +1642,7 @@ class MainWindow:
         duration_s = meta.get("duration_s")
         bitrate = meta.get("bitrate")
         fmt = meta.get("format")
+        bpm = meta.get("bpm")
 
         # Update artwork display
         self._update_artwork(path)
@@ -1426,16 +1652,32 @@ class MainWindow:
         else:
             self.status_var.set(f"{prefix}: {title}")
 
-        # Build metadata line parts (only duration, bitrate, format)
+        # Build metadata line parts (duration, bitrate, bpm, format)
         parts = []
         if duration_s:
             parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
         if bitrate:
             parts.append(f"{bitrate} kbps")
-        if fmt:
-            parts.append(fmt.upper())
 
-        self.meta_var.set(" • ".join(parts))
+        if bpm:
+            bpm_str = f" • {bpm} BPM"
+        else:
+            bpm_str =  " • BPM info missing"
+
+        self.meta_var.set(" • ".join(parts) + bpm_str)
+
+        # Handle BPM buttons visibility
+        if bpm is None:
+            # Show BPM control frame when BPM is missing
+            self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
+            # Reset button state and text
+            self.bpm_button_state = "analyze"
+            self.btn_bpm.configure(state="normal", text="Analyze BPM")
+            self.current_temp_bpm = None
+        else:
+            # Hide BPM control frame when BPM is present
+            self.bpm_control_frame.pack_forget()
+            self.current_temp_bpm = None
 
     # ---------- Keyboard Accelerators ----------
     def _bind_keyboard_accelerators(self):

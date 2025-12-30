@@ -12,17 +12,19 @@ class PreferencesWindow(tk.Toplevel):
     - Save/Cancel themed buttons
     - Cancel restores original theme fully
     """
-    def __init__(self, master, settings, theme_manager, on_apply=None):
+    def __init__(self, master, settings, theme_manager, on_apply=None, on_bpm_preference_change=None):
         super().__init__(master)
 
         self.settings = settings
         self.theme_manager = theme_manager
         self.palette = theme_manager.palette
         self.on_apply = on_apply
+        self.on_bpm_preference_change = on_bpm_preference_change
         self.original_theme = settings.theme
+        self.original_bpm_mode = settings.bpm_mode
 
         self.title("Preferences")
-        self.geometry("150x150")
+        self.geometry("180x240")
         self.resizable(False, False)
         self.transient(master)
 
@@ -45,6 +47,22 @@ class PreferencesWindow(tk.Toplevel):
         self.rb_dark = ttk.Radiobutton(rb_frame, text="Dark", value="dark",
                                        variable=self.var, command=self._preview_theme)
         self.rb_dark.pack(anchor="w")
+
+        # BPM Mode section
+        ttk.Separator(self, orient='horizontal').pack(fill='x', pady=8, padx=12)
+        ttk.Label(self, text="BPM Mode").pack(pady=(6, 4))
+
+        self.bpm_var = tk.StringVar(value=self.settings.bpm_mode)
+        bpm_rb_frame = ttk.Frame(self)
+        bpm_rb_frame.pack(pady=4, padx=12)
+
+        self.rb_perceived = ttk.Radiobutton(bpm_rb_frame, text="Perceived (50-100 BPM)",
+                                          value="perceived", variable=self.bpm_var)
+        self.rb_perceived.pack(anchor="w")
+
+        self.rb_raw = ttk.Radiobutton(bpm_rb_frame, text="Raw (detected tempo)",
+                                     value="raw", variable=self.bpm_var)
+        self.rb_raw.pack(anchor="w")
 
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=(8, 12))
@@ -135,6 +153,8 @@ class PreferencesWindow(tk.Toplevel):
         )
         self.rb_light.configure(style="Prefs.TRadiobutton")
         self.rb_dark.configure(style="Prefs.TRadiobutton")
+        self.rb_perceived.configure(style="Prefs.TRadiobutton")
+        self.rb_raw.configure(style="Prefs.TRadiobutton")
 
         # Frame and label styles
         style.configure("Prefs.TFrame", background=bg)
@@ -175,15 +195,40 @@ class PreferencesWindow(tk.Toplevel):
 
     def _save(self):
         new_theme = self.var.get()
+        new_bpm_mode = self.bpm_var.get()
+
+        # Check if BPM mode changed
+        bpm_mode_changed = (new_bpm_mode != self.settings.bpm_mode)
+
         self.settings.theme = new_theme
+        self.settings.bpm_mode = new_bpm_mode
         self.settings.save()
+
+        # Update global BPM preference
+        from audio.metadata import set_bpm_preference
+        set_bpm_preference(new_bpm_mode)
+
+        # Trigger BPM refresh if mode changed
+        if bpm_mode_changed and callable(self.on_bpm_preference_change):
+            self.on_bpm_preference_change()
+
         if callable(self.on_apply):
             self.on_apply(new_theme)
         self.destroy()
 
     def _cancel(self):
         self.settings.theme = self.original_theme
+        self.settings.bpm_mode = self.original_bpm_mode
         self.settings.save()
+
+        # Restore original BPM mode
+        from audio.metadata import set_bpm_preference
+        set_bpm_preference(self.settings.bpm_mode)
+
+        # Trigger BPM refresh if mode was different
+        if self.original_bpm_mode != self.settings.bpm_mode and callable(self.on_bpm_preference_change):
+            self.on_bpm_preference_change()
+
         if callable(self.on_apply):
             self.on_apply(self.original_theme)
         self.destroy()

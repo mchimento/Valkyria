@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
 from pathlib import Path
-from audio.metadata import get_file_info, save_metadata
+from audio.metadata import get_file_info, save_metadata, metadata_extractor, get_display_bpm
 from ui.utils import center_window
 
 
@@ -43,6 +43,11 @@ class MediaInfoWindow:
         # Load file information
         self.file_info = self._get_file_info()
 
+        # Register BPM update listener so UI refreshes when bpm is written
+        try:
+            metadata_extractor.register_bpm_listener(self._on_bpm_updated)
+        except Exception:
+            pass
         # Store references to text widgets for theme updates
         self.general_text = None
         self.codec_text = None
@@ -83,7 +88,8 @@ class MediaInfoWindow:
         self.close_btn = close_btn
 
         # Bind Escape key to close
-        self.window.bind("<Escape>", lambda e: self.window.destroy())
+        self.window.bind("<Escape>", lambda e: self._on_close())
+        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Apply initial theme
         self._apply_theme()
@@ -93,7 +99,7 @@ class MediaInfoWindow:
 
         # Check for theme changes periodically
         self._check_theme_change()
-        
+
         # Show window after all setup is complete
         self.window.deiconify()
 
@@ -259,6 +265,19 @@ class MediaInfoWindow:
             text.insert(tk.END, f"{minutes}:{seconds:02d}", "value_highlight")
             text.insert(tk.END, f" ({info['duration']} seconds)\n\n", "value")
 
+        # BPM (if available)
+        bpm_val = None
+        try:
+            bpm_val = info.get('metadata', {}).get('bpm')
+        except Exception:
+            bpm_val = None
+
+        if bpm_val is not None:
+            text.insert(tk.END, "BPM\n", "label")
+            # Use display BPM function for normalized display
+            display_bpm = get_display_bpm(bpm_val)
+            text.insert(tk.END, f"{display_bpm}\n\n", "value_highlight")
+
         text.insert(tk.END, "Format\n", "label")
         text.insert(tk.END, f"{info['format']}\n", "value_highlight")
 
@@ -269,6 +288,106 @@ class MediaInfoWindow:
         text.tag_configure("value_highlight", font=("Segoe UI", 11, "bold"), foreground=highlight)
 
         text.configure(state=tk.DISABLED)
+
+    def _on_bpm_updated(self, filepath):
+        if os.path.abspath(filepath) != os.path.abspath(self.file_path):
+            return
+        try:
+            if self.window.winfo_exists():
+                self.window.after(50, self._refresh_bpm)
+        except Exception:
+            pass
+
+    def _refresh_bpm(self):
+        try:
+            self.file_info = self._get_file_info()
+            # Update general tab text
+            if self.general_text:
+                try:
+                    self.general_text.configure(state=tk.NORMAL)
+                    self.general_text.delete('1.0', tk.END)
+
+                    info = self.file_info
+                    accent = self.theme_manager.palette.get('accent', '#0078d4') if self.theme_manager else '#0078d4'
+                    fg = self.theme_manager.palette.get('fg', '#000000') if self.theme_manager else '#000000'
+                    highlight = self.theme_manager.palette.get('highlight', '#EB5B00') if self.theme_manager else '#EB5B00'
+
+                    self.general_text.insert(tk.END, "File Information\n\n", "header")
+                    self.general_text.insert(tk.END, "Filename\n", "label")
+                    self.general_text.insert(tk.END, f"{info['filename']}\n\n", "value")
+                    self.general_text.insert(tk.END, "Path\n", "label")
+                    self.general_text.insert(tk.END, f"{info['path']}\n\n", "value")
+
+                    # Size
+                    size_mb = info['size'] / (1024 * 1024)
+                    size_kb = info['size'] / 1024
+                    self.general_text.insert(tk.END, "Size\n", "label")
+                    if size_mb >= 1:
+                        self.general_text.insert(tk.END, f"{size_mb:.2f} MB", "value_highlight")
+                        self.general_text.insert(tk.END, f" ({info['size']:,} bytes)\n\n", "value")
+                    else:
+                        self.general_text.insert(tk.END, f"{size_kb:.2f} KB", "value_highlight")
+                        self.general_text.insert(tk.END, f" ({info['size']:,} bytes)\n\n", "value")
+
+                    # Duration
+                    if info['duration'] > 0:
+                        minutes = info['duration'] // 60
+                        seconds = info['duration'] % 60
+                        self.general_text.insert(tk.END, "Duration\n", "label")
+                        self.general_text.insert(tk.END, f"{minutes}:{seconds:02d}", "value_highlight")
+                        self.general_text.insert(tk.END, f" ({info['duration']} seconds)\n\n", "value")
+
+                    bpm_val = None
+                    try:
+                        bpm_val = info.get('metadata', {}).get('bpm')
+                    except Exception:
+                        bpm_val = None
+
+                    if bpm_val is not None:
+                        self.general_text.insert(tk.END, "BPM\n", "label")
+                        # Use display BPM function for normalized display
+                        display_bpm = get_display_bpm(bpm_val)
+                        self.general_text.insert(tk.END, f"{display_bpm}\n\n", "value_highlight")
+
+                    self.general_text.insert(tk.END, "Format\n", "label")
+                    self.general_text.insert(tk.END, f"{info['format']}\n", "value_highlight")
+
+                    # Reconfigure tags (keep same style)
+                    self.general_text.tag_configure("header", font=("Segoe UI", 16, "bold"), foreground=accent)
+                    self.general_text.tag_configure("label", font=("Segoe UI", 9), foreground=fg)
+                    self.general_text.tag_configure("value", font=("Segoe UI", 11))
+                    self.general_text.tag_configure("value_highlight", font=("Segoe UI", 11, "bold"), foreground=highlight)
+
+                    self.general_text.configure(state=tk.DISABLED)
+                except Exception:
+                    pass
+
+            # Update metadata entry for bpm if present
+            try:
+                if hasattr(self, 'entries') and 'bpm' in self.entries:
+                    val = self.file_info.get('metadata', {}).get('bpm')
+                    entry = self.entries.get('bpm')
+                    if entry is not None:
+                        entry.delete(0, tk.END)
+                        if val is not None:
+                            # Show display value but store raw value
+                            display_val = get_display_bpm(val)
+                            entry.insert(0, str(display_val))
+                            entry.raw_value = str(val)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_close(self):
+        try:
+            metadata_extractor.unregister_bpm_listener(self._on_bpm_updated)
+        except Exception:
+            pass
+        try:
+            self.window.destroy()
+        except Exception:
+            pass
 
     def _populate_codec_tab(self, frame):
         container = ttk.Frame(frame, padding=15)
@@ -353,7 +472,8 @@ class MediaInfoWindow:
             ("Album", "album"),
             ("Year", "date"),
             ("Genre", "genre"),
-            ("Track Number", "tracknumber")
+            ("Track Number", "tracknumber"),
+            ("BPM", "bpm")
         ]
 
         info = self.file_info['metadata']
@@ -367,7 +487,14 @@ class MediaInfoWindow:
             # Pre-fill if value exists
             # Map common keys if needed, but mutagen easy=True handles these well
             val = info.get(key, "")
-            entry.insert(0, str(val))
+            # For BPM, show display value but store raw value in entry's data
+            if key == 'bpm' and val:
+                display_val = get_display_bpm(val)
+                entry.insert(0, str(display_val))
+                # Store raw value in entry's data for saving
+                entry.raw_value = str(val)
+            else:
+                entry.insert(0, str(val))
 
             self.entries[key] = entry
 
