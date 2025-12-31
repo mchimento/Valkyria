@@ -10,7 +10,8 @@ local audio files.
 -   Browse folders to add multiple songs in the playback list.
 -   Playback controls: Play, Pause/Resume, Stop, Previous, Next.
 -   Automatic next track playback.
--   Volume control.
+-   Metadata display and editing.
+-   Metadata album images booklet
 -   Save playlists (Save / Save As).
 
 ## 🎧 Automatic BPM (Tempo) Analysis

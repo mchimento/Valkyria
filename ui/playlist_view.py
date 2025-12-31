@@ -263,25 +263,19 @@ class PlaylistView(ttk.Frame):
                     filepath = self.state.playlist[i]
                     metadata = self._get_metadata(filepath)
                     bpm = metadata.get("bpm", "")
-                    # Convert None to empty string for display
                     if bpm is None:
                         bpm = ""
 
                     # Use display BPM function for normalized display
-                    #display_bpm = get_display_bpm(bpm)
-                    display_bpm = bpm
+                    display_bpm = get_display_bpm(bpm)
                     padded_bpm = f"  {display_bpm}" if display_bpm else ""
-
-                    # Get current values and update only the BPM column
                     current_values = list(self.tree.item(item, 'values'))
-                    if len(current_values) >= 5:  # Ensure we have all columns
-                        current_values[4] = padded_bpm  # Update BPM column (index 4)
+                    if len(current_values) >= 5:
+                        current_values[4] = padded_bpm
                         self.tree.item(item, values=current_values)
         except Exception:
-            # Fall back to full refresh if targeted update fails
             self.refresh(preserve_selection=True)
         finally:
-            # Re-enable selection event
             self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
 
     def refresh_metadata_for_file(self, filepath):
@@ -297,24 +291,21 @@ class PlaylistView(ttk.Frame):
                     album = metadata.get("album", "")
                     duration = metadata.get("duration", "")
                     bpm = metadata.get("bpm", "")
-                    # Convert None to empty string for display
                     if bpm is None:
                         bpm = ""
 
-                    # Update tree item
                     children = self.tree.get_children()
                     if i < len(children):
                         item_id = children[i]
                         # Add padding to column values to match main refresh method
-                        padded_artist = f"  {artist}"  # Add 2 spaces padding
-                        padded_album = f"  {album}"   # Add 2 spaces padding
-                        padded_duration = f"  {duration}"  # Add 2 spaces padding
-                        padded_bpm = f"  {bpm}" if bpm else ""  # Add 2 spaces padding if BPM exists
+                        padded_artist = f"  {artist}"
+                        padded_album = f"  {album}"
+                        padded_duration = f"  {duration}"
+                        padded_bpm = f"  {bpm}" if bpm else ""
                         values = (title, padded_artist, padded_album, padded_duration, padded_bpm)
                         self.tree.item(item_id, values=values)
                     break
         except Exception as e:
-            # Fail silently - refresh is not critical
             pass
 
     def refresh(self, preserve_selection=False):
@@ -359,8 +350,7 @@ class PlaylistView(ttk.Frame):
             padded_album = f"  {album}"   # Add 2 spaces padding
             padded_duration = f"  {duration}"  # Add 2 spaces padding
             # Use display BPM function for normalized display
-            #display_bpm = get_display_bpm(bpm)
-            display_bpm = bpm
+            display_bpm = get_display_bpm(bpm)
             padded_bpm = f"  {display_bpm}" if display_bpm else ""  # Add 2 spaces padding if BPM exists
 
             self.tree.insert(

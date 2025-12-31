@@ -216,7 +216,9 @@ class MainWindow:
             if self.bpm_button_state == "analyze":
                 # Start BPM analysis
                 self.bpm_button_state = "analyzing"
-                self.btn_bpm.configure(state="disabled", text="Analyzing...")
+                # Use dark text color for disabled state in dark mode
+                disabled_text_color = "#333333" if self.theme_manager and self.theme_manager.current_theme == "dark" else btn_fg
+                self.btn_bpm.configure(state="disabled", text="Analyzing...", text_color_disabled=disabled_text_color)
 
                 # Start BPM analysis in background thread
                 thread = threading.Thread(target=self._analyze_bpm_worker, args=(filepath,), daemon=True)
@@ -226,7 +228,9 @@ class MainWindow:
                 # Save BPM to file
                 if self.current_temp_bpm is not None:
                     self.bpm_button_state = "saving"
-                    self.btn_bpm.configure(state="disabled", text="Saving...")
+                    # Use dark text color for disabled state in dark mode
+                    disabled_text_color = "#333333" if self.theme_manager and self.theme_manager.current_theme == "dark" else btn_fg
+                    self.btn_bpm.configure(state="disabled", text="Saving...", text_color_disabled=disabled_text_color)
 
                     # Start save operation in background thread
                     thread = threading.Thread(target=self._save_bpm_worker, args=(filepath, self.current_temp_bpm), daemon=True)
@@ -236,7 +240,8 @@ class MainWindow:
             logger.error(f"Error in BPM button click: {e}")
             # Reset to analyze state on error
             self.bpm_button_state = "analyze"
-            self.btn_bpm.configure(state="normal", text="Analyze BPM")
+            btn_fg = self.palette.get("button_fg_color", "#ffffff")
+            self.btn_bpm.configure(state="normal", text="Analyze BPM", text_color=btn_fg)
 
     def _analyze_bpm_worker(self, filepath):
         """Worker function to analyze BPM in background."""
@@ -266,7 +271,8 @@ class MainWindow:
 
                 # Change button to Save state
                 self.bpm_button_state = "save"
-                self.btn_bpm.configure(state="normal", text="Save BPM")
+                btn_fg = self.palette.get("button_fg_color", "#ffffff")
+                self.btn_bpm.configure(state="normal", text="Save BPM", text_color=btn_fg)
             else:
                 # Analysis failed, reset to analyze state
                 self._reset_bpm_button_to_analyze()
@@ -279,7 +285,9 @@ class MainWindow:
     def _reset_bpm_button_to_analyze(self):
         """Reset BPM button back to analyze state."""
         self.bpm_button_state = "analyze"
-        self.btn_bpm.configure(state="normal", text="Analyze BPM")
+        # Restore original text color when resetting to normal state
+        btn_fg = self.palette.get("button_fg_color", "#ffffff")
+        self.btn_bpm.configure(state="normal", text="Analyze BPM", text_color=btn_fg)
         self.current_temp_bpm = None
         # Don't clear temporary_bpm_files here as other files might still have temporary BPMs
 
@@ -350,7 +358,8 @@ class MainWindow:
             else:
                 # Save failed, reset to save state
                 self.bpm_button_state = "save"
-                self.btn_bpm.configure(state="normal", text="Save BPM")
+                btn_fg = self.palette.get("button_fg_color", "#ffffff")
+                self.btn_bpm.configure(state="normal", text="Save BPM", text_color=btn_fg)
                 self._set_temporary_status("Failed to save BPM to file")
 
         except Exception as e:
@@ -1715,7 +1724,8 @@ class MainWindow:
             self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
             # Reset button state and text
             self.bpm_button_state = "analyze"
-            self.btn_bpm.configure(state="normal", text="Analyze BPM")
+            btn_fg = self.palette.get("button_fg_color", "#ffffff")
+            self.btn_bpm.configure(state="normal", text="Analyze BPM", text_color=btn_fg)
             self.current_temp_bpm = None
         else:
             # Check if this BPM is a temporary one (needs saving)
@@ -1723,7 +1733,8 @@ class MainWindow:
                 # This is a temporary BPM, show save button
                 self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
                 self.bpm_button_state = "save"
-                self.btn_bpm.configure(state="normal", text="Save BPM")
+                btn_fg = self.palette.get("button_fg_color", "#ffffff")
+                self.btn_bpm.configure(state="normal", text="Save BPM", text_color=btn_fg)
                 # Restore the temporary BPM value
                 self.current_temp_bpm = metadata_extractor._cache[path].get('bpm')
             else:

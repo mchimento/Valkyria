@@ -278,21 +278,17 @@ class MediaInfoWindow:
         except Exception:
             bpm_val = None
 
-        # Only show BPM if it's a valid number
         if bpm_val is not None and bpm_val != "":
             text.insert(tk.END, "BPM\n", "label")
-            # Show raw BPM value (without normalization)
             try:
                 raw_bpm = int(round(float(bpm_val)))
                 text.insert(tk.END, f"{raw_bpm}\n\n", "value_highlight")
             except (ValueError, TypeError):
-                # If conversion fails, show empty string instead of None
                 text.insert(tk.END, "\n\n", "value_highlight")
 
         text.insert(tk.END, "Format\n", "label")
         text.insert(tk.END, f"{info['format']}\n", "value_highlight")
 
-        # Configure tags with improved styling
         text.tag_configure("header", font=("Segoe UI", 16, "bold"), foreground=accent)
         text.tag_configure("label", font=("Segoe UI", 9), foreground=fg)
         text.tag_configure("value", font=("Segoe UI", 11))
@@ -312,7 +308,6 @@ class MediaInfoWindow:
     def _refresh_bpm(self):
         try:
             self.file_info = self._get_file_info()
-            # Update general tab text
             if self.general_text:
                 try:
                     self.general_text.configure(state=tk.NORMAL)
@@ -357,18 +352,15 @@ class MediaInfoWindow:
                     # Only show BPM if it's a valid number
                     if bpm_val is not None and bpm_val != "":
                         self.general_text.insert(tk.END, "BPM\n", "label")
-                        # Show raw BPM value (without normalization)
                         try:
                             raw_bpm = int(round(float(bpm_val)))
                             self.general_text.insert(tk.END, f"{raw_bpm}\n\n", "value_highlight")
                         except (ValueError, TypeError):
-                            # If conversion fails, show empty string instead of None
                             self.general_text.insert(tk.END, "\n\n", "value_highlight")
 
                     self.general_text.insert(tk.END, "Format\n", "label")
                     self.general_text.insert(tk.END, f"{info['format']}\n", "value_highlight")
 
-                    # Reconfigure tags (keep same style)
                     self.general_text.tag_configure("header", font=("Segoe UI", 16, "bold"), foreground=accent)
                     self.general_text.tag_configure("label", font=("Segoe UI", 9), foreground=fg)
                     self.general_text.tag_configure("value", font=("Segoe UI", 11))
@@ -378,7 +370,6 @@ class MediaInfoWindow:
                 except Exception:
                     pass
 
-            # Update metadata entry for bpm if present
             try:
                 if hasattr(self, 'entries') and 'bpm' in self.entries:
                     val = self.file_info.get('metadata', {}).get('bpm')
@@ -392,11 +383,9 @@ class MediaInfoWindow:
                                 entry.insert(0, str(raw_bpm))
                                 entry.raw_value = str(val)
                             except (ValueError, TypeError):
-                                # If conversion fails, show empty string instead of None
                                 entry.insert(0, "")
                                 entry.raw_value = str(val)
                         else:
-                            # Show empty string for None or empty values
                             entry.insert(0, "")
                             entry.raw_value = None
             except Exception:
@@ -441,10 +430,7 @@ class MediaInfoWindow:
         text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Store reference for theme updates
         self.codec_text = text
-
-        # Add information with improved formatting
         info = self.file_info
 
         text.insert(tk.END, "Audio Codec Information\n\n", "header")
@@ -472,7 +458,6 @@ class MediaInfoWindow:
             channel_text = "Stereo" if info['channels'] == 2 else f"{info['channels']} channels"
             text.insert(tk.END, f"{channel_text}\n", "value_highlight")
 
-        # Configure tags with improved styling
         text.tag_configure("header", font=("Segoe UI", 16, "bold"), foreground=accent)
         text.tag_configure("label", font=("Segoe UI", 9), foreground=fg)
         text.tag_configure("value", font=("Segoe UI", 11))
@@ -490,7 +475,6 @@ class MediaInfoWindow:
         # Dictionary to store entry widgets
         self.entries = {}
 
-        # Common tags to edit
         tags = [
             ("Title", "title"),
             ("Artist", "artist"),
@@ -503,7 +487,6 @@ class MediaInfoWindow:
 
         info = self.file_info['metadata']
 
-        # Get theme colors for buttons
         if self.theme_manager:
             palette = self.theme_manager.palette
             btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
@@ -549,9 +532,7 @@ class MediaInfoWindow:
                 entry.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=5)
 
             # Pre-fill if value exists
-            # Map common keys if needed, but mutagen easy=True handles these well
             val = info.get(key, "")
-            # For BPM, show raw value but store raw value in entry's data
             if key == 'bpm' and val:
                 try:
                     raw_bpm = int(round(float(val)))
@@ -559,22 +540,18 @@ class MediaInfoWindow:
                     # Store raw value in entry's data for saving
                     entry.raw_value = str(val)
                 except (ValueError, TypeError):
-                    # If conversion fails, show empty string instead of None
                     entry.insert(0, "")
                     entry.raw_value = str(val)
             else:
-                # Show empty string for None or empty values
                 if val is None or val == "":
                     entry.insert(0, "")
                 else:
                     entry.insert(0, str(val))
-                # Clear raw_value for BPM if no existing value
                 if key == 'bpm':
                     entry.raw_value = None
 
             self.entries[key] = entry
 
-        # Add binding to clear raw_value when BPM entry is manually edited
         if 'bpm' in self.entries:
             self.entries['bpm'].bind('<KeyRelease>', lambda e: self._on_bpm_entry_edit())
 
@@ -611,28 +588,22 @@ class MediaInfoWindow:
     def _save_metadata(self):
         """Save edited metadata back to the file."""
         try:
-            # Update tags from entries
             metadata_to_save = {}
             for key, entry in self.entries.items():
                 val = entry.get().strip()
-                # For BPM, use raw value if available (from calculation), otherwise use display value
                 if key == 'bpm' and hasattr(entry, 'raw_value'):
-                    # If entry is empty, don't use raw_value (allow removal)
                     if val:
                         metadata_to_save[key] = entry.raw_value
                     else:
-                        metadata_to_save[key] = val  # Empty string to remove BPM
+                        metadata_to_save[key] = val
                 else:
-                    # Include empty values to allow metadata removal
                     metadata_to_save[key] = val
 
             success = save_metadata(self.file_path, metadata_to_save)
             if success:
                 messagebox.showinfo("Success", "Metadata saved successfully!", parent=self.window)
-                # Refresh file info to show updates
                 self.file_info = self._get_file_info()
 
-                # Call the callback to notify main window of changes
                 if self.metadata_saved_callback:
                     try:
                         self.metadata_saved_callback(self.file_path)
@@ -651,7 +622,6 @@ class MediaInfoWindow:
             if self.bpm_btn:
                 self.bpm_btn.configure(state="disabled", text="Calculating...")
 
-            # Start BPM analysis in background thread
             thread = threading.Thread(target=self._calculate_bpm_worker, daemon=True)
             thread.start()
 
@@ -665,8 +635,6 @@ class MediaInfoWindow:
         """Worker function to calculate BPM in background."""
         try:
             analyzed_bpm = analyze_bpm(self.file_path)
-
-            # Update UI in main thread
             self.window.after(0, self._on_bpm_calculation_complete, analyzed_bpm)
 
         except Exception as e:
@@ -676,12 +644,10 @@ class MediaInfoWindow:
         """Handle BPM calculation completion."""
         try:
             if bpm_value is not None:
-                # Update the BPM entry field
                 if hasattr(self, 'entries') and 'bpm' in self.entries:
                     entry = self.entries['bpm']
                     if entry:
                         entry.delete(0, tk.END)
-                        # Show raw value but store raw value
                         try:
                             raw_bpm = int(round(float(bpm_value)))
                             entry.insert(0, str(raw_bpm))
@@ -695,7 +661,6 @@ class MediaInfoWindow:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process BPM result: {e}", parent=self.window)
 
-        # Reset button state
         if self.bpm_btn:
             self.bpm_btn.configure(state="normal", text="Calculate BPM")
 
@@ -703,7 +668,6 @@ class MediaInfoWindow:
         """Handle BPM calculation error."""
         messagebox.showerror("BPM Analysis Error", f"Failed to calculate BPM: {error_message}", parent=self.window)
 
-        # Reset button state
         if self.bpm_btn:
             self.bpm_btn.configure(state="normal", text="Calculate BPM")
 
@@ -712,5 +676,4 @@ class MediaInfoWindow:
         if 'bpm' in self.entries:
             entry = self.entries['bpm']
             if entry and hasattr(entry, 'raw_value'):
-                # Clear the raw_value when user manually edits the BPM field
                 entry.raw_value = None
