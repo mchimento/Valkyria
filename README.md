@@ -14,51 +14,7 @@ local audio files.
 -   Metadata album images booklet
 -   Save playlists (Save / Save As).
 
-## 🎧 Automatic BPM (Tempo) Analysis
-
-Tango Studio can automatically analyze and store the **BPM (Beats Per
-Minute)** of your music files. This enables DJ-style features such as
-tempo sorting, smart playlists, and smooth beat-matched transitions.
-
-### What is BPM?
-
-BPM represents the musical tempo of a track --- how fast the beat moves
---- and is different from audio quality metrics such as *kbps*. BPM is a
-musical property and must be computed from the audio signal itself.
-
-### How BPM is Calculated
-
-Tango Studio uses the **librosa** audio analysis library to estimate BPM
-directly from the sound waveform.
-
-1. **Audio Decoding**
-   - The audio file is decoded into a mono waveform at a fixed sample rate.
-   - For MP3 files, a short segment is first decoded using FFmpeg to ensure reliable analysis.
-
-2. **Onset Strength Detection**
-   - librosa computes an onset strength envelope.
-   - This highlights moments where musical energy suddenly increases (such as drum hits, kicks, and claps).
-   - These peaks represent the rhythmic pulse of the track.
-
-3. **Tempogram Analysis**
-   - A tempogram is generated from the onset envelope.
-   - The tempogram measures repeating rhythmic patterns over time and reveals the dominant beat periodicities in the song.
-
-4. **Global Tempo Estimation**
-   - The strongest rhythmic periodicity is selected from the tempogram.
-   - This produces a **raw physical tempo value** expressed in BPM.
-
-5. **Optional Tempo Normalization**
-   - Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range.
-   - This resolves common half-tempo and double-tempo ambiguities and allows BPM values to match professional DJ software.
-   - Normalization is controlled by user preference and can be disabled to expose the raw tempo.
-
-6. **Metadata Storage**
-   - The resulting BPM value can be written back into the audio file’s metadata.
-   - BPM is always stored in its raw form, i.e. not normalized.
-   - Once analyzed, BPM is cached inside the file and does not need to be recomputed again.
-
-### Supported Formats
+## Supported Formats
 
 -   MP3
 -   WAV
@@ -116,6 +72,50 @@ python main.py
 -   `themes/`: Theme definitions and management.
 -   `README.md`: Documentation for the tool.
 
+## 🎧 Automatic BPM (Tempo) Analysis
+
+Tango Studio can automatically analyze and store the **BPM (Beats Per
+Minute)** of your music files. This enables DJ-style features such as
+tempo sorting, smart playlists, and smooth beat-matched transitions.
+
+### What is BPM?
+
+BPM represents the musical tempo of a track --- how fast the beat moves
+--- and is different from audio quality metrics such as *kbps*. BPM is a
+musical property and must be computed from the audio signal itself.
+
+### How BPM is Calculated
+
+Tango Studio uses the **librosa** audio analysis library to estimate BPM
+directly from the sound waveform.
+
+1. **Audio Decoding**
+   - The audio file is decoded into a mono waveform at a fixed sample rate.
+   - For MP3 files, a short segment is first decoded using FFmpeg to ensure reliable analysis.
+
+2. **Onset Strength Detection**
+   - librosa computes an onset strength envelope.
+   - This highlights moments where musical energy suddenly increases (such as drum hits, kicks, and claps).
+   - These peaks represent the rhythmic pulse of the track.
+
+3. **Tempogram Analysis**
+   - A tempogram is generated from the onset envelope.
+   - The tempogram measures repeating rhythmic patterns over time and reveals the dominant beat periodicities in the song.
+
+4. **Global Tempo Estimation**
+   - The strongest rhythmic periodicity is selected from the tempogram.
+   - This produces a **raw physical tempo value** expressed in BPM.
+
+5. **Optional Tempo Normalization**
+   - Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range.
+   - This resolves common half-tempo and double-tempo ambiguities and allows BPM values to match professional DJ software.
+   - Normalization is controlled by user preference and can be disabled to expose the raw tempo.
+
+6. **Metadata Storage**
+   - The resulting BPM value can be written back into the audio file’s metadata.
+   - BPM is always stored in its raw form, i.e. not normalized.
+   - Once analyzed, BPM is cached inside the file and does not need to be recomputed again.
+
 ## Troubleshooting
 
 ### MP3/MP4 files don't show waveforms or display ffmpeg warnings
@@ -154,10 +154,6 @@ ffmpeg -version
 ```
 
 If the command returns version information, ffmpeg is correctly installed and accessible.
-
-## Notes
-
--   Only local files are supported in the playlist.
 
 ## License
 
