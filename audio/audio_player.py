@@ -204,6 +204,19 @@ class AudioPlayer:
             logger.error("Failed to get track length", exc_info=True)
             return 0
 
+    def set_time(self, time_ms: int) -> None:
+        """
+        Set the playback position.
+
+        Args:
+            time_ms: Position in milliseconds.
+        """
+        with self._lock:
+            try:
+                self.player.set_time(time_ms)
+            except Exception:
+                logger.error(f"Failed to set time to {time_ms}", exc_info=True)
+
     def get_audio_devices(self) -> list:
         """
         Get available audio output devices.

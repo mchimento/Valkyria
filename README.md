@@ -116,6 +116,45 @@ python main.py
 -   `themes/`: Theme definitions and management.
 -   `README.md`: Documentation for the tool.
 
+## Troubleshooting
+
+### MP3/MP4 files don't show waveforms or display ffmpeg warnings
+
+**Symptoms:**
+- No waveform appears in the seekbar for MP3/MP4 files
+- Warning message: `Couldn't find ffmpeg or avconv - defaulting to ffmpeg, but may not work`
+
+**Cause:**
+MP3 and MP4 are compressed formats that require the `ffmpeg` codec for decoding. If ffmpeg is not installed or not accessible, these files cannot be processed.
+
+**Solution:**
+Install ffmpeg for your operating system:
+
+**Windows:**
+```bash
+choco install ffmpeg
+```
+Or download directly from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+**Linux:**
+```bash
+sudo apt-get install ffmpeg
+```
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Important:** After installing ffmpeg, **restart the application** for PATH changes to take effect.
+
+**Verify installation:**
+```bash
+ffmpeg -version
+```
+
+If the command returns version information, ffmpeg is correctly installed and accessible.
+
 ## Notes
 
 -   Only local files are supported in the playlist.

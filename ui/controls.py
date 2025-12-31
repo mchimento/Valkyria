@@ -9,6 +9,7 @@ import customtkinter as ctk
 from typing import Optional, Callable
 import threading
 from audio.metadata import get_metadata, analyze_bpm, write_bpm, metadata_extractor
+from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +79,17 @@ class ControlsBar(ttk.Frame):
             self.tooltip_manager.attach(self.btn_stop, lambda: "Stop (S)")
             self.tooltip_manager.attach(self.btn_next, lambda: "Next Track (→)")
 
-        # ---------------- TIME LABEL ----------------
+        # ---------------- WAVEFORM SEEKBAR ----------------
         middle = ttk.Frame(self)
         middle.pack(side=tk.LEFT, padx=12)
+
+        # Create waveform seekbar
+        self.waveform_seekbar = WaveformSeekbar(middle, self.player, self.theme, width=300, height=40)
+        self.waveform_seekbar.pack(side=tk.LEFT, pady=(0, 5))
+
+        # Time label below waveform
         self.time_var = tk.StringVar(value="00:00 / 00:00")
-        ttk.Label(middle, textvariable=self.time_var).pack(side=tk.LEFT)
+        ttk.Label(middle, textvariable=self.time_var).pack(side=tk.LEFT, padx=(10, 0))
 
         # Play on double-click checkbutton
         self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
@@ -168,6 +175,8 @@ class ControlsBar(ttk.Frame):
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
             self.player.play(path)
+            # Load waveform for the new track
+            self.waveform_seekbar.load_waveform(path)
 
         # Set play button to pressed state and reset pause button only if playlist has songs
         if self.state.playlist and len(self.state.playlist) > 0:
@@ -237,6 +246,8 @@ class ControlsBar(ttk.Frame):
         self.is_playing = False
         # Clear current index to remove playing highlight
         self.state.current_index = None
+        # Clear waveform when stopped
+        self.waveform_seekbar.clear()
         # Update playlist highlight if available
         if self.playlist:
             self.playlist._highlight_current()
@@ -425,12 +436,22 @@ class ControlsBar(ttk.Frame):
         except Exception:
             pass
 
+        # Update waveform seekbar theme
+        try:
+            if hasattr(self, 'waveform_seekbar'):
+                self.waveform_seekbar.update_theme()
+        except Exception:
+            pass
+
     def destroy(self):
         if self._update_id:
             try:
                 self.after_cancel(self._update_id)
             except Exception:
                 pass
+        # Clean up waveform seekbar
+        if hasattr(self, 'waveform_seekbar'):
+            self.waveform_seekbar.destroy()
         super().destroy()
 
     # ---------------- STATUS CALLBACK ----------------

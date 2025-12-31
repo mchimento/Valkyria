@@ -38,5 +38,9 @@
   "scrollbar_track": "#1E1E1E",
   "scrollbar_thumb": "#525252",
   "scrollbar_hover": "#999292",
-  "resize_column_color": "#525252"
+  "resize_column_color": "#525252",
+  "waveform_bg": "#1a1a1a",
+  "waveform_playhead": "#FF6B00",
+  "waveform_played": "#FF6B00",
+  "waveform_unplayed": "#404040"
 }
