@@ -4,12 +4,10 @@ and wires them to the AppState, ThemeManager, AudioPlayer and Settings.
 """
 
 import logging
-import os
-import io
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
-import threading
+import threading, os, io
 from app.paths import get_resource_path
 from audio.metadata import get_metadata, get_display_title, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor
 from PIL import Image, ImageTk, ImageDraw, ImageFont
@@ -24,6 +22,7 @@ from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
+from ui.documentation_view import BPMAnalysisWindow
 
 logger = logging.getLogger(__name__)
 
@@ -457,6 +456,8 @@ class MainWindow:
 
         # Help menu
         help_items = [
+            {"label": "BPM Analysis", "command": self.open_bpm_analysis},
+            {"separator": True},
             {"label": "About", "command": self.open_about, "accelerator": "F1"}
         ]
         self.menubar.add_menu("Help", help_items)
@@ -1014,6 +1015,14 @@ class MainWindow:
             except:
                 pass
 
+        # Update open documentation windows
+        for window in self.root.winfo_children():
+            if isinstance(window, BPMAnalysisWindow):
+                try:
+                    window.update_theme()
+                except Exception:
+                    pass
+
         # Trigger refresh to redraw
         self.refresh_all()
 
@@ -1205,6 +1214,10 @@ class MainWindow:
 
         # Show window after all setup is complete
         about_window.deiconify()
+
+    def open_bpm_analysis(self):
+        """Open BPM Analysis documentation window."""
+        BPMAnalysisWindow(self.root, self.theme, self.settings)
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")
