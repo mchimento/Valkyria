@@ -520,6 +520,7 @@ class MediaInfoWindow:
                     height=28,
                     fg_color=btn_bg,
                     text_color=btn_fg,
+                    text_color_disabled=btn_fg,
                     hover_color=btn_hover,
                     bg_color=bg
                 )
