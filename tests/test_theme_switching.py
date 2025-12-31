@@ -104,7 +104,13 @@ class TestThemeSwitching(unittest.TestCase):
         theme_manager.palette = {
             'bg': '#ffffff',
             'fg': '#000000',
-            'accent': '#0078d4'
+            'accent': '#0078d4',
+            'button_hover': '#106ebe',
+            'accent_hover': '#106ebe',
+            'button_fg_color': '#ffffff',
+            'tree_bg': '#ffffff',
+            'tree_header': '#f0f0f0',
+            'ui_font': 'Segoe UI'
         }
 
         # Apply theme to root

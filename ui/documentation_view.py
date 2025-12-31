@@ -149,8 +149,8 @@ class BPMAnalysisWindow(ctk.CTkToplevel):
             "Onset Strength Detection - librosa computes an onset strength envelope. This highlights moments where musical energy suddenly increases (such as drum hits, kicks, and claps). These peaks represent the rhythmic pulse of the track.",
             "Tempogram Analysis - A tempogram is generated from the onset envelope. The tempogram measures repeating rhythmic patterns over time and reveals the dominant beat periodicities in the song.",
             "Global Tempo Estimation - The strongest rhythmic periodicity is selected from the tempogram. This value is converted into BPM.",
-            "Dance Tempo Normalization - The detected tempo is normalized into a musically meaningful dance-tempo range. This resolves common half-tempo and double-tempo ambiguities, ensuring BPM values match professional DJ software.",
-            "Metadata Storage - The final BPM value is written back into the audio file's metadata using Mutagen. Once analyzed, BPM is cached inside the file and does not need to be recomputed again."
+            "Optional Tempo Normalization - Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range. This resolves common half-tempo and double-tempo ambiguities and allows BPM values to match professional DJ software. Normalization is controlled by user preference and can be disabled to expose the raw tempo.",
+            "Metadata Storage - The resulting BPM value can be written back into the audio file's metadata using Mutagen. BPM is always stored in its raw form, i.e. not normalized. Once analyzed, BPM is cached inside the file and does not need to be recomputed again."
         ]
 
         for i, step in enumerate(steps, 1):

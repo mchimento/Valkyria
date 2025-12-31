@@ -53,9 +53,6 @@ def apply_base_styles(root: tk.Tk, palette: Dict[str, Any]) -> None:
               background=[('active', palette["tree_header"]), ('pressed', palette["tree_header"])],
               foreground=[('active', palette["fg"]), ('pressed', palette["fg"])])
 
-    # Treeview stripes
-    style.map('Treeview', background=[('selected', palette.get("accent"))], foreground=[('selected', palette.get("fg"))])
-
     # Checkbutton
     style.configure('TCheckbutton',
                     background=palette["bg"],
@@ -68,8 +65,9 @@ def apply_base_styles(root: tk.Tk, palette: Dict[str, Any]) -> None:
 
     # Radiobutton
     style.configure('Prefs.TRadiobutton', background=palette["bg"], foreground=palette["fg"])
-    style.map('Prefs.TRadiobutton', background=[('active', palette["bg"]), ('selected', palette["bg"])],
-            foreground=[('!disabled', palette["fg"])])
+    style.map('Prefs.TRadiobutton',
+              background=[('active', palette["bg"]), ('selected', palette["bg"])],
+              foreground=[('!disabled', palette["fg"]), ('active', palette["fg"])])
 
     # Scale
     style.configure("Horizontal.TScale", background=palette["bg"])
