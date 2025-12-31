@@ -26,6 +26,8 @@ class BPMAnalysisWindow(ctk.CTkToplevel):
         self.bg_color = palette.get("bg", "#1E1E1E" if self.settings.theme == "dark" else "#FAFAFA")
         self.fg_color = palette.get("fg", "#FFFFFF" if self.settings.theme == "dark" else "#000000")
         self.accent_color = palette.get("accent", "#0078d4")
+        self.btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        self.btn_fg_color = palette.get("button_fg_color", "#FFFFFF" if self.settings.theme == "dark" else "#000000")
 
         self.configure(fg_color=self.bg_color)
 
@@ -65,6 +67,8 @@ class BPMAnalysisWindow(ctk.CTkToplevel):
         self.bg_color = palette.get("bg", "#1E1E1E" if is_dark else "#FAFAFA")
         self.fg_color = palette.get("fg", "#FFFFFF" if is_dark else "#000000")
         self.accent_color = palette.get("accent", "#0078d4")
+        self.btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        self.btn_fg_color = palette.get("button_fg_color", "#FFFFFF" if is_dark else "#000000")
 
         # Update window background
         self.configure(fg_color=self.bg_color)
@@ -166,9 +170,9 @@ class BPMAnalysisWindow(ctk.CTkToplevel):
             self.scrollable_frame,
             text="Close",
             font=("Segoe UI", 12),
-            fg_color=self.accent_color,
+            fg_color=self.btn_bg,
             hover_color=self.theme_manager.palette.get("accent_hover", "#106ebe"),
-            text_color="#ffffff",
+            text_color=self.btn_fg_color,
             width=80,
             height=32,
             command=self.destroy
