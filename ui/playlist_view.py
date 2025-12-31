@@ -268,7 +268,8 @@ class PlaylistView(ttk.Frame):
                         bpm = ""
 
                     # Use display BPM function for normalized display
-                    display_bpm = get_display_bpm(bpm)
+                    #display_bpm = get_display_bpm(bpm)
+                    display_bpm = bpm
                     padded_bpm = f"  {display_bpm}" if display_bpm else ""
 
                     # Get current values and update only the BPM column
@@ -358,7 +359,8 @@ class PlaylistView(ttk.Frame):
             padded_album = f"  {album}"   # Add 2 spaces padding
             padded_duration = f"  {duration}"  # Add 2 spaces padding
             # Use display BPM function for normalized display
-            display_bpm = get_display_bpm(bpm)
+            #display_bpm = get_display_bpm(bpm)
+            display_bpm = bpm
             padded_bpm = f"  {display_bpm}" if display_bpm else ""  # Add 2 spaces padding if BPM exists
 
             self.tree.insert(

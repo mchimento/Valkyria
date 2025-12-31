@@ -93,11 +93,11 @@ class MetadataExtractor:
                             v = audio.get(k)
                             if v:
                                 try:
-                                    bpm = int(float(v[0]))
+                                    bpm = float(v[0])
                                     break
                                 except Exception:
                                     try:
-                                        bpm = int(float(v))
+                                        bpm = float(v)
                                         break
                                     except Exception:
                                         pass
@@ -112,7 +112,7 @@ class MetadataExtractor:
                                     val = raw.tags.get('TBPM')
                                     # mutagen may return a FrameList or text
                                     val_str = str(val)
-                                    bpm = int(float(val_str))
+                                    bpm = float(val_str)
                             except Exception:
                                 pass
 
@@ -121,7 +121,7 @@ class MetadataExtractor:
                                 try:
                                     if 'tmpo' in raw.tags:
                                         val = raw.tags.get('tmpo')
-                                        bpm = int(float(val))
+                                        bpm = float(val)
                                 except Exception:
                                     pass
                 except Exception:
@@ -572,106 +572,7 @@ def get_display_bpm(bpm):
     display_bpm = normalize_bpm(bpm_float)
     return str(display_bpm) if display_bpm is not None else ""
 
-def analyze_bpm_v2(file_path):
-    # 1. Load the audio file
-    # we use a duration of 60s to get a solid average without loading the whole file
-    y, sr = librosa.load(file_path, duration=60)
-
-    # 2. Run the onset strength envelope
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-
-    # 3. Estimate tempo
-    # Librosa returns an array; we take the first value
-    raw_tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr)[0]
-
-    # Round for UI cleanliness
-    raw_tempo = round(raw_tempo)
-
-    # 4. Generate variants for the UI
-    return raw_tempo
-
-def analyze_bpm_v3(file_path):
-    """Analyze BPM using advanced techniques with mel spectrogram and tempo prior."""
-    try:
-        # 1. Load audio with error handling for shorter files
-        # Try 90 seconds first, fall back to shorter duration if needed
-        try:
-            y, sr = librosa.load(file_path, duration=90)
-        except Exception:
-            # Fall back to shorter duration for problematic files
-            y, sr = librosa.load(file_path, duration=30)
-
-        # Check if we got valid audio data
-        if len(y) == 0:
-            return None
-
-        # 2. Pre-process: Use a Log-scaled Mel Spectrogram
-        # This emphasizes the 'hits' better than a raw waveform
-        try:
-            S = librosa.feature.melspectrogram(y=y, sr=sr)
-            onset_env = librosa.onset.onset_strength(S=librosa.power_to_db(S), sr=sr)
-        except Exception:
-            # Fall back to standard onset strength if mel spectrogram fails
-            onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-
-        # 3. Apply a Tempo Prior (The "Hint")
-        # We create a probability distribution centered around 170 BPM
-        # This guides the algorithm away from 'half-time' errors (like 85 or 120)
-        try:
-            prior = scipy.stats.lognorm(s=0.5, scale=170)  # Use scale instead of loc for lognorm
-        except Exception:
-            prior = None
-
-        # 4. Calculate tempo with the hint
-        # we use aggregate=np.median to avoid being skewed by outliers
-        try:
-            tempo = librosa.feature.tempo(onset_envelope=onset_env,
-                                          sr=sr,
-                                          aggregate=np.median,
-                                          prior=prior)
-        except Exception:
-            # Fall back to basic tempo calculation
-            tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr)
-
-        # Extract the first tempo value and round it
-        if tempo is not None and len(tempo) > 0:
-            return round(float(tempo[0]))
-        else:
-            return None
-
-    except Exception as e:
-        print(f"BPM analysis failed: {e}")
-        return None
-
-def analyze_tempo_v4(file_path):
-    try:
-        # 1. Load audio - using 40 seconds of the middle to avoid quiet intros
-        # We also force a standard sampling rate (22050) for consistency
-        y, sr = librosa.load(file_path, sr=22050, duration=40, offset=30)
-
-        # 2. Get the Onset Strength Envelope
-        # We use a Mel Spectrogram behind the scenes for better "kick drum" detection
-        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-
-        # 3. Compute Tempo with a specific "BPM Range" (The AIMP way)
-        # Instead of a complex math prior, we simply tell Librosa the
-        # range we expect (e.g., 60 to 200 BPM).
-        # This prevents the "129 vs 179" confusion by narrowing the search.
-        tempo = librosa.feature.tempo(
-            onset_envelope=onset_env,
-            sr=sr,
-            start_bpm=120,  # A good "middle" starting point
-            std_bpm=50,     # How much it can vary from the start_bpm
-            max_tempo=220   # Limits the search to realistic music speeds
-        )
-
-        return round(float(tempo[0]))
-
-    except Exception as e:
-        print(f"Error analyzing {file_path}: {e}")
-        return 0
-
-def analyze_bpm(filepath, sr=22050, duration=120):
+def analyze_bpm(filepath, sr=22050, duration=60):
     try:
         ext = os.path.splitext(filepath)[1].lower()
 
@@ -689,10 +590,7 @@ def analyze_bpm(filepath, sr=22050, duration=120):
         else:
             y, sr_used = librosa.load(filepath, sr=sr, mono=True, duration=duration)
 
-        raw_bpm = dj_bpm_estimate(y, sr_used)
-        if raw_bpm is None:
-            return None
-        return normalize_bpm(raw_bpm)
+        return dj_bpm_estimate(y, sr_used)
 
     except Exception as e:
         print("BPM error:", e)
@@ -782,8 +680,8 @@ def write_bpm(filepath, bpm):
     try:
         if bpm is None:
             return False
-        # Normalize bpm to int
-        bpm_val = int(round(float(bpm)))
+        # Use bpm value as-is without normalization
+        bpm_val = str(bpm)
 
         raw = MutagenFile(filepath)
         # MP3 (ID3 TBPM)

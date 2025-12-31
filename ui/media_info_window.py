@@ -278,11 +278,16 @@ class MediaInfoWindow:
         except Exception:
             bpm_val = None
 
-        if bpm_val is not None:
+        # Only show BPM if it's a valid number
+        if bpm_val is not None and bpm_val != "":
             text.insert(tk.END, "BPM\n", "label")
-            # Use display BPM function for normalized display
-            display_bpm = get_display_bpm(bpm_val)
-            text.insert(tk.END, f"{display_bpm}\n\n", "value_highlight")
+            # Show raw BPM value (without normalization)
+            try:
+                raw_bpm = int(round(float(bpm_val)))
+                text.insert(tk.END, f"{raw_bpm}\n\n", "value_highlight")
+            except (ValueError, TypeError):
+                # If conversion fails, show empty string instead of None
+                text.insert(tk.END, "\n\n", "value_highlight")
 
         text.insert(tk.END, "Format\n", "label")
         text.insert(tk.END, f"{info['format']}\n", "value_highlight")
@@ -349,11 +354,16 @@ class MediaInfoWindow:
                     except Exception:
                         bpm_val = None
 
-                    if bpm_val is not None:
+                    # Only show BPM if it's a valid number
+                    if bpm_val is not None and bpm_val != "":
                         self.general_text.insert(tk.END, "BPM\n", "label")
-                        # Use display BPM function for normalized display
-                        display_bpm = get_display_bpm(bpm_val)
-                        self.general_text.insert(tk.END, f"{display_bpm}\n\n", "value_highlight")
+                        # Show raw BPM value (without normalization)
+                        try:
+                            raw_bpm = int(round(float(bpm_val)))
+                            self.general_text.insert(tk.END, f"{raw_bpm}\n\n", "value_highlight")
+                        except (ValueError, TypeError):
+                            # If conversion fails, show empty string instead of None
+                            self.general_text.insert(tk.END, "\n\n", "value_highlight")
 
                     self.general_text.insert(tk.END, "Format\n", "label")
                     self.general_text.insert(tk.END, f"{info['format']}\n", "value_highlight")
@@ -375,11 +385,20 @@ class MediaInfoWindow:
                     entry = self.entries.get('bpm')
                     if entry is not None:
                         entry.delete(0, tk.END)
-                        if val is not None:
-                            # Show display value but store raw value
-                            display_val = get_display_bpm(val)
-                            entry.insert(0, str(display_val))
-                            entry.raw_value = str(val)
+                        if val is not None and val != "":
+                            # Show raw value but store raw value
+                            try:
+                                raw_bpm = int(round(float(val)))
+                                entry.insert(0, str(raw_bpm))
+                                entry.raw_value = str(val)
+                            except (ValueError, TypeError):
+                                # If conversion fails, show empty string instead of None
+                                entry.insert(0, "")
+                                entry.raw_value = str(val)
+                        else:
+                            # Show empty string for None or empty values
+                            entry.insert(0, "")
+                            entry.raw_value = None
             except Exception:
                 pass
         except Exception:
@@ -532,14 +551,23 @@ class MediaInfoWindow:
             # Pre-fill if value exists
             # Map common keys if needed, but mutagen easy=True handles these well
             val = info.get(key, "")
-            # For BPM, show display value but store raw value in entry's data
+            # For BPM, show raw value but store raw value in entry's data
             if key == 'bpm' and val:
-                display_val = get_display_bpm(val)
-                entry.insert(0, str(display_val))
-                # Store raw value in entry's data for saving
-                entry.raw_value = str(val)
+                try:
+                    raw_bpm = int(round(float(val)))
+                    entry.insert(0, str(raw_bpm))
+                    # Store raw value in entry's data for saving
+                    entry.raw_value = str(val)
+                except (ValueError, TypeError):
+                    # If conversion fails, show empty string instead of None
+                    entry.insert(0, "")
+                    entry.raw_value = str(val)
             else:
-                entry.insert(0, str(val))
+                # Show empty string for None or empty values
+                if val is None or val == "":
+                    entry.insert(0, "")
+                else:
+                    entry.insert(0, str(val))
                 # Clear raw_value for BPM if no existing value
                 if key == 'bpm':
                     entry.raw_value = None
@@ -653,10 +681,14 @@ class MediaInfoWindow:
                     entry = self.entries['bpm']
                     if entry:
                         entry.delete(0, tk.END)
-                        # Show display value but store raw value
-                        display_val = get_display_bpm(bpm_value)
-                        entry.insert(0, str(display_val))
-                        entry.raw_value = str(bpm_value)
+                        # Show raw value but store raw value
+                        try:
+                            raw_bpm = int(round(float(bpm_value)))
+                            entry.insert(0, str(raw_bpm))
+                            entry.raw_value = str(bpm_value)
+                        except (ValueError, TypeError):
+                            entry.insert(0, str(bpm_value))
+                            entry.raw_value = str(bpm_value)
             else:
                 messagebox.showwarning("BPM Analysis", "Could not calculate BPM for this file.", parent=self.window)
 
@@ -674,3 +706,11 @@ class MediaInfoWindow:
         # Reset button state
         if self.bpm_btn:
             self.bpm_btn.configure(state="normal", text="Calculate BPM")
+
+    def _on_bpm_entry_edit(self):
+        """Handle manual editing of BPM entry field."""
+        if 'bpm' in self.entries:
+            entry = self.entries['bpm']
+            if entry and hasattr(entry, 'raw_value'):
+                # Clear the raw_value when user manually edits the BPM field
+                entry.raw_value = None

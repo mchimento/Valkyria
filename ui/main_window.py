@@ -9,7 +9,7 @@ from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 import threading, os, io
 from app.paths import get_resource_path
-from audio.metadata import get_metadata, get_display_title, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor
+from audio.metadata import get_metadata, get_display_title, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor, get_display_bpm
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 from audio import m3u as m3u_module, playback
@@ -304,7 +304,7 @@ class MainWindow:
             if bitrate:
                 parts.append(f"{bitrate} kbps")
             if bpm:
-                bpm_str = f" • {bpm} BPM"
+                bpm_str = f" • {get_display_bpm(bpm)} BPM"
             else:
                 bpm_str =  " • BPM info missing"
 
@@ -1703,7 +1703,7 @@ class MainWindow:
             parts.append(f"{bitrate} kbps")
 
         if bpm:
-            bpm_str = f" • {bpm} BPM"
+            bpm_str = f" • {get_display_bpm(bpm)} BPM"
         else:
             bpm_str =  " • BPM info missing"
 
