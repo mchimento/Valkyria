@@ -946,6 +946,10 @@ class MainWindow:
 
         update_buttons_in_frame(self.mid_frame)
 
+        # Update status frame buttons (including BPM button)
+        if hasattr(self, 'bpm_buttons_frame'):
+            update_buttons_in_frame(self.bpm_buttons_frame)
+
         # Update controls
         self.controls.update_theme()
 
@@ -1508,7 +1512,7 @@ class MainWindow:
             return
         if 0 <= index < len(self.state.playlist):
             track = self.state.playlist[index]
-            MediaInfoWindow(self.root, track, theme_manager=self.theme, 
+            MediaInfoWindow(self.root, track, theme_manager=self.theme,
                          metadata_saved_callback=self._on_metadata_saved_from_info_window)
 
     def _on_metadata_saved_from_info_window(self, filepath):
@@ -1516,18 +1520,18 @@ class MainWindow:
         try:
             # Update metadata cache for the modified file
             metadata_extractor.update_cache(filepath)
-            
+
             # Check if this is the currently playing file
-            if (self.state.current_index is not None and 
+            if (self.state.current_index is not None and
                 self.state.current_index < len(self.state.playlist) and
                 self.state.playlist[self.state.current_index] == filepath):
                 # Refresh status display for current track
                 self._restore_status()
-            
+
             # Refresh playlist to show updated metadata
             if self.playlist_view:
                 self.playlist_view.refresh_metadata_for_file(filepath)
-                
+
         except Exception as e:
             logger.error(f"Error refreshing after metadata save: {e}")
 

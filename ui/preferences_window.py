@@ -6,11 +6,10 @@ from ui.utils import center_window
 
 class PreferencesWindow(tk.Toplevel):
     """
-    Updated PreferencesWindow with:
-    - Live preview including Save/Cancel buttons
-    - Radiobutton layout without gray background
-    - Save/Cancel themed buttons
-    - Cancel restores original theme fully
+    Proper Preferences window with organized sections:
+    - Interface section for theme and UI preferences
+    - Audio section for BPM and audio preferences
+    - Easily extensible for additional sections
     """
     def __init__(self, master, settings, theme_manager, on_apply=None, on_bpm_preference_change=None):
         super().__init__(master)
@@ -24,7 +23,7 @@ class PreferencesWindow(tk.Toplevel):
         self.original_bpm_mode = settings.bpm_mode
 
         self.title("Preferences")
-        self.geometry("180x240")
+        self.geometry("300x400")
         self.resizable(False, False)
         self.transient(master)
 
@@ -33,40 +32,81 @@ class PreferencesWindow(tk.Toplevel):
 
         center_window(self, master)
 
-        ttk.Label(self, text="Theme").pack(pady=(12, 6))
+        # Create main container with padding
+        main_container = ttk.Frame(self)
+        main_container.pack(fill='both', expand=True, padx=20, pady=20)
+
+        # Create notebook for sections
+        self.notebook = ttk.Notebook(main_container)
+        self.notebook.pack(fill='both', expand=True)
+
+        # Create sections
+        self._create_interface_section()
+        self._create_audio_section()
+        # Add more sections here
+
+        # Button frame
+        btn_frame = ttk.Frame(main_container)
+        btn_frame.pack(fill='x', pady=(20, 0))
+
+        self._create_buttons(btn_frame)
+
+        self._apply_theme_to_this_window(self.settings.theme)
+
+        # Show window after all setup is complete
+        self.deiconify()
+
+    def _create_interface_section(self):
+        """Create the Interface section with theme preferences."""
+        interface_frame = ttk.Frame(self.notebook)
+        self.notebook.add(interface_frame, text="Interface")
+
+        # Add padding to the interface frame
+        content_frame = ttk.Frame(interface_frame)
+        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+
+        # Theme selection
+        ttk.Label(content_frame, text="Theme", font=("Segoe UI", 10, "bold")).pack(anchor='w', pady=(0, 10))
 
         # Use lowercase theme consistently
         self.var = tk.StringVar(value=self.settings.theme.lower())
-        rb_frame = ttk.Frame(self)
-        rb_frame.pack(pady=6, padx=12)
+        theme_frame = ttk.Frame(content_frame)
+        theme_frame.pack(fill='x', pady=(0, 20))
 
-        self.rb_light = ttk.Radiobutton(rb_frame, text="Light", value="light",
+        self.rb_light = ttk.Radiobutton(theme_frame, text="Light", value="light",
                                         variable=self.var, command=self._preview_theme)
-        self.rb_light.pack(anchor="w")
+        self.rb_light.pack(anchor='w', pady=2)
 
-        self.rb_dark = ttk.Radiobutton(rb_frame, text="Dark", value="dark",
+        self.rb_dark = ttk.Radiobutton(theme_frame, text="Dark", value="dark",
                                        variable=self.var, command=self._preview_theme)
-        self.rb_dark.pack(anchor="w")
+        self.rb_dark.pack(anchor='w', pady=2)
 
-        # BPM Mode section
-        ttk.Separator(self, orient='horizontal').pack(fill='x', pady=8, padx=12)
-        ttk.Label(self, text="BPM Mode").pack(pady=(6, 4))
+    def _create_audio_section(self):
+        """Create the Audio section with BPM preferences."""
+        audio_frame = ttk.Frame(self.notebook)
+        self.notebook.add(audio_frame, text="Audio")
+
+        # Add padding to the audio frame
+        content_frame = ttk.Frame(audio_frame)
+        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+
+        # BPM Mode selection
+        ttk.Label(content_frame, text="BPM Mode", font=("Segoe UI", 10, "bold")).pack(anchor='w', pady=(0, 10))
 
         self.bpm_var = tk.StringVar(value=self.settings.bpm_mode)
-        bpm_rb_frame = ttk.Frame(self)
-        bpm_rb_frame.pack(pady=4, padx=12)
+        bpm_frame = ttk.Frame(content_frame)
+        bpm_frame.pack(fill='x', pady=(0, 20))
 
-        self.rb_perceived = ttk.Radiobutton(bpm_rb_frame, text="Perceived (50-100 BPM)",
+        self.rb_perceived = ttk.Radiobutton(bpm_frame, text="Perceived (50-100 BPM)",
                                           value="perceived", variable=self.bpm_var)
-        self.rb_perceived.pack(anchor="w")
+        self.rb_perceived.pack(anchor='w', pady=2)
 
-        self.rb_raw = ttk.Radiobutton(bpm_rb_frame, text="Raw (detected tempo)",
+        self.rb_raw = ttk.Radiobutton(bpm_frame, text="Raw (detected tempo)",
                                      value="raw", variable=self.bpm_var)
-        self.rb_raw.pack(anchor="w")
+        self.rb_raw.pack(anchor='w', pady=2)
 
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(pady=(8, 12))
-
+    def _create_buttons(self, parent_frame):
+        """Create Save and Cancel buttons."""
         # Get button colors from theme palette (matching controls.py)
         palette = self.theme_manager.palette
         btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
@@ -74,11 +114,15 @@ class PreferencesWindow(tk.Toplevel):
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
         UI_FONT = (palette.get("ui_font", "Segoe UI"), 12)
-        btn_width = 70
-        btn_height = 30
+        btn_width = 80
+        btn_height = 32
+
+        # Right-align buttons
+        button_container = ttk.Frame(parent_frame)
+        button_container.pack(anchor='e')
 
         self.cancel_btn = ctk.CTkButton(
-            btn_frame,
+            button_container,
             text="Cancel",
             command=self._cancel,
             font=UI_FONT,
@@ -88,10 +132,10 @@ class PreferencesWindow(tk.Toplevel):
             text_color=btn_fg,
             hover_color=btn_hover
         )
-        self.cancel_btn.pack(side=tk.RIGHT, padx=5)
+        self.cancel_btn.pack(side=tk.RIGHT, padx=(5, 0))
 
         self.save_btn = ctk.CTkButton(
-            btn_frame,
+            button_container,
             text="Save",
             command=self._save,
             font=UI_FONT,
@@ -101,12 +145,7 @@ class PreferencesWindow(tk.Toplevel):
             text_color=btn_fg,
             hover_color=btn_hover
         )
-        self.save_btn.pack(side=tk.RIGHT, padx=5)
-
-        self._apply_theme_to_this_window(self.settings.theme)
-
-        # Show window after all setup is complete
-        self.deiconify()
+        self.save_btn.pack(side=tk.RIGHT)
 
     def _preview_theme(self):
         """Update the preferences window and main window for live preview."""
@@ -134,6 +173,21 @@ class PreferencesWindow(tk.Toplevel):
         self.theme_manager.apply_to(self)
         style = ttk.Style(self)
 
+        # Configure notebook style
+        style.configure("Prefs.TNotebook", background=bg, tabmargins=[2, 5, 2, 0])
+        style.configure("Prefs.TNotebook.Tab",
+                       background=bg,
+                       foreground=fg,
+                       padding=[12, 8])
+        style.map("Prefs.TNotebook.Tab",
+                 background=[("selected", palette.get("accent", "#0078d4")),
+                           ("active", palette.get("button_hover", "#106ebe"))],
+                 foreground=[("selected", "#ffffff"),
+                           ("active", fg)])
+
+        # Apply notebook style
+        self.notebook.configure(style="Prefs.TNotebook")
+
         # Radiobutton style
         style.layout("Prefs.TRadiobutton", [
             ("Radiobutton.padding", {
@@ -151,10 +205,13 @@ class PreferencesWindow(tk.Toplevel):
             focuscolor=bg,
             indicatorcolor=bg
         )
-        self.rb_light.configure(style="Prefs.TRadiobutton")
-        self.rb_dark.configure(style="Prefs.TRadiobutton")
-        self.rb_perceived.configure(style="Prefs.TRadiobutton")
-        self.rb_raw.configure(style="Prefs.TRadiobutton")
+
+        # Apply radiobutton style to all radio buttons
+        if hasattr(self, 'rb_light'):
+            self.rb_light.configure(style="Prefs.TRadiobutton")
+            self.rb_dark.configure(style="Prefs.TRadiobutton")
+            self.rb_perceived.configure(style="Prefs.TRadiobutton")
+            self.rb_raw.configure(style="Prefs.TRadiobutton")
 
         # Frame and label styles
         style.configure("Prefs.TFrame", background=bg)
@@ -166,10 +223,17 @@ class PreferencesWindow(tk.Toplevel):
                 return  # buttons handled separately
             if isinstance(widget, tk.Frame):
                 widget.configure(bg=bg)
-            if isinstance(widget, (ttk.Frame, ttk.LabelFrame)):
+            if isinstance(widget, ttk.Notebook):
+                widget.configure(style="Prefs.TNotebook")
+            elif isinstance(widget, (ttk.Frame, ttk.LabelFrame)):
                 widget.configure(style="Prefs.TFrame")
-            if isinstance(widget, (ttk.Label, tk.Label)):
+            elif isinstance(widget, ttk.Label):
+                widget.configure(style="Prefs.TLabel")
+            elif isinstance(widget, tk.Label):
                 widget.configure(background=bg, foreground=fg)
+            elif isinstance(widget, ttk.Radiobutton):
+                widget.configure(style="Prefs.TRadiobutton")
+
             for child in widget.winfo_children():
                 restyle(child)
 
