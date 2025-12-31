@@ -83,6 +83,7 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
         # Canvas items
         self.waveform_items = []
+        self.placeholder_line = None
 
         # Bind mouse events
         self.bind('<Button-1>', self._on_click)
@@ -94,6 +95,9 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
         # Start update loop
         self._update_playhead()
+
+        # Draw initial placeholder line
+        self._draw_placeholder_line()
 
         logger.info("WaveformSeekbar initialized")
 
@@ -200,13 +204,19 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
         except Exception as e:
             logger.error(f"Failed to generate waveform for {audio_file}: {e}")
-            # Clear waveform on error
+            # Clear waveform on error and show placeholder
             with self.waveform_lock:
                 self.waveform_data = None
-            self.after(0, self._clear_waveform)
+            self.after(0, self.clear)
 
     def _draw_waveform(self):
         self._clear_waveform()
+
+        # Remove placeholder line when drawing actual waveform
+        if self.placeholder_line:
+            self.delete(self.placeholder_line)
+            self.placeholder_line = None
+
         with self.waveform_lock:
             if self.waveform_data is None:
                 return
@@ -239,6 +249,22 @@ class WaveformSeekbar(ctk.CTkCanvas):
         for item in self.waveform_items:
             self.delete(item)
         self.waveform_items.clear()
+
+    def _draw_placeholder_line(self):
+        """Draw a horizontal placeholder line when no waveform is loaded."""
+        # Remove existing placeholder line if any
+        if self.placeholder_line:
+            self.delete(self.placeholder_line)
+
+        # Draw horizontal line at center of canvas
+        center_y = self.height // 2
+        self.placeholder_line = self.create_line(
+            0, center_y,
+            self.width, center_y,
+            fill=self.unplayed_color,
+            width=1,
+            tags='placeholder'
+        )
 
 
     def _update_waveform_colors(self):
@@ -360,7 +386,15 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
     def clear(self):
         """Clear the waveform and reset state."""
+        # Clear placeholder line if it exists
+        if self.placeholder_line:
+            self.delete(self.placeholder_line)
+            self.placeholder_line = None
+
         self._clear_waveform()
+
+        # Draw placeholder line when clearing to empty state
+        self._draw_placeholder_line()
 
         with self.waveform_lock:
             self.waveform_data = None
