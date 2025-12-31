@@ -68,7 +68,7 @@ class TestWaveformSeekbar(unittest.TestCase):
         self.assertEqual(self.waveform.height, 50)
         self.assertEqual(self.waveform.player, self.mock_player)
         self.assertEqual(self.waveform.bg_color, '#1a1a1a')
-        self.assertEqual(self.waveform.playhead_color, '#FF6B00')
+        self.assertEqual(self.waveform.played_color, '#FF6B00')
     
     def test_mouse_click_sets_dragging_state(self):
         """Test mouse click sets dragging state and stores position."""
@@ -172,8 +172,9 @@ class TestWaveformSeekbar(unittest.TestCase):
         # Should have created waveform items
         self.assertGreater(len(self.waveform.waveform_items), 0)
         
-        # Should have playhead line
-        self.assertIsNotNone(self.waveform.playhead_line)
+        # playhead_x should be calculated based on mock player time (50/180 * 300 = 83)
+        expected_x = int((50000 / 180000) * 300)
+        self.assertEqual(self.waveform.playhead_x, expected_x)
     
     def test_waveform_clearing(self):
         """Test waveform clearing functionality."""
@@ -185,7 +186,9 @@ class TestWaveformSeekbar(unittest.TestCase):
         
         # Should be empty
         self.assertEqual(len(self.waveform.waveform_items), 0)
-        self.assertIsNone(self.waveform.playhead_line)
+        # playhead_x should be calculated based on mock player time (50/180 * 300 = 83)
+        expected_x = int((50000 / 180000) * 300)
+        self.assertEqual(self.waveform.playhead_x, expected_x)
     
     def test_color_updates(self):
         """Test waveform color updates based on playhead."""

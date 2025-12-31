@@ -56,12 +56,12 @@ class WaveformSeekbar(ctk.CTkCanvas):
         # Get colors from theme palette
         palette = theme.palette if hasattr(theme, 'palette') else {}
         self.bg_color = palette.get("waveform_bg", "#1a1a1a")
-        self.playhead_color = palette.get("waveform_playhead", "#FF6B00")
         self.played_color = palette.get("waveform_played", "#FF6B00")
         self.unplayed_color = palette.get("waveform_unplayed", "#404040")
+        self.border_color = palette.get("waveform_border", "#808080")
 
         # Set canvas background color
-        self.configure(bg=self.bg_color, highlightthickness=1, highlightbackground=self.playhead_color)
+        self.configure(bg=self.bg_color, highlightthickness=1, highlightbackground=self.border_color)
 
         self.player = player
         self.theme = theme
@@ -83,7 +83,6 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
         # Canvas items
         self.waveform_items = []
-        self.playhead_line = None
 
         # Bind mouse events
         self.bind('<Button-1>', self._on_click)
@@ -107,6 +106,9 @@ class WaveformSeekbar(ctk.CTkCanvas):
         """
         if audio_file == self.current_file and self.waveform_data is not None:
             return  # Already loaded
+
+        # Clear existing waveform before loading new one
+        self._clear_waveform()
 
         self.current_file = audio_file
         # Update audio length from player
@@ -167,22 +169,34 @@ class WaveformSeekbar(ctk.CTkCanvas):
                 else:
                     y = samples / (2 ** (audio.sample_width * 8 - 1))
 
-            # Calculate amplitude envelope (RMS energy)
-            hop_length = 512
-            frame_length = 2048
-            rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+            # Calculate the max peak for every pixel on the canvas
+            num_pixels = self.width
+            if num_pixels <= 0: num_pixels = 400 # Fallback
 
-            # Normalize to 0-1 range
-            if rms.max() > 0:
-                rms = rms / rms.max()
+            # Calculate how many audio samples represent one horizontal pixel
+            samples_per_pixel = len(y) // num_pixels
 
+            if samples_per_pixel > 0:
+                # Reshape the array to (num_pixels, samples_per_pixel)
+                # and find the absolute maximum in each chunk
+                y_trimmed = y[:num_pixels * samples_per_pixel]
+                chunks = y_trimmed.reshape(num_pixels, samples_per_pixel)
+                peaks = np.max(np.abs(chunks), axis=1)
+            else:
+                # For very short files, just use the raw data
+                peaks = np.abs(y)
+
+            # Normalize the peaks to 0-1 range based on the track's loudest point
+            if peaks.max() > 0:
+                peaks = peaks / peaks.max()
+
+            # Save data and update length
             with self.waveform_lock:
-                self.waveform_data = rms
-                self.audio_length = len(y) / sr * 1000  # Convert to milliseconds
+                self.waveform_data = peaks
+                self.audio_length = (len(y) / sr) * 1000
 
-            # Schedule UI update in main thread
+            # Schedule UI update
             self.after(0, self._draw_waveform)
-            logger.info(f"Waveform generated for {audio_file}: {len(rms)} frames")
 
         except Exception as e:
             logger.error(f"Failed to generate waveform for {audio_file}: {e}")
@@ -192,46 +206,33 @@ class WaveformSeekbar(ctk.CTkCanvas):
             self.after(0, self._clear_waveform)
 
     def _draw_waveform(self):
-        """Draw the waveform on the canvas."""
-        # Clear existing waveform
         self._clear_waveform()
-
         with self.waveform_lock:
             if self.waveform_data is None:
                 return
 
-            # Calculate bar width and spacing
-            num_frames = len(self.waveform_data)
-            bar_width = max(1, self.width // num_frames)
-            spacing = 1
-
-            # Draw waveform as vertical bars
             center_y = self.height // 2
-            max_height = self.height * 0.8  # Use 80% of canvas height
+            max_height = self.height * 0.75
 
-            for i, amplitude in enumerate(self.waveform_data):
-                if i * (bar_width + spacing) >= self.width:
-                    break
-
-                x = i * (bar_width + spacing)
+            # We draw exactly one bar per pixel to match self.width
+            for x in range(len(self.waveform_data)):
+                amplitude = self.waveform_data[x]
                 bar_height = amplitude * max_height / 2
 
-                # Draw top and bottom bars (centered)
                 top_y = center_y - bar_height
                 bottom_y = center_y + bar_height
 
-                # Create bars for played/unplayed sections
-                # Initially all are unplayed (gray)
+                # Create the rectangle with a generic tag 'waveform'
+                # and a specific tag for its x-position 'rx_{x}'
                 bar_id = self.create_rectangle(
-                    x, top_y, x + bar_width, bottom_y,
+                    x, top_y, x + 1, bottom_y,
                     fill=self.unplayed_color,
                     outline='',
-                    tags='waveform'
+                    tags=('waveform', f'rx_{x}')
                 )
                 self.waveform_items.append(bar_id)
 
-        # Draw playhead
-        self._draw_playhead()
+        self._update_waveform_colors()
 
     def _clear_waveform(self):
         """Clear all waveform items from canvas."""
@@ -239,92 +240,60 @@ class WaveformSeekbar(ctk.CTkCanvas):
             self.delete(item)
         self.waveform_items.clear()
 
-        if self.playhead_line:
-            self.delete(self.playhead_line)
-            self.playhead_line = None
-
-    def _draw_playhead(self):
-        """Draw or update the playhead line."""
-        if self.playhead_line:
-            self.delete(self.playhead_line)
-
-        # Draw vertical line at current position
-        self.playhead_line = self.create_line(
-            self.playhead_x, 0,
-            self.playhead_x, self.height,
-            fill=self.playhead_color,
-            width=2,
-            tags='playhead'
-        )
-
-        # Update waveform colors for played/unplayed sections
-        self._update_waveform_colors()
 
     def _update_waveform_colors(self):
-        """Update waveform bar colors based on playhead position."""
+        """Update waveform bar colors based on playhead position using area selection."""
         if not self.waveform_items:
             return
 
-        with self.waveform_lock:
-            if self.waveform_data is None:
-                return
+        # 1. Reset all bars to 'unplayed' color (optional, but safe for seeking)
+        self.itemconfig('waveform', fill=self.unplayed_color)
 
-            num_frames = len(self.waveform_data)
-            if num_frames == 0:
-                return
+        # 2. Find all items from X=0 to X=playhead_x
+        # find_enclosed or find_overlapping works here
+        # We use a small buffer (+1) to ensure we catch the bar under the playhead
+        played_items = self.find_overlapping(0, 0, self.playhead_x, self.height)
 
-            # Calculate which frame corresponds to playhead
-            current_time = self.player.get_time()
-            if self.audio_length <= 0:
-                return
-
-            played_ratio = current_time / self.audio_length
-            played_frames = int(played_ratio * num_frames)
-
-            # Update colors
-            for i, bar_id in enumerate(self.waveform_items):
-                if i < played_frames:
-                    color = self.played_color
-                else:
-                    color = self.unplayed_color
-
-                self.itemconfig(bar_id, fill=color)
+        for item_id in played_items:
+            # Only color items that belong to the 'waveform' group
+            tags = self.gettags(item_id)
+            if 'waveform' in tags:
+                self.itemconfig(item_id, fill=self.played_color)
 
     def _update_playhead(self):
-        """Update playhead position based on current playback time."""
-        # Don't update if user is dragging - prevent conflicts
         if self.is_dragging:
-            # Schedule next update but don't change position
             self.after(100, self._update_playhead)
             return
 
         try:
             current_time = self.player.get_time()
-            self.audio_length = self.player.get_length()
+            # Ensure we always have the latest length from VLC
+            total_length = self.player.get_length()
 
-            if self.audio_length > 0:
-                # Calculate playhead X position
+            if total_length > 0:
+                self.audio_length = total_length
                 progress_ratio = current_time / self.audio_length
-                self.playhead_x = int(progress_ratio * self.width)
-                self.playhead_x = max(0, min(self.playhead_x, self.width))
 
-                # Redraw playhead and update colors
-                self._draw_playhead()
+                # New pixel position
+                new_x = int(progress_ratio * self.width)
 
+                # Only redraw if the playhead has moved at least 1 pixel
+                if new_x != self.playhead_x:
+                    self.playhead_x = new_x
+                    self._update_waveform_colors()
         except Exception as e:
-            logger.error(f"Error updating playhead: {e}")
+            logger.error(f"Sync error: {e}")
 
-        # Schedule next update
-        self.after(100, self._update_playhead)  # Update every 100ms
+        self.after(50, self._update_playhead) # 50ms is smoother for DJs (20fps)
 
     def _on_click(self, event):
         """Handle mouse click on canvas."""
         self.is_dragging = True
         # Store the target position but don't seek yet
         self._pending_seek_position = event.x
-        # Update playhead visually for immediate feedback
+        # Update playhead position visually for immediate feedback
         self.playhead_x = event.x
-        self._draw_playhead()
+        self._update_waveform_colors()
 
     def _on_drag(self, event):
         """Handle mouse drag on canvas."""
@@ -332,7 +301,7 @@ class WaveformSeekbar(ctk.CTkCanvas):
             # Only update visual position, don't seek yet
             self._pending_seek_position = event.x
             self.playhead_x = event.x
-            self._draw_playhead()
+            self._update_waveform_colors()
 
     def _on_release(self, event):
         """Handle mouse release - perform the actual seek."""
@@ -378,12 +347,12 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
             # Update colors from theme palette
             self.bg_color = palette.get("waveform_bg", "#1a1a1a")
-            self.playhead_color = palette.get("waveform_playhead", "#FF6B00")
             self.played_color = palette.get("waveform_played", "#FF6B00")
             self.unplayed_color = palette.get("waveform_unplayed", "#404040")
+            self.border_color = palette.get("waveform_border", "#808080")
 
             # Update canvas background
-            self.configure(bg=self.bg_color, highlightbackground=self.playhead_color)
+            self.configure(bg=self.bg_color, highlightbackground=self.border_color)
 
             # Redraw waveform with new colors
             if self.waveform_data is not None:

@@ -83,9 +83,9 @@ class ControlsBar(ttk.Frame):
         middle = ttk.Frame(self)
         middle.pack(side=tk.LEFT, padx=12)
 
-        # Create waveform seekbar
+        # Create waveform seekbar with same height as control buttons
         self.waveform_seekbar = WaveformSeekbar(middle, self.player, self.theme, width=300, height=40)
-        self.waveform_seekbar.pack(side=tk.LEFT, pady=(0, 5))
+        self.waveform_seekbar.pack(side=tk.LEFT, pady=2)
 
         # Time label below waveform
         self.time_var = tk.StringVar(value="00:00 / 00:00")
