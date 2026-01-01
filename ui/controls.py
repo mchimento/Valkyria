@@ -83,13 +83,19 @@ class ControlsBar(ttk.Frame):
         middle = ttk.Frame(self)
         middle.pack(side=tk.LEFT, padx=12)
 
+        # Current time label (left side)
+        self.current_time_var = tk.StringVar(value="--:--")
+        self.current_time_label = ttk.Label(middle, textvariable=self.current_time_var, width=8, anchor="center")
+        self.current_time_label.pack(side=tk.LEFT)
+
         # Create waveform seekbar with same height as control buttons
         self.waveform_seekbar = WaveformSeekbar(middle, self.player, self.theme, width=360, height=40)
         self.waveform_seekbar.pack(side=tk.LEFT, pady=2)
 
-        # Time label below waveform
-        self.time_var = tk.StringVar(value="00:00 / 00:00")
-        ttk.Label(middle, textvariable=self.time_var).pack(side=tk.LEFT, padx=(10, 0))
+        # Total time label (right side)
+        self.total_time_var = tk.StringVar(value="--:--")
+        self.total_time_label = ttk.Label(middle, textvariable=self.total_time_var, width=8, anchor="center")
+        self.total_time_label.pack(side=tk.LEFT)
 
         # Play on double-click checkbutton
         self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
@@ -387,13 +393,16 @@ class ControlsBar(ttk.Frame):
             length_ms = self.player.get_length()
             pos_ms = self.player.get_time()
             if length_ms <= 0:
-                self.time_var.set("00:00 / 00:00")
+                self.current_time_var.set("--:--")
+                self.total_time_var.set("--:--")
             else:
                 cur_s = int(pos_ms // 1000)
                 len_s = int(length_ms // 1000)
-                self.time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d} / {len_s//60:02d}:{len_s%60:02d}")
+                self.current_time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d}")
+                self.total_time_var.set(f"{len_s//60:02d}:{len_s%60:02d}")
         except Exception:
-            self.time_var.set("00:00 / 00:00")
+            self.current_time_var.set("--:--")
+            self.total_time_var.set("--:--")
 
         self._update_id = self.after(500, self._schedule_time_update)
 
