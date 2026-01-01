@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 import vlc
-from typing import Optional, Callable
 import threading
 import audio.metadata as metadata_module
 
@@ -46,7 +45,7 @@ if sys.platform == 'win32':
     os.environ['VLC_PLUGIN_PATH'] = str(plugins_dir)
 
 class AudioPlayer:
-    def __init__(self, on_track_end: Optional[Callable[[], None]] = None) -> None:
+    def __init__(self, on_track_end=None):
         """
         Initialize the audio player.
 
@@ -77,7 +76,7 @@ class AudioPlayer:
 
         logger.info("AudioPlayer initialized")
 
-    def _on_end(self, event) -> None:
+    def _on_end(self, event):
         """Called by VLC in its internal thread when media ends."""
         if callable(self.on_track_end):
             try:
@@ -85,7 +84,7 @@ class AudioPlayer:
             except Exception:
                 logger.error("Error in track end callback", exc_info=True)
 
-    def play(self, path: str) -> None:
+    def play(self, path):
         """
         Play an audio file.
 
@@ -105,7 +104,7 @@ class AudioPlayer:
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
 
-    def pause(self) -> None:
+    def pause(self):
         """Pause or resume playback."""
         with self._lock:
             try:
@@ -113,7 +112,7 @@ class AudioPlayer:
             except Exception:
                 logger.error("Failed to pause playback", exc_info=True)
 
-    def stop(self) -> None:
+    def stop(self):
         """Stop playback."""
         with self._lock:
             try:
@@ -121,7 +120,7 @@ class AudioPlayer:
             except Exception:
                 logger.error("Failed to stop playback", exc_info=True)
 
-    def set_volume(self, val: int) -> None:
+    def set_volume(self, val):
         """
         Set the playback volume.
 
@@ -134,7 +133,7 @@ class AudioPlayer:
             except Exception:
                 logger.error(f"Failed to set volume to {val}", exc_info=True)
 
-    def get_mute_state(self) -> bool:
+    def get_mute_state(self):
         """
         Check if audio is currently muted.
 
@@ -147,7 +146,7 @@ class AudioPlayer:
             logger.error("Failed to check mute status", exc_info=True)
             return False
 
-    def set_mute(self, mute: bool) -> None:
+    def set_mute(self, mute):
         """
         Set mute state.
 
@@ -161,7 +160,7 @@ class AudioPlayer:
             except Exception:
                 logger.error(f"Failed to set mute to {mute}", exc_info=True)
 
-    def is_playing(self) -> bool:
+    def is_playing(self):
         """
         Check if audio is currently playing.
 
@@ -174,7 +173,7 @@ class AudioPlayer:
             logger.error("Failed to check playback status", exc_info=True)
             return False
 
-    def is_paused(self) -> bool:
+    def is_paused(self):
         """
         Check if audio is currently paused.
 
@@ -187,7 +186,7 @@ class AudioPlayer:
             logger.error("Failed to check pause status", exc_info=True)
             return False
 
-    def get_time(self) -> int:
+    def get_time(self):
         """
         Get current playback position in milliseconds.
 
@@ -200,7 +199,7 @@ class AudioPlayer:
             logger.error("Failed to get playback time", exc_info=True)
             return 0
 
-    def get_length(self) -> int:
+    def get_length(self):
         """
         Get total track length in milliseconds.
 
@@ -213,7 +212,7 @@ class AudioPlayer:
             logger.error("Failed to get track length", exc_info=True)
             return 0
 
-    def set_time(self, time_ms: int) -> None:
+    def set_time(self, time_ms):
         """
         Set the playback position.
 
@@ -281,7 +280,7 @@ class AudioPlayer:
             logger.error(f"Failed to get audio devices: {e}")
             return [('__DEFAULT__', 'Default Audio Device')]
 
-    def set_audio_device(self, device_id: str) -> None:
+    def set_audio_device(self, device_id):
         """
         Set the audio output device.
 
@@ -300,7 +299,7 @@ class AudioPlayer:
         except Exception as e:
             logger.error(f"Failed to set audio device to {device_id}: {e}")
 
-    def set_equalizer_enabled(self, enabled: bool) -> None:
+    def set_equalizer_enabled(self, enabled):
         """Enable or disable the equalizer."""
         if not self.equalizer:
             return
@@ -312,10 +311,10 @@ class AudioPlayer:
             else:
                 self.player.set_equalizer(None)
 
-    def get_equalizer_enabled(self) -> bool:
+    def get_equalizer_enabled(self):
         return self.equalizer_enabled
 
-    def set_equalizer_preamp(self, preamp: float) -> None:
+    def set_equalizer_preamp(self, preamp):
         """Set preamp level in dB (-20 to 20)."""
         if not self.equalizer:
             return
@@ -329,12 +328,12 @@ class AudioPlayer:
             except Exception as e:
                 logger.error(f"Failed to set equalizer preamp: {e}")
 
-    def get_equalizer_preamp(self) -> float:
+    def get_equalizer_preamp(self):
         if not self.equalizer:
             return 0.0
         return self.equalizer.get_preamp()
 
-    def set_equalizer_band(self, band_index: int, value: float) -> None:
+    def set_equalizer_band(self, band_index, value):
         """Set gain for a specific band in dB (-20 to 20)."""
         if not self.equalizer:
             return
@@ -348,12 +347,12 @@ class AudioPlayer:
             except Exception as e:
                 logger.error(f"Failed to set equalizer band {band_index}: {e}")
 
-    def get_equalizer_band(self, band_index: int) -> float:
+    def get_equalizer_band(self, band_index):
         if not self.equalizer:
             return 0.0
         return self.equalizer.get_amp_at_index(band_index)
 
-    def set_playback_rate(self, rate: float) -> None:
+    def set_playback_rate(self, rate):
         """
         Set playback speed.
         Args:
@@ -364,14 +363,14 @@ class AudioPlayer:
         except Exception as e:
             logger.error(f"Failed to set playback rate: {e}")
 
-    def get_playback_rate(self) -> float:
+    def get_playback_rate(self):
         """Get current playback rate."""
         try:
             return self.player.get_rate()
         except Exception:
             return 1.0
 
-    def set_stereo_mode(self, mode: str) -> None:
+    def set_stereo_mode(self, mode):
         """
         Set stereo output mode.
         Args:
