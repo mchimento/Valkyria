@@ -1,7 +1,8 @@
-python-vlc
 mutagen
 customtkinter
 Pillow
 librosa
 numpy
 soundfile
+sounddevice
+scipy

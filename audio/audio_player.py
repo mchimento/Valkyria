@@ -1,5 +1,5 @@
 """
-VLC Audio backend wrapper.
+SoundDevice Audio backend wrapper.
 
 Provides a simple, stable API to play/pause/stop and emits callbacks when a track ends.
 """
@@ -10,39 +10,13 @@ import os
 import sys
 from pathlib import Path
 
-import vlc
-import threading
+import sounddevice as sd
+import soundfile as sf
+import numpy as np
+import scipy.signal
 import audio.metadata as metadata_module
 
 logger = logging.getLogger(__name__)
-
-# Add project root to DLL search path for libvlc.dll
-# This allows VLC to find libvlc.dll in the project root directory
-if sys.platform == 'win32':
-    # Get the project root (parent of audio/ directory)
-    if getattr(sys, 'frozen', False):
-        project_root = Path(sys._MEIPASS)
-    else:
-        project_root = Path(__file__).parent.parent
-    # Path to the bundled plugins directory
-    plugins_dir = project_root / 'plugins'
-
-    # Add to DLL search path (Python 3.8+)
-    if hasattr(os, 'add_dll_directory'):
-        try:
-            # We need to add the plugins directory itself where libvlc.dll resides
-            os.add_dll_directory(str(plugins_dir))
-        except (OSError, FileNotFoundError):
-            pass
-
-    # Also add to PATH as fallback for older Python versions and for other dependencies
-    os.environ['PATH'] = str(plugins_dir) + os.pathsep + os.environ.get('PATH', '')
-
-    # Explicitly set the library path for python-vlc
-    os.environ['PYTHON_VLC_LIB_PATH'] = str(plugins_dir / 'libvlc.dll')
-
-    # Set VLC_PLUGIN_PATH to plugins_dir, where libvlc will find the 'plugins' subdirectory
-    os.environ['VLC_PLUGIN_PATH'] = str(plugins_dir)
 
 class AudioPlayer:
     def __init__(self, on_track_end=None):
@@ -52,37 +26,113 @@ class AudioPlayer:
         Args:
             on_track_end: Optional callback function to be called when a track ends.
         """
-        # Create a single VLC instance and media_player
-        # Use --quiet to suppress VLC's startup sound and messages
-        self.instance = vlc.Instance('--quiet', '--no-video')
-        self.player = self.instance.media_player_new()
         self.on_track_end = on_track_end
-
-        # Attach VLC event for end-of-media
-        events = self.player.event_manager()
-        events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_end)
-
-        # small lock for thread-safety
         self._lock = threading.RLock()
 
-        # Initialize equalizer
-        try:
-            self.equalizer = vlc.AudioEqualizer()
-        except Exception as e:
-            logger.warning(f"Failed to initialize equalizer: {e}")
-            self.equalizer = None
+        self._stream = None
+        self._file = None
+        self._volume = 100  # 0-100
+        self._muted = False
+        self._paused = False
+        self._stopped_manually = False
+        self._device_id = None
+        self._playback_rate = 1.0
+        self._rate_remainder = 0.0
 
+        # Equalizer
         self.equalizer_enabled = False
+        self._eq_bands = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000]
+        self._eq_gains = [0.0] * len(self._eq_bands)
+        self._eq_preamp = 0.0
+        self._eq_sos = None
+        self._eq_zi = None
 
-        logger.info("AudioPlayer initialized")
+        logger.info("AudioPlayer initialized (sounddevice)")
 
-    def _on_end(self, event):
-        """Called by VLC in its internal thread when media ends."""
-        if callable(self.on_track_end):
-            try:
-                self.on_track_end()
-            except Exception:
-                logger.error("Error in track end callback", exc_info=True)
+    def _stream_callback(self, outdata, frames, time, status):
+        """Callback for sounddevice OutputStream."""
+        if status:
+            logger.warning(f"Audio callback status: {status}")
+
+        data = []
+        frames_to_read = frames
+
+        with self._lock:
+            if not self._file:
+                outdata[:] = 0
+                raise sd.CallbackStop
+
+            # Calculate frames to read based on rate
+            if abs(self._playback_rate - 1.0) < 0.01:
+                frames_to_read = frames
+                self._rate_remainder = 0.0
+            else:
+                # Accumulate fractional frames to keep sync over time
+                target_read = frames * self._playback_rate + self._rate_remainder
+                frames_to_read = int(target_read)
+                self._rate_remainder = target_read - frames_to_read
+
+            # Read data from file
+            data = self._file.read(frames_to_read)
+            # Ensure data is 2D for consistent processing (N, C)
+            if data.ndim == 1:
+                data = data[:, np.newaxis]
+
+        # Handle End of File
+        if len(data) < frames_to_read:
+            # End of file reached, handle partial data
+            if abs(self._playback_rate - 1.0) < 0.01:
+                outdata[:len(data)] = data
+                outdata[len(data):] = 0
+            else:
+                # Resample partial data
+                valid_frames = int(len(data) / self._playback_rate)
+                valid_frames = min(valid_frames, frames)
+                if valid_frames > 0:
+                    x_old = np.linspace(0, 1, len(data))
+                    x_new = np.linspace(0, 1, valid_frames)
+                    for ch in range(data.shape[1]):
+                        outdata[:valid_frames, ch] = np.interp(x_new, x_old, data[:, ch])
+                outdata[valid_frames:] = 0
+            raise sd.CallbackStop
+        else:
+            if abs(self._playback_rate - 1.0) < 0.01:
+                outdata[:] = data
+            else:
+                # Resample full block: stretch read data to fit output frames
+                x_old = np.linspace(0, 1, len(data))
+                x_new = np.linspace(0, 1, frames)
+                for ch in range(data.shape[1]):
+                    outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
+
+        # Apply Equalizer
+        if self.equalizer_enabled and self._eq_sos is not None:
+            # Apply Preamp
+            if self._eq_preamp != 0.0:
+                outdata[:] *= (10 ** (self._eq_preamp / 20.0))
+
+            # Apply SOS filters
+            # Check if ZI shape matches current channels (file channels)
+            if self._eq_zi is not None and self._eq_zi.shape[1] == outdata.shape[1]:
+                outdata[:], self._eq_zi = scipy.signal.sosfilt(self._eq_sos, outdata, axis=0, zi=self._eq_zi)
+
+        # Apply Volume
+        if self._muted:
+            outdata[:] = 0
+        else:
+            # Normalize 0-100 to 0.0-1.0
+            vol = self._volume / 100.0
+            outdata[:] *= vol
+
+    def _on_stream_finished(self):
+        """Called when stream finishes (stops or ends)."""
+        # Only trigger track end if it wasn't stopped manually or paused
+        if not self._stopped_manually and not self._paused:
+            if callable(self.on_track_end):
+                try:
+                    self.on_track_end()
+                except Exception:
+                    logger.error("Error in track end callback", exc_info=True)
 
     def play(self, path):
         """
@@ -91,34 +141,93 @@ class AudioPlayer:
         Args:
             path: Path to the audio file to play.
         """
+        self.stop()
+
         with self._lock:
             try:
-                # Stop current playback to prevent audio overlap noise
-                if self.player.is_playing():
-                    self.player.stop()
+                self._file = sf.SoundFile(path)
+                self._paused = False
+                self._stopped_manually = False
 
-                media = self.instance.media_new(path)
-                self.player.set_media(media)
-                self.player.play()
+                # Determine device index if set
+                device = None
+                if self._device_id is not None:
+                    try:
+                        device = int(self._device_id)
+                    except (ValueError, TypeError):
+                        device = None
 
+                self._stream = sd.OutputStream(
+                    samplerate=self._file.samplerate,
+                    channels=self._file.channels,
+                    device=device,
+                    callback=self._stream_callback,
+                    finished_callback=self._on_stream_finished
+                )
+                self._stream.start()
+                self._update_equalizer()
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
+                # Cleanup manually since we can't call stop() safely inside lock if it blocks
+                if self._stream:
+                    self._stream.close()
+                    self._stream = None
+                if self._file:
+                    self._file.close()
+                    self._file = None
 
     def pause(self):
         """Pause or resume playback."""
+        stream_to_toggle = None
+        should_start = False
+
         with self._lock:
+            if self._stream:
+                stream_to_toggle = self._stream
+                if self._paused:
+                    should_start = True
+                    self._paused = False
+                else:
+                    should_start = False
+                    self._paused = True
+
+        if stream_to_toggle:
             try:
-                self.player.pause()
+                if should_start:
+                    stream_to_toggle.start()
+                else:
+                    stream_to_toggle.stop()
             except Exception:
                 logger.error("Failed to pause playback", exc_info=True)
 
     def stop(self):
         """Stop playback."""
+        stream_to_close = None
+        file_to_close = None
+
         with self._lock:
+            self._stopped_manually = True
+            if self._stream:
+                stream_to_close = self._stream
+                self._stream = None
+            if self._file:
+                file_to_close = self._file
+                self._file = None
+            self._paused = False
+
+        # Perform cleanup outside lock to avoid deadlock with callback
+        if stream_to_close:
             try:
-                self.player.stop()
+                stream_to_close.stop()
+                stream_to_close.close()
             except Exception:
-                logger.error("Failed to stop playback", exc_info=True)
+                logger.error("Failed to stop stream", exc_info=True)
+
+        if file_to_close:
+            try:
+                file_to_close.close()
+            except Exception:
+                logger.error("Failed to close file", exc_info=True)
 
     def set_volume(self, val):
         """
@@ -128,10 +237,7 @@ class AudioPlayer:
             val: Volume level (0-100).
         """
         with self._lock:
-            try:
-                self.player.audio_set_volume(int(val))
-            except Exception:
-                logger.error(f"Failed to set volume to {val}", exc_info=True)
+            self._volume = max(0, min(100, float(val)))
 
     def get_mute_state(self):
         """
@@ -140,11 +246,7 @@ class AudioPlayer:
         Returns:
             True if muted, False otherwise.
         """
-        try:
-            return bool(self.player.audio_get_mute())
-        except Exception:
-            logger.error("Failed to check mute status", exc_info=True)
-            return False
+        return self._muted
 
     def set_mute(self, mute):
         """
@@ -154,11 +256,8 @@ class AudioPlayer:
             mute: True to mute, False to unmute.
         """
         with self._lock:
-            try:
-                self.player.audio_set_mute(int(mute))
-                logger.info(f"Mute set to: {mute}")
-            except Exception:
-                logger.error(f"Failed to set mute to {mute}", exc_info=True)
+            self._muted = bool(mute)
+            logger.info(f"Mute set to: {mute}")
 
     def is_playing(self):
         """
@@ -167,11 +266,7 @@ class AudioPlayer:
         Returns:
             True if playing, False otherwise.
         """
-        try:
-            return bool(self.player.is_playing())
-        except Exception:
-            logger.error("Failed to check playback status", exc_info=True)
-            return False
+        return self._stream is not None and self._stream.active and not self._paused
 
     def is_paused(self):
         """
@@ -180,11 +275,7 @@ class AudioPlayer:
         Returns:
             True if paused, False otherwise.
         """
-        try:
-            return self.player.get_state() == vlc.State.Paused
-        except Exception:
-            logger.error("Failed to check pause status", exc_info=True)
-            return False
+        return self._paused
 
     def get_time(self):
         """
@@ -193,11 +284,15 @@ class AudioPlayer:
         Returns:
             Current position in milliseconds, or 0 if unavailable.
         """
-        try:
-            return int(self.player.get_time() or 0)
-        except Exception:
-            logger.error("Failed to get playback time", exc_info=True)
-            return 0
+        with self._lock:
+            try:
+                if self._file:
+                    # tell() returns frames, convert to ms
+                    return int((self._file.tell() / self._file.samplerate) * 1000)
+                return 0
+            except Exception:
+                logger.error("Failed to get playback time", exc_info=True)
+                return 0
 
     def get_length(self):
         """
@@ -206,11 +301,14 @@ class AudioPlayer:
         Returns:
             Track length in milliseconds, or 0 if unavailable.
         """
-        try:
-            return int(self.player.get_length() or 0)
-        except Exception:
-            logger.error("Failed to get track length", exc_info=True)
-            return 0
+        with self._lock:
+            try:
+                if self._file:
+                    return int((len(self._file) / self._file.samplerate) * 1000)
+                return 0
+            except Exception:
+                logger.error("Failed to get track length", exc_info=True)
+                return 0
 
     def set_time(self, time_ms):
         """
@@ -221,7 +319,13 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                self.player.set_time(time_ms)
+                if self._file:
+                    # Convert ms to frames
+                    frame_pos = int((time_ms / 1000.0) * self._file.samplerate)
+                    self._file.seek(frame_pos)
+                    # Reset filter state on seek to prevent artifacts
+                    if self._eq_zi is not None:
+                        self._eq_zi.fill(0)
             except Exception:
                 logger.error(f"Failed to set time to {time_ms}", exc_info=True)
 
@@ -230,50 +334,42 @@ class AudioPlayer:
         Get available audio output devices.
 
         Returns:
-            List of tuples (device_id, device_name). device_id is the actual VLC device identifier (GUID or similar).
+            List of tuples (device_id, device_name). device_id is the identifier used by sounddevice.
             The default device has device_id = '__DEFAULT__'.
         """
         try:
             devices = []
 
-            # Get audio output devices from VLC
-            aout = self.player.audio_output_device_enum()
+            # Query sounddevice
+            sd_devices = sd.query_devices()
 
-            if aout:
-                device = aout
-                is_first = True
-                while device:
-                    try:
-                        content = device.contents
-                        # Get device description (friendly name)
-                        desc = getattr(content, 'description', None)
-                        # Get device ID (GUID or identifier)
-                        dev_id = getattr(content, 'device', None)
+            # Add default option
+            devices.append(('__DEFAULT__', 'Default Audio Device'))
 
-                        if desc:
-                            if isinstance(desc, bytes):
-                                desc = desc.decode('utf-8', errors='ignore')
+            # Filter duplicates by using the host API of the system default output device
+            target_hostapi = None
+            default_out_idx = sd.default.device[1]
 
-                            if isinstance(dev_id, bytes):
-                                dev_id = dev_id.decode('utf-8', errors='ignore')
+            if default_out_idx >= 0 and default_out_idx < len(sd_devices):
+                target_hostapi = sd_devices[default_out_idx]['hostapi']
 
-                            # First device with empty ID is the default
-                            if is_first and not dev_id:
-                                device_key = '__DEFAULT__'
-                                is_first = False
-                            else:
-                                device_key = dev_id if dev_id else desc
-
-                            devices.append((device_key, str(desc)))
-
-                        # Move to next device
-                        device = getattr(content, 'next', None)
-                    except Exception:
+            # Fallback: if no default device, pick the API of the first available output device
+            if target_hostapi is None:
+                for dev in sd_devices:
+                    if dev['max_output_channels'] > 0:
+                        target_hostapi = dev['hostapi']
                         break
 
-            # If no devices found, return default option
-            if not devices:
-                devices.append(('__DEFAULT__', 'Default Audio Device'))
+            for idx, dev in enumerate(sd_devices):
+                # Filter for output devices
+                if dev['max_output_channels'] > 0:
+                    # If we have a target API, skip devices from other APIs to avoid duplicates
+                    if target_hostapi is not None and dev['hostapi'] != target_hostapi:
+                        continue
+
+                    name = dev['name']
+                    # Use index as ID
+                    devices.append((str(idx), name))
 
             return devices
         except Exception as e:
@@ -285,72 +381,98 @@ class AudioPlayer:
         Set the audio output device.
 
         Args:
-            device_id: Device ID (GUID or identifier from VLC) or '__DEFAULT__' for system default.
+            device_id: Device ID or '__DEFAULT__' for system default.
         """
-        try:
-            if device_id == '__DEFAULT__':
-                # Reset to default by setting empty device ID
-                self.player.audio_output_device_set(None, '')
-            else:
-                # Set using the actual device ID (GUID)
-                self.player.audio_output_device_set(None, device_id)
+        restart_needed = False
+        restart_path = None
+        restart_pos = 0
+        restart_paused = False
 
-            logger.info(f"Audio device set to: {device_id}")
-        except Exception as e:
-            logger.error(f"Failed to set audio device to {device_id}: {e}")
+        with self._lock:
+            try:
+                if device_id == '__DEFAULT__':
+                    self._device_id = None
+                else:
+                    self._device_id = device_id
+
+                logger.info(f"Audio device set to: {device_id}")
+
+                # If currently playing or paused, restart stream to apply new device
+                if self._stream and self._file:
+                    restart_needed = True
+                    restart_path = self._file.name
+                    restart_pos = int((self._file.tell() / self._file.samplerate) * 1000)
+                    restart_paused = self._paused
+            except Exception as e:
+                logger.error(f"Failed to set audio device to {device_id}: {e}")
+
+        if restart_needed:
+            self.stop()
+            self.play(restart_path)
+            self.set_time(restart_pos)
+            if restart_paused:
+                self.pause()
+
+    def _design_peaking_filter(self, f0, gain_db, Q, fs):
+        """Design coefficients for a peaking EQ filter."""
+        A = 10 ** (gain_db / 40.0)
+        w0 = 2 * np.pi * f0 / fs
+        alpha = np.sin(w0) / (2 * Q)
+
+        b0 = 1 + alpha * A
+        b1 = -2 * np.cos(w0)
+        b2 = 1 - alpha * A
+        a0 = 1 + alpha / A
+        a1 = -2 * np.cos(w0)
+        a2 = 1 - alpha / A
+
+        return np.array([b0, b1, b2, a0, a1, a2]) / a0
+
+    def _update_equalizer(self):
+        """Recalculate equalizer filter coefficients."""
+        with self._lock:
+            if not self._file or not self.equalizer_enabled:
+                self._eq_sos = None
+                self._eq_zi = None
+                return
+
+            fs = self._file.samplerate
+            sos_list = []
+            for i, freq in enumerate(self._eq_bands):
+                sos = self._design_peaking_filter(freq, self._eq_gains[i], 1.414, fs)
+                sos_list.append(sos)
+
+            self._eq_sos = np.vstack(sos_list)
+
+            # Initialize state if needed
+            if self._eq_zi is None or self._eq_zi.shape != (len(self._eq_bands), self._file.channels, 2):
+                self._eq_zi = np.zeros((len(self._eq_bands), self._file.channels, 2))
 
     def set_equalizer_enabled(self, enabled):
         """Enable or disable the equalizer."""
-        if not self.equalizer:
-            return
-
-        with self._lock:
-            self.equalizer_enabled = enabled
-            if enabled:
-                self.player.set_equalizer(self.equalizer)
-            else:
-                self.player.set_equalizer(None)
+        self.equalizer_enabled = enabled
+        self._update_equalizer()
 
     def get_equalizer_enabled(self):
         return self.equalizer_enabled
 
     def set_equalizer_preamp(self, preamp):
         """Set preamp level in dB (-20 to 20)."""
-        if not self.equalizer:
-            return
-
-        with self._lock:
-            try:
-                self.equalizer.set_preamp(preamp)
-                # Re-apply if enabled to ensure update takes effect immediately
-                if self.equalizer_enabled:
-                    self.player.set_equalizer(self.equalizer)
-            except Exception as e:
-                logger.error(f"Failed to set equalizer preamp: {e}")
+        self._eq_preamp = max(-20.0, min(20.0, float(preamp)))
 
     def get_equalizer_preamp(self):
-        if not self.equalizer:
-            return 0.0
-        return self.equalizer.get_preamp()
+        return self._eq_preamp
 
     def set_equalizer_band(self, band_index, value):
         """Set gain for a specific band in dB (-20 to 20)."""
-        if not self.equalizer:
-            return
-
-        with self._lock:
-            try:
-                self.equalizer.set_amp_at_index(value, band_index)
-                # Re-apply if enabled to ensure update takes effect immediately
-                if self.equalizer_enabled:
-                    self.player.set_equalizer(self.equalizer)
-            except Exception as e:
-                logger.error(f"Failed to set equalizer band {band_index}: {e}")
+        if 0 <= band_index < len(self._eq_bands):
+            self._eq_gains[band_index] = max(-20.0, min(20.0, float(value)))
+            self._update_equalizer()
 
     def get_equalizer_band(self, band_index):
-        if not self.equalizer:
-            return 0.0
-        return self.equalizer.get_amp_at_index(band_index)
+        if 0 <= band_index < len(self._eq_bands):
+            return self._eq_gains[band_index]
+        return 0.0
 
     def set_playback_rate(self, rate):
         """
@@ -358,32 +480,9 @@ class AudioPlayer:
         Args:
             rate: Speed factor (e.g. 1.0 is normal, 0.5 is half speed, 2.0 is double).
         """
-        try:
-            self.player.set_rate(rate)
-        except Exception as e:
-            logger.error(f"Failed to set playback rate: {e}")
+        # Clamp rate to reasonable limits
+        self._playback_rate = max(0.1, min(4.0, float(rate)))
 
     def get_playback_rate(self):
         """Get current playback rate."""
-        try:
-            return self.player.get_rate()
-        except Exception:
-            return 1.0
-
-    def set_stereo_mode(self, mode):
-        """
-        Set stereo output mode.
-        Args:
-            mode: One of 'stereo', 'reverse', 'left', 'right'.
-        """
-        mode_map = {
-            'stereo': vlc.AudioOutputChannel.Stereo,
-            'reverse': vlc.AudioOutputChannel.RStereo,
-            'left': vlc.AudioOutputChannel.Left,
-            'right': vlc.AudioOutputChannel.Right
-        }
-        if mode in mode_map:
-            try:
-                self.player.audio_output_set_channel(mode_map[mode])
-            except Exception as e:
-                logger.error(f"Failed to set stereo mode: {e}")
+        return self._playback_rate
