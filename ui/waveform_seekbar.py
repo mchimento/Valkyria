@@ -6,11 +6,15 @@ Provides a visual representation of audio waveform with interactive seeking capa
 
 import logging
 import threading
+import warnings
+import subprocess
+import sys
 import customtkinter as ctk
 import librosa
 import soundfile as sf
 from pathlib import Path
 from pydub import AudioSegment
+import pydub.utils
 import numpy as np
 from typing import Optional, Callable
 
@@ -140,38 +144,66 @@ class WaveformSeekbar(ctk.CTkCanvas):
             audio_file: Path to the audio file
         """
         try:
-            # Try soundfile first (handles WAV, FLAC, OGG, etc.)
-            try:
-                y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                # Try soundfile first (handles WAV, FLAC, OGG, etc.)
+                try:
+                    y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
 
-                # Convert to mono if stereo
-                if y.ndim > 1:
-                    y = y.mean(axis=1)
+                    # Convert to mono if stereo
+                    if y.ndim > 1:
+                        y = y.mean(axis=1)
 
-            except (sf.LibsndfileError, RuntimeError):
-                # Fallback for MP3 and other formats soundfile can't handle
-                # Use pydub which handles MP3 well
-                audio = AudioSegment.from_file(audio_file)
+                except (sf.LibsndfileError, RuntimeError):
+                    # Fallback for MP3 and other formats soundfile can't handle
+                    # Use pydub which handles MP3 well
 
-                # Convert to mono
-                if audio.channels > 1:
-                    audio = audio.set_channels(1)
+                    # Monkey patch subprocess.Popen to suppress console window on Windows
+                    if sys.platform == 'win32':
+                        _original_subprocess_Popen = subprocess.Popen
+                        _original_pydub_Popen = getattr(pydub.utils, 'Popen', None)
 
-                # Get sample rate
-                sr = audio.frame_rate
+                        def _patched_Popen(*args, **kwargs):
+                            if 'startupinfo' not in kwargs:
+                                startupinfo = subprocess.STARTUPINFO()
+                                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                                kwargs['startupinfo'] = startupinfo
+                            if 'creationflags' not in kwargs:
+                                kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
+                            return _original_subprocess_Popen(*args, **kwargs)
 
-                # Convert to numpy array
-                samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+                        subprocess.Popen = _patched_Popen
+                        if _original_pydub_Popen:
+                            pydub.utils.Popen = _patched_Popen
 
-                # Normalize to -1.0 to 1.0 range
-                if audio.sample_width == 1:  # 8-bit
-                    y = (samples - 128) / 128.0
-                elif audio.sample_width == 2:  # 16-bit
-                    y = samples / 32768.0
-                elif audio.sample_width == 4:  # 32-bit
-                    y = samples / 2147483648.0
-                else:
-                    y = samples / (2 ** (audio.sample_width * 8 - 1))
+                        try:
+                            audio = AudioSegment.from_file(audio_file)
+                        finally:
+                            subprocess.Popen = _original_subprocess_Popen
+                            if _original_pydub_Popen:
+                                pydub.utils.Popen = _original_pydub_Popen
+                    else:
+                        audio = AudioSegment.from_file(audio_file)
+
+                    # Convert to mono
+                    if audio.channels > 1:
+                        audio = audio.set_channels(1)
+
+                    # Get sample rate
+                    sr = audio.frame_rate
+
+                    # Convert to numpy array
+                    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+
+                    # Normalize to -1.0 to 1.0 range
+                    if audio.sample_width == 1:  # 8-bit
+                        y = (samples - 128) / 128.0
+                    elif audio.sample_width == 2:  # 16-bit
+                        y = samples / 32768.0
+                    elif audio.sample_width == 4:  # 32-bit
+                        y = samples / 2147483648.0
+                    else:
+                        y = samples / (2 ** (audio.sample_width * 8 - 1))
 
             # Calculate the max peak for every pixel on the canvas
             num_pixels = self.width
