@@ -3,29 +3,32 @@ Metadata handling module for audio files.
 Consolidates all metadata extraction, manipulation, and display logic.
 """
 
-import os
-import glob
 from mutagen import File as MutagenFile
-from mutagen.id3 import APIC, GEOB
+from mutagen.id3 import APIC, GEOB, ID3, TXXX, TBPM, ID3NoHeaderError
 from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4, MP4Cover
-import io
-from PIL import Image
 
+import shutil, tempfile, subprocess, math, os, glob, io
+from PIL import Image
+import librosa
+import numpy as np
+import scipy.stats
+from math import log
 
 class MetadataExtractor:
     """Handles extraction and manipulation of audio file metadata."""
 
     def __init__(self):
         self._cache = {}
+        self._bpm_listeners = []
 
     def get_metadata(self, filepath):
         """
         Get metadata for a file, using cache for performance.
-        
+
         Args:
             filepath (str): Path to the audio file
-            
+
         Returns:
             dict: Dictionary containing metadata fields (title, artist, album, duration, etc.)
         """
@@ -81,6 +84,50 @@ class MetadataExtractor:
                 except Exception:
                     fmt = None
                 metadata["format"] = fmt
+                # Attempt to extract BPM from common tags/frames
+                bpm = None
+                try:
+                    # Try easy tags first (common for vorbis/flac/mp4 easy tags)
+                    if audio and hasattr(audio, 'get'):
+                        for k in ('bpm', 'BPM'):
+                            v = audio.get(k)
+                            if v:
+                                try:
+                                    bpm = float(v[0])
+                                    break
+                                except Exception:
+                                    try:
+                                        bpm = float(v)
+                                        break
+                                    except Exception:
+                                        pass
+
+                    # Fallback to raw mutagen tags for ID3/MP4 specific frames
+                    if bpm is None:
+                        raw = MutagenFile(filepath)
+                        if raw is not None and hasattr(raw, 'tags') and raw.tags is not None:
+                            # ID3 TBPM frame for MP3
+                            try:
+                                if 'TBPM' in raw.tags:
+                                    val = raw.tags.get('TBPM')
+                                    # mutagen may return a FrameList or text
+                                    val_str = str(val)
+                                    bpm = float(val_str)
+                            except Exception:
+                                pass
+
+                            # MP4 tempo tag 'tmpo'
+                            if bpm is None:
+                                try:
+                                    if 'tmpo' in raw.tags:
+                                        val = raw.tags.get('tmpo')
+                                        bpm = float(val)
+                                except Exception:
+                                    pass
+                except Exception:
+                    bpm = None
+
+                metadata['bpm'] = bpm
         except Exception:
             # Fallback to filename if metadata extraction fails
             metadata = {
@@ -90,6 +137,7 @@ class MetadataExtractor:
                 "duration": "",
                 "duration_s": None,
                 "bitrate": None,
+                "bpm": None,
                 "format": None
             }
 
@@ -102,10 +150,10 @@ class MetadataExtractor:
         Get the display title for a file.
         Returns "Title — Artist" if both tags exist, "Title" if only title exists,
         or the filename if no tags are found.
-        
+
         Args:
             file_path (str): Path to the audio file
-            
+
         Returns:
             str: Display title string
         """
@@ -125,10 +173,10 @@ class MetadataExtractor:
     def get_file_info(self, file_path):
         """
         Extract comprehensive file information including technical details.
-        
+
         Args:
             file_path (str): Path to the audio file
-            
+
         Returns:
             dict: Dictionary containing file information (path, size, format, duration, bitrate, etc.)
         """
@@ -205,6 +253,13 @@ class MetadataExtractor:
                     else:
                         info['metadata'][key] = str(value)
 
+            # Also include parsed metadata such as bpm if available
+            try:
+                parsed_meta = self.get_metadata(file_path)
+                if parsed_meta and 'bpm' in parsed_meta:
+                    info['metadata']['bpm'] = parsed_meta.get('bpm')
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -213,11 +268,11 @@ class MetadataExtractor:
     def save_metadata(self, file_path, metadata_dict):
         """
         Save metadata to an audio file.
-        
+
         Args:
             file_path (str): Path to the audio file
             metadata_dict (dict): Dictionary of metadata to save
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -248,7 +303,7 @@ class MetadataExtractor:
     def update_cache(self, filepath):
         """
         Update metadata cache for a specific file.
-        
+
         Args:
             filepath (str): Path to the audio file
         """
@@ -256,14 +311,36 @@ class MetadataExtractor:
             del self._cache[filepath]
         self.get_metadata(filepath)
 
+    def register_bpm_listener(self, callback):
+        """Register a callback to be notified when BPM is updated for a file.
+
+        Callback will be called as callback(filepath).
+        """
+        if callback not in self._bpm_listeners:
+            self._bpm_listeners.append(callback)
+
+    def unregister_bpm_listener(self, callback):
+        """Unregister a BPM listener callback."""
+        try:
+            self._bpm_listeners.remove(callback)
+        except ValueError:
+            pass
+
+    def _notify_bpm_listeners(self, filepath):
+        for cb in list(self._bpm_listeners):
+            try:
+                cb(filepath)
+            except Exception:
+                pass
+
     def get_booklet_images(self, filepath, include_folder_images=True):
         """
         Extract booklet/liner-note images from audio file metadata.
-        
+
         Args:
             filepath (str): Path to the audio file
             include_folder_images (bool): If True, also look for images in the same folder
-            
+
         Returns:
             list: List of tuples containing (image_data, description, image_type)
         """
@@ -374,7 +451,6 @@ class MetadataExtractor:
         except Exception:
             pass
 
-        # Optionally check for folder images (like VLC does)
         if include_folder_images:
             try:
                 folder = os.path.dirname(filepath)
@@ -414,8 +490,299 @@ class MetadataExtractor:
 
         return booklet_images
 
+def get_best_artwork(filepath):
+    """
+    Get the best artwork image for a file using fallback hierarchy.
+
+    Args:
+        filepath (str): Path to the audio file
+
+    Returns:
+        bytes: Image data for the best artwork, or None if no artwork found
+    """
+    try:
+        # Get all available images using the comprehensive extraction function
+        images = metadata_extractor.get_booklet_images(filepath, include_folder_images=True)
+
+        if not images:
+            return None
+
+        # Priority order for artwork selection
+        # 1. Front cover (APIC type 3) from embedded metadata
+        # 2. Any embedded artwork (APIC, FLAC Picture, MP4 Cover, GEOB Image)
+        # 3. Folder artwork with priority names (cover.jpg, album.jpg, etc.)
+        # 4. Any other image (including other folder images)
+
+        # First, look for front cover (type 3) in embedded images
+        for img_data, description, img_type in images:
+            if "APIC" in img_type and "Type 3" in img_type:
+                return img_data
+
+        # Then look for any embedded artwork
+        for img_data, description, img_type in images:
+            if any(embedded_type in img_type for embedded_type in ["APIC", "FLAC Picture", "MP4 Cover", "GEOB Image"]):
+                return img_data
+
+        # Then look for folder artwork with priority names
+        priority_names = ['cover.jpg', 'cover.png', 'front.jpg', 'front.png',
+                        'album.jpg', 'album.png', 'albumart.jpg', 'albumart.png',
+                        'folder.jpg', 'folder.png']
+
+        for img_data, description, img_type in images:
+            if "Folder Image" in img_type:
+                desc_lower = description.lower()
+                if any(name in desc_lower for name in priority_names):
+                    return img_data
+
+        # Then look for any folder image
+        for img_data, description, img_type in images:
+            if "Folder Image" in img_type:
+                return img_data
+
+        # Finally, return any available image
+        if images:
+            return images[0][0]
+
+    except Exception as e:
+        pass
+
+    return None
+
+def get_display_bpm(bpm):
+    """Get BPM value formatted for display according to current preference.
+    
+    Args:
+        bpm: Raw BPM value (int or float) or None
+        
+    Returns:
+        Formatted BPM string for display, or empty string if bpm is None
+    """
+    if bpm is None:
+        return ""
+
+    try:
+        bpm_float = float(bpm)
+    except (ValueError, TypeError):
+        return ""
+
+    if not math.isfinite(bpm_float) or bpm_float <= 0:
+        return ""
+
+    # Apply normalization based on preference
+    display_bpm = normalize_bpm(bpm_float)
+    return str(display_bpm) if display_bpm is not None else ""
+
+def analyze_bpm(filepath, sr=22050, duration=60):
+    try:
+        ext = os.path.splitext(filepath)[1].lower()
+
+        if ext == '.mp3' and shutil.which('ffmpeg'):
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                tmpname = tmp.name
+            try:
+                subprocess.run([
+                    'ffmpeg', '-y', '-i', filepath,
+                    '-t', str(duration), '-ar', str(sr), '-ac', '1', tmpname
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                y, sr_used = librosa.load(tmpname, sr=sr, mono=True)
+            finally:
+                os.unlink(tmpname)
+        else:
+            y, sr_used = librosa.load(filepath, sr=sr, mono=True, duration=duration)
+
+        return dj_bpm_estimate(y, sr_used)
+
+    except Exception as e:
+        print("BPM error:", e)
+        return None
+
+def normalize_bpm(bpm):
+    try:
+        bpm = float(bpm)
+    except Exception:
+        print("Failed normalization")
+        return None
+
+    if not math.isfinite(bpm) or bpm <= 0:
+        print("Invalid BPM value")
+        return None
+
+    # Behavior depends on BPM_PREFERENCE: 'perceived' folds into 50-100,
+    # 'raw' returns the detected tempo without octave-folding.
+    if BPM_PREFERENCE == 'raw':
+        return int(round(bpm))
+
+    # Default: 'perceived' - fold into 50-100 BPM range
+    while bpm > 100:
+        bpm /= 2.0
+    while bpm < 50:
+        bpm *= 2.0
+
+    return int(round(bpm))
+
+def dj_bpm_estimate(y, sr):
+    # Guard against empty audio
+    if y is None or len(y) == 0:
+        print("BPM error: empty audio buffer")
+        return None
+
+    try:
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    except Exception as e:
+        print("BPM error computing onset envelope:", e)
+        onset_env = None
+
+    # Try tempogram-based global tempo estimate first
+    try:
+        if onset_env is None or len(onset_env) == 0:
+            raise RuntimeError("empty onset envelope")
+
+        tg = librosa.feature.tempogram(onset_envelope=onset_env, sr=sr)
+        if tg is None or tg.size == 0:
+            raise RuntimeError("empty tempogram")
+
+        # Global tempo profile
+        tempo_freqs = librosa.tempo_frequencies(tg.shape[0], sr=sr)
+        if tempo_freqs is None or len(tempo_freqs) == 0:
+            raise RuntimeError("no tempo frequencies")
+
+        avg_tg = np.mean(tg, axis=1)
+        if avg_tg is None or len(avg_tg) == 0 or np.all(np.isnan(avg_tg)):
+            raise RuntimeError("invalid tempogram energy")
+
+        idx = int(np.nanargmax(avg_tg))
+        if idx < 0 or idx >= len(tempo_freqs):
+            raise RuntimeError("tempo index out of range")
+
+        bpm = float(tempo_freqs[idx])
+        if not math.isfinite(bpm) or bpm <= 0:
+            raise RuntimeError("non-finite tempo from tempogram")
+
+        return bpm
+
+    except Exception as e:
+        # Fallback to beat_track which is more robust in many cases
+        try:
+            tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+            if tempo is None or not math.isfinite(tempo) or tempo <= 0:
+                print("BPM fallback beat_track failed:", tempo)
+                return None
+            return float(tempo)
+        except Exception as e2:
+            print("BPM fallback failed:", e2)
+            return None
+
+def write_bpm(filepath, bpm):
+    """Write BPM tag back into the audio file using mutagen when possible.
+
+    Returns True on success, False otherwise.
+    """
+    try:
+        if bpm is None:
+            return False
+        # Use bpm value as-is without normalization
+        bpm_val = str(bpm)
+
+        raw = MutagenFile(filepath)
+        # MP3 (ID3 TBPM)
+        try:
+            if filepath.lower().endswith('.mp3'):
+                try:
+                    id3 = ID3(filepath)
+                except ID3NoHeaderError:
+                    id3 = ID3()
+                # remove existing TBPM frames
+                try:
+                    id3.delall('TBPM')
+                except Exception:
+                    pass
+                id3.add(TBPM(encoding=3, text=str(bpm_val)))
+                id3.save(filepath)
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_bpm_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+        # MP4/M4A tempo tag 'tmpo'
+        try:
+            if isinstance(raw, MP4) or filepath.lower().endswith(('.m4a', '.mp4')):
+                mp4 = MP4(filepath)
+                tags = mp4.tags or {}
+                tags['tmpo'] = [bpm_val]
+                mp4.tags = tags
+                mp4.save()
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_bpm_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+        # FLAC Vorbis comment
+        try:
+            if isinstance(raw, FLAC) or filepath.lower().endswith('.flac'):
+                fl = FLAC(filepath)
+                fl['bpm'] = str(bpm_val)
+                fl.save()
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_bpm_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+        # Generic easy tag fallback
+        try:
+            easy = MutagenFile(filepath, easy=True)
+            if easy is not None:
+                easy['bpm'] = [str(bpm_val)]
+                easy.save()
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_bpm_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+    except Exception:
+        pass
+    return False
+
+
 # Global instance for use across the application
 metadata_extractor = MetadataExtractor()
+
+# BPM preference: 'perceived' (50-100) or 'raw' (no octave folding)
+BPM_PREFERENCE = 'perceived'
+
+def set_bpm_preference(mode: str):
+    global BPM_PREFERENCE
+    if mode in ('perceived', 'raw'):
+        BPM_PREFERENCE = mode
+    else:
+        BPM_PREFERENCE = 'perceived'
 
 # Convenience functions for backward compatibility
 def get_metadata(filepath):

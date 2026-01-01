@@ -40,6 +40,8 @@ if sys.platform == 'win32':
 
 import vlc
 from typing import Optional, Callable
+import threading
+import audio.metadata as metadata_module
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,7 @@ class AudioPlayer:
                 media = self.instance.media_new(path)
                 self.player.set_media(media)
                 self.player.play()
+
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
 
@@ -200,6 +203,19 @@ class AudioPlayer:
         except Exception:
             logger.error("Failed to get track length", exc_info=True)
             return 0
+
+    def set_time(self, time_ms: int) -> None:
+        """
+        Set the playback position.
+
+        Args:
+            time_ms: Position in milliseconds.
+        """
+        with self._lock:
+            try:
+                self.player.set_time(time_ms)
+            except Exception:
+                logger.error(f"Failed to set time to {time_ms}", exc_info=True)
 
     def get_audio_devices(self) -> list:
         """

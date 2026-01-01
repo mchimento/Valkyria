@@ -80,8 +80,15 @@ class BrowserView(ttk.Frame):
         self.drag_start_pos = None
         self.suppress_selection = False
 
+        # Track clicked item for distinguishing click vs drag
+        self._clicked_item = None
+        self._single_click_timer = None
+        self._mouse_moved = False
+
         # Track index for internal live reordering
         self.internal_drag_index = None
+        self.internal_drag_indices = []  # For multi-item reordering
+        self.last_internal_target = None
 
         # Drag tooltip for showing song names during drag
         self.drag_tooltip = tk.Toplevel(self)
@@ -176,6 +183,37 @@ class BrowserView(ttk.Frame):
         # Update scrollbar
         self._update_scrollbar()
 
+    def _reorder_browser_tree(self):
+        """Efficiently reorder browser tree items without re-fetching metadata."""
+        # Store current items' data
+        current_items = []
+        children = self.tree.get_children()
+        for iid in children:
+            text = self.tree.item(iid, 'text')
+            current_items.append(text)
+
+        # Clear tree
+        self.tree.delete(*children)
+
+        # Re-insert in new order
+        for i, text in enumerate(current_items):
+            # Update tags based on new position
+            tags = ["odd" if i % 2 == 1 else "even"]
+            if "striped_bg" in self.theme.palette and i % 2 == 1:
+                tags.append("striped")
+
+            self.tree.insert('', tk.END, text=text, tags=tuple(tags))
+
+        # Update scrollbar
+        self._update_scrollbar()
+
+    def _handle_single_click(self, item):
+        """Handle a confirmed single click by removing selection."""
+        if item and item in self.tree.selection():
+            self.tree.selection_remove(item)
+        # Clean up timer since it fired
+        self._single_click_timer = None
+
     # ---------- Middle Buttons: Browse Song, Add, Add below ----------
     def browse_folder(self):
         folder = filedialog.askdirectory()
@@ -223,10 +261,27 @@ class BrowserView(ttk.Frame):
         self.drag_start_pos = (event.x, event.y)
         self.drag_data = None
         self.internal_drag_index = None
+        self.internal_drag_indices = []  # For multi-item reordering
+        self.last_internal_target = None
+
+        # Handle click vs drag distinction for multi-selection
+        current_selection = self.tree.selection()
+        if item in current_selection and len(current_selection) > 1:
+            # Multi-selection: allow dragging without changing selection
+            self._clicked_item = item
+            # Set up drag state for multi-selection
+            self.internal_drag_indices = [self.tree.index(s) for s in current_selection]
+            return "break"
+        elif item in current_selection and len(current_selection) == 1:
+            # Single selection: allow immediate drag
+            self._clicked_item = item
+            self.state.dragged_index = self.tree.index(item)
 
     def _on_drag_motion(self, event):
         if not self.drag_start_pos:
             return
+
+        self._clicked_item = None
 
         paths = []  # Initialize paths here to make it accessible throughout the method
 
@@ -242,10 +297,14 @@ class BrowserView(ttk.Frame):
             sels = self.tree.selection()
 
             if len(sels) == 1:
-                # We can do internal reorder
+                # Single item internal reorder
                 self.internal_drag_index = self.tree.index(sels[0])
-            else:
+                self.internal_drag_indices = []
+            elif not self.internal_drag_indices:  # Only set if not already set from drag start
+                # Multi-item reorder
                 self.internal_drag_index = None
+                self.internal_drag_indices = [self.tree.index(s) for s in sels]
+                self.last_internal_target = None
 
             for s in sels:
                 idx = self.tree.index(s)
@@ -293,8 +352,8 @@ class BrowserView(ttk.Frame):
         if self.playlist_view:
              self.playlist_view.handle_external_drag_motion(x_root, y_root, self.drag_data)
 
-        # 2. Internal Live Reorder (if single item)
-        if self.internal_drag_index is not None:
+        # 2. Internal Live Reorder
+        if self.internal_drag_index is not None or self.internal_drag_indices:
             # Check if over BrowserView
             tree_x = self.tree.winfo_rootx()
             tree_y = self.tree.winfo_rooty()
@@ -305,26 +364,77 @@ class BrowserView(ttk.Frame):
                  target_row = self.tree.identify_row(event.y)
                  if target_row:
                       target_index = self.tree.index(target_row)
-                      if target_index != self.internal_drag_index:
-                           # Valid swap
-                           if 0 <= target_index < len(self.state.browser_files) and 0 <= self.internal_drag_index < len(self.state.browser_files):
-                                # Visual update: Move item
-                                dragged_item = self.tree.get_children()[self.internal_drag_index]
-                                self.tree.move(dragged_item, '', target_index)
 
-                                # Data update: Swap files
-                                self.state.browser_files.insert(target_index, self.state.browser_files.pop(self.internal_drag_index))
+                      if self.internal_drag_index is not None:
+                          # Single item reorder (existing logic)
+                          if target_index != self.internal_drag_index:
+                               if 0 <= target_index < len(self.state.browser_files) and 0 <= self.internal_drag_index < len(self.state.browser_files):
+                                    dragged_item = self.tree.get_children()[self.internal_drag_index]
+                                    self.tree.move(dragged_item, '', target_index)
+                                    self.state.browser_files.insert(target_index, self.state.browser_files.pop(self.internal_drag_index))
+                                    self._restripe_tree()
+                                    self.internal_drag_index = target_index
+                                    self.tree.selection_set(dragged_item)
+                                    self.tree.see(dragged_item)
+                      else:
+                          # Multi-item reorder
+                          if self.internal_drag_indices and target_index not in self.internal_drag_indices:
+                              if self.last_internal_target != target_index:
+                                  self.last_internal_target = target_index
 
-                                # Re-apply stripes (visual only)
-                                self._restripe_tree()
+                                  # Calculate new positions
+                                  selected_indices = sorted(self.internal_drag_indices)
+                                  if target_index < selected_indices[0]:
+                                      # Moving up
+                                      new_positions = list(range(target_index, target_index + len(selected_indices)))
+                                  else:
+                                      # Moving down
+                                      new_positions = list(range(target_index - len(selected_indices) + 1, target_index + 1))
 
-                                self.internal_drag_index = target_index
+                                  # Move items in data
+                                  selected_files = [self.state.browser_files[i] for i in selected_indices]
 
-                                # Move selection highlight to follow dragged item
-                                self.tree.selection_set(dragged_item)
-                                self.tree.see(dragged_item)
+                                  # Remove from old positions (reverse order)
+                                  for i in sorted(selected_indices, reverse=True):
+                                      self.state.browser_files.pop(i)
+
+                                  # Insert at new positions
+                                  for i, file_path in enumerate(selected_files):
+                                      self.state.browser_files.insert(new_positions[i], file_path)
+
+                                  # Update treeview efficiently
+                                  self._reorder_browser_tree()
+
+                                  # Update indices
+                                  self.internal_drag_indices = new_positions
+
+                                  # Restore selection
+                                  children = self.tree.get_children()
+                                  for new_pos in new_positions:
+                                      if new_pos < len(children):
+                                          self.tree.selection_add(children[new_pos])
+
+                                  # Scroll to dragged items
+                                  if new_positions:
+                                      self.tree.see(children[new_positions[0]])
 
     def _on_drag_release(self, event):
+        # Cancel single-click timer only if there was mouse movement (drag)
+        if self._single_click_timer is not None and self._mouse_moved:
+            self.after_cancel(self._single_click_timer)
+            self._single_click_timer = None
+            self._mouse_moved = False
+
+        # Handle single-click selection if no drag occurred
+        if self._clicked_item and not self._mouse_moved and not self.drag_data:
+            current_selection = self.tree.selection()
+            if self._clicked_item in current_selection and len(current_selection) > 1:
+                # Change selection to just the clicked item
+                self.tree.selection_set(self._clicked_item)
+
+        # Clear clicked item
+        self._clicked_item = None
+
         self.winfo_toplevel().configure(cursor="")
         self.drag_start_pos = None
 
@@ -345,6 +455,8 @@ class BrowserView(ttk.Frame):
 
             self.drag_data = None
             self.internal_drag_index = None
+            self.internal_drag_indices = []
+            self.last_internal_target = None
 
             # NOW allow playlist to clean up (reset drop index)
             if self.playlist_view:

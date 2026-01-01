@@ -7,6 +7,9 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
 from typing import Optional, Callable
+import threading
+from audio.metadata import get_metadata, analyze_bpm, write_bpm, metadata_extractor
+from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +79,23 @@ class ControlsBar(ttk.Frame):
             self.tooltip_manager.attach(self.btn_stop, lambda: "Stop (S)")
             self.tooltip_manager.attach(self.btn_next, lambda: "Next Track (→)")
 
-        # ---------------- TIME LABEL ----------------
+        # ---------------- WAVEFORM SEEKBAR ----------------
         middle = ttk.Frame(self)
         middle.pack(side=tk.LEFT, padx=12)
-        self.time_var = tk.StringVar(value="00:00 / 00:00")
-        ttk.Label(middle, textvariable=self.time_var).pack(side=tk.LEFT)
+
+        # Current time label (left side)
+        self.current_time_var = tk.StringVar(value="--:--")
+        self.current_time_label = ttk.Label(middle, textvariable=self.current_time_var, width=8, anchor="center")
+        self.current_time_label.pack(side=tk.LEFT)
+
+        # Create waveform seekbar with same height as control buttons
+        self.waveform_seekbar = WaveformSeekbar(middle, self.player, self.theme, width=360, height=40)
+        self.waveform_seekbar.pack(side=tk.LEFT, pady=2)
+
+        # Total time label (right side)
+        self.total_time_var = tk.StringVar(value="--:--")
+        self.total_time_label = ttk.Label(middle, textvariable=self.total_time_var, width=8, anchor="center")
+        self.total_time_label.pack(side=tk.LEFT)
 
         # Play on double-click checkbutton
         self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
@@ -166,6 +181,8 @@ class ControlsBar(ttk.Frame):
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
             self.player.play(path)
+            # Load waveform for the new track
+            self.waveform_seekbar.load_waveform(path)
 
         # Set play button to pressed state and reset pause button only if playlist has songs
         if self.state.playlist and len(self.state.playlist) > 0:
@@ -235,6 +252,8 @@ class ControlsBar(ttk.Frame):
         self.is_playing = False
         # Clear current index to remove playing highlight
         self.state.current_index = None
+        # Clear waveform when stopped
+        self.waveform_seekbar.clear()
         # Update playlist highlight if available
         if self.playlist:
             self.playlist._highlight_current()
@@ -265,7 +284,12 @@ class ControlsBar(ttk.Frame):
 
     def _on_mute_toggle(self):
         """Toggle mute state."""
-        current_state = self.player.get_mute_state()
+        # Use local state when no media is playing, otherwise query player
+        if self.player.is_playing() or self.player.is_paused():
+            current_state = self.player.get_mute_state()
+        else:
+            current_state = self.is_muted
+
         new_state = not current_state
 
         # Update player
@@ -369,13 +393,16 @@ class ControlsBar(ttk.Frame):
             length_ms = self.player.get_length()
             pos_ms = self.player.get_time()
             if length_ms <= 0:
-                self.time_var.set("00:00 / 00:00")
+                self.current_time_var.set("--:--")
+                self.total_time_var.set("--:--")
             else:
                 cur_s = int(pos_ms // 1000)
                 len_s = int(length_ms // 1000)
-                self.time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d} / {len_s//60:02d}:{len_s%60:02d}")
+                self.current_time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d}")
+                self.total_time_var.set(f"{len_s//60:02d}:{len_s%60:02d}")
         except Exception:
-            self.time_var.set("00:00 / 00:00")
+            self.current_time_var.set("--:--")
+            self.total_time_var.set("--:--")
 
         self._update_id = self.after(500, self._schedule_time_update)
 
@@ -418,15 +445,66 @@ class ControlsBar(ttk.Frame):
         except Exception:
             pass
 
+        # Update waveform seekbar theme
+        try:
+            if hasattr(self, 'waveform_seekbar'):
+                self.waveform_seekbar.update_theme()
+        except Exception:
+            pass
+
     def destroy(self):
         if self._update_id:
             try:
                 self.after_cancel(self._update_id)
             except Exception:
                 pass
+        # Clean up waveform seekbar
+        if hasattr(self, 'waveform_seekbar'):
+            self.waveform_seekbar.destroy()
         super().destroy()
 
     # ---------------- STATUS CALLBACK ----------------
     def _send_status(self, event_type):
         if callable(self.status_callback):
             self.status_callback(event_type)
+
+    def _on_play_on_double_change(self):
+        """Handle play on double-click setting change."""
+        new_value = self.play_on_double_var.get()
+
+        # Update both settings and state
+        if self.settings:
+            self.settings.play_on_double = new_value
+            try:
+                self.settings.save()
+            except Exception:
+                pass
+
+        # Update state as well since playlist view checks state.play_on_double
+        self.state.play_on_double = new_value
+
+    def _check_and_analyze_bpm(self, filepath):
+        """Check if BPM is missing and analyze it in a background thread."""
+        try:
+            # Get current metadata to check if BPM exists
+            metadata = get_metadata(filepath)
+            if metadata.get('bpm') is None:
+                thread = threading.Thread(target=self._analyze_bpm_worker, args=(filepath,), daemon=True)
+                thread.start()
+        except Exception as e:
+            logger.error(f"Error checking BPM for {filepath}: {e}")
+
+    def _analyze_bpm_worker(self, filepath):
+        """Worker function to analyze BPM and update UI temporarily."""
+        try:
+            analyzed_bpm = analyze_bpm(filepath)
+
+            if analyzed_bpm is not None:
+                # Store temporary BPM in metadata extractor cache without writing to file
+                metadata_extractor._cache[filepath]['bpm'] = analyzed_bpm
+                # Notify listeners to update UI with temporary BPM
+                metadata_extractor._notify_bpm_listeners(filepath)
+            else:
+                logger.warning(f"BPM analysis returned None for {filepath}")
+        except Exception as e:
+            logger.error(f"Error in BPM analysis worker for {filepath}: {e}")

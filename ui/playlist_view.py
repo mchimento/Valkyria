@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import os
-from audio.metadata import get_metadata, get_display_title
+from audio.metadata import get_metadata, get_display_title, metadata_extractor, get_display_bpm
 from ui.playlist_context_menu import PlaylistContextMenu
 
 
@@ -37,6 +37,18 @@ class PlaylistView(ttk.Frame):
         self._setup_ui()
         self._setup_bindings()
         self._apply_modern_style()
+
+        # Register BPM listener to refresh playlist when bpm is written
+        try:
+            metadata_extractor.register_bpm_listener(self._on_bpm_updated)
+        except Exception:
+            pass
+
+        # Unregister on destroy
+        try:
+            self.bind('<Destroy>', lambda e: metadata_extractor.unregister_bpm_listener(self._on_bpm_updated) if e.widget is self else None)
+        except Exception:
+            pass
 
         # Drop indicator for external drag-drop
         self.drop_indicator = tk.Frame(self.tree, background=self.theme.palette.get("accent", "#BB86FC"), height=3)
@@ -85,7 +97,7 @@ class PlaylistView(ttk.Frame):
 
         self.tree = ttk.Treeview(
             tree_frame,
-            columns=("Title", "Artist", "Album", "Duration"),
+            columns=("Title", "Artist", "Album", "Duration", "BPM"),
             show="headings",  # Show column headings
             selectmode="extended",  # Allow multi-select
             yscrollcommand=self._on_tree_scroll
@@ -95,11 +107,13 @@ class PlaylistView(ttk.Frame):
         self.tree.heading("Artist", text="  Artist", anchor="w")
         self.tree.heading("Album", text="  Album", anchor="w")
         self.tree.heading("Duration", text="  Duration", anchor="w")
+        self.tree.heading("BPM", text="  BPM", anchor="center")
 
         self.tree.column("Title", width=200, minwidth=150, stretch=True, anchor="w")
         self.tree.column("Artist", width=80, minwidth=50, stretch=True, anchor="w")
         self.tree.column("Album", width=100, minwidth=60, stretch=True, anchor="w")
         self.tree.column("Duration", width=100, minwidth=50, stretch=False, anchor="center")
+        self.tree.column("BPM", width=60, minwidth=40, stretch=False, anchor="center")
 
         self.tree.pack(fill="both", expand=True, padx=(0, 10))
 
@@ -147,11 +161,6 @@ class PlaylistView(ttk.Frame):
         self.tree.bind("<Motion>", self._on_tree_motion)
         self.tree.bind("<Leave>", self._on_tree_leave)
 
-        # Column resize tracking
-        self.tree.bind("<Button-1>", self._on_resize_start)
-        self.tree.bind("<B1-Motion>", self._on_resize_motion)
-        self.tree.bind("<ButtonRelease-1>", self._on_resize_end)
-
     def _apply_modern_style(self):
         """Apply modern, theme-aware styling."""
         style = ttk.Style()
@@ -195,6 +204,12 @@ class PlaylistView(ttk.Frame):
         )
 
         style.map(
+            "Playlist.Treeview.Heading",
+            background=[("active", bg)],  # Remove hover effect
+            foreground=[("active", fg)]
+        )
+
+        style.map(
             "Playlist.Treeview",
             background=[("selected", select_bg)],
             foreground=[("selected", select_fg)]
@@ -234,6 +249,65 @@ class PlaylistView(ttk.Frame):
 
     # ========== Refresh and Rendering ==========
 
+    def refresh_bpm_display_only(self):
+        """Refresh only BPM column values without disturbing playback or selection."""
+        try:
+            # Temporarily disable selection event to prevent playback interference
+            self.tree.unbind("<<TreeviewSelect>>")
+
+            # Get all current items
+            children = self.tree.get_children()
+
+            for i, item in enumerate(children):
+                if i < len(self.state.playlist):
+                    filepath = self.state.playlist[i]
+                    metadata = self._get_metadata(filepath)
+                    bpm = metadata.get("bpm", "")
+                    if bpm is None:
+                        bpm = ""
+
+                    # Use display BPM function for normalized display
+                    display_bpm = get_display_bpm(bpm)
+                    padded_bpm = f"  {display_bpm}" if display_bpm else ""
+                    current_values = list(self.tree.item(item, 'values'))
+                    if len(current_values) >= 5:
+                        current_values[4] = padded_bpm
+                        self.tree.item(item, values=current_values)
+        except Exception:
+            self.refresh(preserve_selection=True)
+        finally:
+            self.tree.bind("<<TreeviewSelect>>", self._on_selection_change)
+
+    def refresh_metadata_for_file(self, filepath):
+        """Refresh metadata display for a specific file in the playlist."""
+        try:
+            # Find the file in the playlist
+            for i, playlist_file in enumerate(self.state.playlist):
+                if playlist_file == filepath:
+                    # Get updated metadata
+                    metadata = self._get_metadata(filepath)
+                    title = metadata.get("title", get_display_title(filepath))
+                    artist = metadata.get("artist", "")
+                    album = metadata.get("album", "")
+                    duration = metadata.get("duration", "")
+                    bpm = metadata.get("bpm", "")
+                    if bpm is None:
+                        bpm = ""
+
+                    children = self.tree.get_children()
+                    if i < len(children):
+                        item_id = children[i]
+                        # Add padding to column values to match main refresh method
+                        padded_artist = f"  {artist}"
+                        padded_album = f"  {album}"
+                        padded_duration = f"  {duration}"
+                        padded_bpm = f"  {bpm}" if bpm else ""
+                        values = (title, padded_artist, padded_album, padded_duration, padded_bpm)
+                        self.tree.item(item_id, values=values)
+                    break
+        except Exception as e:
+            pass
+
     def refresh(self, preserve_selection=False):
         """Efficiently refresh the playlist display."""
         # Store current selection
@@ -253,6 +327,10 @@ class PlaylistView(ttk.Frame):
             artist = metadata.get("artist", "")
             album = metadata.get("album", "")
             duration = metadata.get("duration", "")
+            bpm = metadata.get("bpm", "")
+            # Convert None to empty string for display
+            if bpm is None:
+                bpm = ""
 
             # Determine tags based on state
             tags = ["odd" if i % 2 == 1 else "even"]
@@ -263,20 +341,23 @@ class PlaylistView(ttk.Frame):
                 icon = "▶"
                 tags.append("playing")
 
-            items_to_insert.append((i, icon, title, artist, album, duration, filepath, tags))
+            items_to_insert.append((i, icon, title, artist, album, duration, bpm, filepath, tags))
 
         # Insert all at once
-        for i, icon, title, artist, album, duration, filepath, tags in items_to_insert:
+        for i, icon, title, artist, album, duration, bpm, filepath, tags in items_to_insert:
             # Add padding to column values
             padded_artist = f"  {artist}"  # Add 2 spaces padding
             padded_album = f"  {album}"   # Add 2 spaces padding
             padded_duration = f"  {duration}"  # Add 2 spaces padding
+            # Use display BPM function for normalized display
+            display_bpm = get_display_bpm(bpm)
+            padded_bpm = f"  {display_bpm}" if display_bpm else ""  # Add 2 spaces padding if BPM exists
 
             self.tree.insert(
                 '',
                 tk.END,
                 text=icon,
-                values=(title, padded_artist, padded_album, padded_duration),
+                values=(title, padded_artist, padded_album, padded_duration, padded_bpm),
                 tags=tuple(tags)
             )
 
@@ -298,6 +379,15 @@ class PlaylistView(ttk.Frame):
         else:
             self.scrollbar_canvas.pack(side="right", fill="y")
             self.tree.pack(fill="both", expand=True, padx=(0, 10))
+
+    def _on_bpm_updated(self, filepath):
+        try:
+            # If the updated file is in the current playlist, refresh BPM display only
+            if filepath in self.state.playlist:
+                if self.winfo_exists():
+                    self.after(50, lambda: self.refresh_bpm_display_only())
+        except Exception:
+            pass
 
     def _get_metadata(self, filepath):
         """Get metadata for a file using the centralized metadata module."""
@@ -441,29 +531,53 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_press(self, event):
         """Start drag operation."""
+        # Hide resize indicators when mouse button is pressed
+        self._hide_resize_indicators()
+
         item = self.tree.identify_row(event.y)
         if item:
             current_selection = self.tree.selection()
             if item in current_selection and len(current_selection) == 1:
-                self.tree.selection_remove(item)
-                self.state.selected_indices = []
-                return "break"
-
-            # If clicking on an item that's already part of a multi-selection,
-            # preserve multi-selection for potential drag, but remember the clicked item
-            if item in current_selection and len(current_selection) > 1:
-                # Store the clicked item for potential single-click selection on release
+                self._single_click_timer = self.after(100, lambda: self._handle_single_click(item))
                 self._clicked_item = item
-                # Keep the current multi-selection intact for dragging
                 self.state.dragged_index = self.tree.index(item)
                 return "break"
 
+            if item in current_selection and len(current_selection) > 1:
+                self._clicked_item = item
+                self.state.dragged_index = self.tree.index(item)
+                self._original_selection_indices = [self.tree.index(item) for item in current_selection]
+                self._original_current_in_selection = self.state.current_index in self._original_selection_indices
+                self._original_current_index = self.state.current_index
+                return "break"
+
             self.state.dragged_index = self.tree.index(item)
+        else:
+            # Click in empty area - clear selection but don't affect songs
+            self.tree.selection_remove(self.tree.selection())
+            self.state.selected_indices = []
+            self._clicked_item = None
+            self.state.dragged_index = None
+            return "break"
+
+    def _handle_single_click(self, item):
+        """Handle a confirmed single click by removing selection."""
+        if item and item in self.tree.selection():
+            self.tree.selection_remove(item)
+            self.state.selected_indices = []
 
     def _on_mouse_motion(self, event):
         """Handle drag motion with live swapping."""
         if self.state.dragged_index is None:
             return
+
+        # Cancel single-click timer if mouse moves (indicating drag intent)
+        if hasattr(self, '_single_click_timer'):
+            self.after_cancel(self._single_click_timer)
+            delattr(self, '_single_click_timer')
+            # Mark that mouse moved (drag started)
+            self._mouse_moved = True
+
         self._clicked_item = None
 
         target_row = self.tree.identify_row(event.y)
@@ -478,9 +592,25 @@ class PlaylistView(ttk.Frame):
         is_multi_drag = dragged_item in current_selection and len(current_selection) > 1
 
         if is_multi_drag:
+            # Check if target is within selected items - if so, don't move
+            if target_row in current_selection:
+                return
+
+            # Prevent multiple updates during the same drag operation
+            if hasattr(self, '_last_multi_drag_target') and self._last_multi_drag_target == target_index:
+                return
+            self._last_multi_drag_target = target_index
+
+            # Use stored original selection values from drag start
+            original_current_in_selection = getattr(self, '_original_current_in_selection', False)
+            original_selection_indices = getattr(self, '_original_selection_indices', [])
+
             # Handle multi-item drag reordering
             selected_indices = [self.tree.index(item) for item in current_selection]
             selected_indices.sort()  # Sort to maintain order
+
+            # Save old playlist for mapping data
+            old_playlist = self.state.playlist.copy()
 
             # Calculate new positions for all selected items
             if target_index < self.state.dragged_index:
@@ -493,6 +623,11 @@ class PlaylistView(ttk.Frame):
             # Move items in data model
             selected_files = [self.state.playlist[i] for i in selected_indices]
 
+            # Get the current playing song's file path BEFORE reordering
+            current_song = None
+            if self.state.current_index is not None:
+                current_song = self.state.playlist[self.state.current_index]
+
             # Remove selected items from original positions
             for i in sorted(selected_indices, reverse=True):
                 self.state.playlist.pop(i)
@@ -502,20 +637,50 @@ class PlaylistView(ttk.Frame):
                 self.state.playlist.insert(new_positions[i], file_path)
 
             # Adjust current_index if needed
-            if self.state.current_index is not None:
-                if self.state.current_index in selected_indices:
-                    # Current playing item was dragged, find its new position
-                    old_pos = selected_indices.index(self.state.current_index)
-                    self.state.current_index = new_positions[old_pos]
+            if self.state.current_index is not None and current_song is not None:
+                if original_current_in_selection:
+                    # Current playing item was originally in the dragged selection
+                    original_current_index = getattr(self, '_original_current_index', None)
+                    if original_current_index is not None and original_current_index in original_selection_indices:
+                        old_pos = original_selection_indices.index(original_current_index)
+                        self.state.current_index = new_positions[old_pos]
                 else:
-                    # Adjust for items moved before/after current position
-                    moved_before = sum(1 for old, new in zip(selected_indices, new_positions)
-                                     if old < self.state.current_index and new >= self.state.current_index)
-                    moved_after = sum(1 for old, new in zip(selected_indices, new_positions)
-                                    if old > self.state.current_index and new <= self.state.current_index)
-                    self.state.current_index += moved_after - moved_after
+                    # Find where the current song ended up after the reordering
+                    try:
+                        new_current_index = self.state.playlist.index(current_song)
+                        self.state.current_index = new_current_index
+                    except ValueError:
+                        # Song was somehow removed from playlist
+                        self.state.current_index = None
 
-            self.refresh()
+            # Efficiently update treeview without re-fetching metadata
+            children = self.tree.get_children()
+            current_items = []
+            for iid in children:
+                values = self.tree.item(iid, 'values')
+                text = self.tree.item(iid, 'text')
+                current_items.append((text, values))
+
+            # Clear tree
+            self.tree.delete(*children)
+
+            # Re-insert in new order, mapping to correct old data
+            for i, file_path in enumerate(self.state.playlist):
+                # Find the old index of this file
+                old_index = old_playlist.index(file_path)
+                old_text, values = current_items[old_index]
+
+                # Set text based on new playing position (ignore old text which may have wrong ▶)
+                text = "▶" if self.state.current_index is not None and i == self.state.current_index else ""
+
+                tags = ["odd" if i % 2 == 1 else "even"]
+                if self.state.current_index is not None and i == self.state.current_index:
+                    tags.append("playing")
+
+                self.tree.insert('', tk.END, text=text, values=values, tags=tuple(tags))
+
+            # Update scrollbar
+            self._update_scrollbar()
 
             # Manually restore selection based on new positions
             children = self.tree.get_children()
@@ -525,6 +690,11 @@ class PlaylistView(ttk.Frame):
 
             # Update dragged_index to the first selected item's new position
             self.state.dragged_index = new_positions[0]
+
+            # Scroll to the dragged item
+            dragged_item = children[self.state.dragged_index]
+            self.tree.see(dragged_item)
+
             return
 
         # Move in tree (visual)
@@ -555,16 +725,32 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_release(self, event):
         """End drag operation."""
+        if hasattr(self, '_single_click_timer') and hasattr(self, '_mouse_moved'):
+            self.after_cancel(self._single_click_timer)
+            delattr(self, '_single_click_timer')
+            delattr(self, '_mouse_moved')
+
         # Handle single-click selection if no drag occurred
         if self._clicked_item and self.state.dragged_index is not None:
             current_selection = self.tree.selection()
-            if self._clicked_item in current_selection and len(current_selection) > 1:
-                # Change selection to just the clicked item
+            drag_occurred = hasattr(self, '_mouse_moved')
+            if not drag_occurred:
+                # Always select the clicked item on single click (regardless of current selection)
                 self.tree.selection_set(self._clicked_item)
                 self.state.selected_indices = [self.tree.index(self._clicked_item)]
 
         # Clear clicked item
         self._clicked_item = None
+
+        # Clear stored original selection values
+        if hasattr(self, '_original_selection_indices'):
+            delattr(self, '_original_selection_indices')
+        if hasattr(self, '_original_current_in_selection'):
+            delattr(self, '_original_current_in_selection')
+        if hasattr(self, '_original_current_index'):
+            delattr(self, '_original_current_index')
+        if hasattr(self, '_last_multi_drag_target'):
+            delattr(self, '_last_multi_drag_target')
 
         self.state.dragged_index = None
         if self.state.current_index is not None:
@@ -784,7 +970,7 @@ class PlaylistView(ttk.Frame):
         """Show a vertical line at the column boundary."""
         indicator = tk.Frame(
             self.tree,
-            background=self.theme.palette.get("accent", "#BB86FC"),
+            background=self.theme.palette.get("resize_column_color", "#BB86FC"),
             width=2
         )
 
@@ -799,32 +985,6 @@ class PlaylistView(ttk.Frame):
             indicator.destroy()
         self._resize_indicators.clear()
         self._last_hover_region = None
-
-    def _on_resize_start(self, event):
-        """Handle column resize start."""
-        # Check if clicking on column boundary (resize area)
-        if event.y <= 20:  # In header area
-            columns = self.tree.cget("columns")
-            current_x = 0
-            for col in columns:
-                col_width = self.tree.column(col, "width")
-                # Check if click is near column boundary (within 5 pixels)
-                if current_x + col_width - 5 <= event.x <= current_x + col_width + 5:
-                    self._is_resizing = True
-                    return
-                current_x += col_width
-
-    def _on_resize_motion(self, event):
-        """Handle column resize motion."""
-        if self._is_resizing:
-            # Hide indicators during resize
-            self._hide_resize_indicators()
-
-    def _on_resize_end(self, event):
-        """Handle column resize end."""
-        self._is_resizing = False
-        # Show indicators again after resize ends
-        # This will be handled by the next motion event
 
     def _on_tree_motion(self, event):
         """Handle mouse motion over treeview items for hover effect."""
