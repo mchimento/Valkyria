@@ -66,6 +66,15 @@ class AudioPlayer:
         # small lock for thread-safety
         self._lock = threading.RLock()
 
+        # Initialize equalizer
+        try:
+            self.equalizer = vlc.AudioEqualizer()
+        except Exception as e:
+            logger.warning(f"Failed to initialize equalizer: {e}")
+            self.equalizer = None
+
+        self.equalizer_enabled = False
+
         logger.info("AudioPlayer initialized")
 
     def _on_end(self, event) -> None:
@@ -290,3 +299,56 @@ class AudioPlayer:
             logger.info(f"Audio device set to: {device_id}")
         except Exception as e:
             logger.error(f"Failed to set audio device to {device_id}: {e}")
+
+    def set_equalizer_enabled(self, enabled: bool) -> None:
+        """Enable or disable the equalizer."""
+        if not self.equalizer:
+            return
+
+        with self._lock:
+            self.equalizer_enabled = enabled
+            if enabled:
+                self.player.set_equalizer(self.equalizer)
+            else:
+                self.player.set_equalizer(None)
+
+    def get_equalizer_enabled(self) -> bool:
+        return self.equalizer_enabled
+
+    def set_equalizer_preamp(self, preamp: float) -> None:
+        """Set preamp level in dB (-20 to 20)."""
+        if not self.equalizer:
+            return
+
+        with self._lock:
+            try:
+                self.equalizer.set_preamp(preamp)
+                # Re-apply if enabled to ensure update takes effect immediately
+                if self.equalizer_enabled:
+                    self.player.set_equalizer(self.equalizer)
+            except Exception as e:
+                logger.error(f"Failed to set equalizer preamp: {e}")
+
+    def get_equalizer_preamp(self) -> float:
+        if not self.equalizer:
+            return 0.0
+        return self.equalizer.get_preamp()
+
+    def set_equalizer_band(self, band_index: int, value: float) -> None:
+        """Set gain for a specific band in dB (-20 to 20)."""
+        if not self.equalizer:
+            return
+
+        with self._lock:
+            try:
+                self.equalizer.set_amp_at_index(value, band_index)
+                # Re-apply if enabled to ensure update takes effect immediately
+                if self.equalizer_enabled:
+                    self.player.set_equalizer(self.equalizer)
+            except Exception as e:
+                logger.error(f"Failed to set equalizer band {band_index}: {e}")
+
+    def get_equalizer_band(self, band_index: int) -> float:
+        if not self.equalizer:
+            return 0.0
+        return self.equalizer.get_amp_at_index(band_index)
