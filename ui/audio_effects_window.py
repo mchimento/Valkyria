@@ -112,7 +112,10 @@ class AudioEffectsWindow(tk.Toplevel):
             width=150,
             height=28,
         )
-        self.preset_menu.pack(side=tk.RIGHT)
+        self.preset_menu.pack(side=tk.RIGHT, padx=(0, 10))
+
+        self.preset_label = ttk.Label(top_frame, text="Preset", font=("Roboto", 10, "bold"))
+        self.preset_label.pack(side=tk.RIGHT, padx=(0, 5))
 
         # EQ Container
         eq_container = ttk.Frame(self.main_frame)
@@ -139,10 +142,10 @@ class AudioEffectsWindow(tk.Toplevel):
             variable=self.preamp_var,
             command=self._on_preamp_change,
             height=200,
-            width=16,
-            border_width=1,
-            button_length=10,
-            corner_radius=2,
+            width=10,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
             button_corner_radius=2
         )
         self.preamp_slider.pack(pady=5)
@@ -182,10 +185,10 @@ class AudioEffectsWindow(tk.Toplevel):
                 variable=val_var,
                 command=lambda v, idx=i: self._on_band_change(idx, v),
                 height=200,
-                width=16,
-                border_width=1,
-                button_length=10,
-                corner_radius=2,
+                width=10,
+                border_width=0,
+                button_length=20,
+                corner_radius=4,
                 button_corner_radius=2
             )
             slider.pack(pady=5)
@@ -310,41 +313,42 @@ class AudioEffectsWindow(tk.Toplevel):
                     hover_color=accent_hover, bg_color=bg
                 )
 
-        # Sliders
-        slider_bg = palette.get("slider_bg", "#E0E0E0")
-        slider_fg = palette.get("slider_fg", accent)
-        slider_border = palette.get("border", "#cccccc")
+        # Sliders - VLC Style
+        slider_bg = palette.get("slider_bg", "#2a2a2a")  # Darker track background
+        slider_fg = palette.get("slider_fg", accent)     # Active progress color
+        slider_button = palette.get("accent", "#0078d4") # Button/handle color
 
         self.preamp_slider.configure(
             fg_color=slider_bg,
             progress_color=slider_fg,
-            button_color=slider_fg,
+            button_color=slider_button,
             button_hover_color=accent_hover,
             bg_color=bg,
-            border_color=slider_border
+            border_color="transparent"  # No border for VLC style
         )
 
         self.speed_slider.configure(
             fg_color=slider_bg,
             progress_color=slider_fg,
-            button_color=slider_fg,
+            button_color=slider_button,
             button_hover_color=accent_hover,
             bg_color=bg,
-            border_color=slider_border
+            border_color="transparent"  # No border for VLC style
         )
 
         for slider in self.sliders:
             slider.configure(
                 fg_color=slider_bg,
                 progress_color=slider_fg,
-                button_color=slider_fg,
+                button_color=slider_button,
                 button_hover_color=accent_hover,
                 bg_color=bg,
-                border_color=slider_border
+                border_color="transparent"  # No border for VLC style
             )
 
         # Labels
         self.preamp_label.configure(foreground=fg, background=bg)
+        self.preset_label.configure(foreground=fg, background=bg)
         for slider in self.sliders:
             if hasattr(slider, 'value_label'):
                 slider.value_label.configure(foreground=fg, background=bg)
