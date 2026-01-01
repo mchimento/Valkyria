@@ -45,7 +45,6 @@ class PreferencesWindow(tk.Toplevel):
         # Create sections
         self._create_interface_section()
         self._create_audio_section()
-        self._create_playback_section()
         # Add more sections here
 
         # Button frame
@@ -86,7 +85,7 @@ class PreferencesWindow(tk.Toplevel):
         self.rb_dark.pack(anchor='w', pady=2)
 
     def _create_audio_section(self):
-        """Create the Audio section with BPM preferences."""
+        """Create the Audio section with BPM and Crossfade preferences."""
         audio_frame = ttk.Frame(self.notebook)
         self.notebook.add(audio_frame, text="Audio")
 
@@ -100,7 +99,7 @@ class PreferencesWindow(tk.Toplevel):
 
         self.bpm_var = tk.StringVar(value=self.settings.bpm_mode)
         bpm_frame = ttk.Frame(content_frame)
-        bpm_frame.pack(fill='x', pady=(0, 20))
+        bpm_frame.pack(fill='x', pady=(0, 5))
 
         self.rb_perceived = ttk.Radiobutton(bpm_frame, text="Perceived (50-100 BPM)",
                                           value="perceived", variable=self.bpm_var)
@@ -110,13 +109,8 @@ class PreferencesWindow(tk.Toplevel):
                                      value="raw", variable=self.bpm_var)
         self.rb_raw.pack(anchor='w', pady=2)
 
-    def _create_playback_section(self):
-        """Create the Playback section with Crossfade preferences."""
-        playback_frame = ttk.Frame(self.notebook)
-        self.notebook.add(playback_frame, text="Playback")
-
-        content_frame = ttk.Frame(playback_frame)
-        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        # Separator
+        ttk.Separator(content_frame, orient='horizontal').pack(fill='x', pady=(5, 15))
 
         # Crossfade
         ttk.Label(content_frame, text="Crossfade",
