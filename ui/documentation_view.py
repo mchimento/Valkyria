@@ -1,6 +1,5 @@
 import tkinter as tk
 import customtkinter as ctk
-from ui.utils import center_window
 
 class BPMAnalysisWindow(ctk.CTkToplevel):
     """Documentation window for BPM Analysis feature."""

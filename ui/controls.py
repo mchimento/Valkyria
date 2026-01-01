@@ -8,7 +8,7 @@ from tkinter import ttk
 import customtkinter as ctk
 from typing import Optional, Callable
 import threading
-from audio.metadata import get_metadata, analyze_bpm, write_bpm, metadata_extractor
+from audio.metadata import get_metadata, analyze_bpm, metadata_extractor
 from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)

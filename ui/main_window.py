@@ -8,9 +8,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 import threading, os, io
-from app.paths import get_resource_path
-from audio.metadata import get_metadata, get_display_title, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor, get_display_bpm
-from PIL import Image, ImageTk, ImageDraw, ImageFont
+from audio.metadata import get_metadata, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor, get_display_bpm
+from PIL import Image, ImageDraw, ImageFont
 
 from audio import m3u as m3u_module, playback
 from ui.playlist_view import PlaylistView

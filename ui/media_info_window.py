@@ -6,8 +6,7 @@ from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
 import threading
-from pathlib import Path
-from audio.metadata import get_file_info, save_metadata, metadata_extractor, get_display_bpm, analyze_bpm, write_bpm
+from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm
 from ui.utils import center_window
 
 

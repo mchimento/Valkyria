@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import os
 from audio.metadata import get_metadata, get_display_title, metadata_extractor, get_display_bpm
 from ui.playlist_context_menu import PlaylistContextMenu
 

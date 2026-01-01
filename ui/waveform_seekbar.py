@@ -10,13 +10,10 @@ import warnings
 import subprocess
 import sys
 import customtkinter as ctk
-import librosa
 import soundfile as sf
-from pathlib import Path
 from pydub import AudioSegment
 import pydub.utils
 import numpy as np
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 

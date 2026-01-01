@@ -1,6 +1,4 @@
 import tkinter as tk
-import os
-from audio.metadata import get_display_title
 
 def center_window(window, parent=None):
     """

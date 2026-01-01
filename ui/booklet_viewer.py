@@ -3,7 +3,7 @@ Album Booklet Viewer Window
 Displays booklet/liner-note images extracted from audio file metadata.
 """
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from PIL import Image, ImageTk
 import io
 from audio.metadata import get_booklet_images
@@ -15,7 +15,7 @@ class BookletViewer:
     def __init__(self, parent, filepath):
         """
         Initialize the booklet viewer.
-        
+
         Args:
             parent: Parent window
             filepath (str): Path to the audio file

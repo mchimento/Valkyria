@@ -1,6 +1,6 @@
 import tkinter as tk
 import customtkinter as ctk
-from typing import Callable, Optional, List, Dict, Any
+from typing import Callable, List, Dict, Any
 
 
 class CustomMenuBar(ctk.CTkFrame):
