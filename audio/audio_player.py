@@ -10,6 +10,13 @@ import os
 import sys
 from pathlib import Path
 
+import vlc
+from typing import Optional, Callable
+import threading
+import audio.metadata as metadata_module
+
+logger = logging.getLogger(__name__)
+
 # Add project root to DLL search path for libvlc.dll
 # This allows VLC to find libvlc.dll in the project root directory
 if sys.platform == 'win32':
@@ -37,13 +44,6 @@ if sys.platform == 'win32':
 
     # Set VLC_PLUGIN_PATH to plugins_dir, where libvlc will find the 'plugins' subdirectory
     os.environ['VLC_PLUGIN_PATH'] = str(plugins_dir)
-
-import vlc
-from typing import Optional, Callable
-import threading
-import audio.metadata as metadata_module
-
-logger = logging.getLogger(__name__)
 
 class AudioPlayer:
     def __init__(self, on_track_end: Optional[Callable[[], None]] = None) -> None:
@@ -75,27 +75,6 @@ class AudioPlayer:
 
         self.equalizer_enabled = False
 
-        # Compressor settings (VLC defaults)
-        self.compressor_config = {
-            'enabled': False,
-            'makeup_gain': 6.0,
-            'threshold': -12.0,
-            'ratio': 4.0,
-            'attack': 25.0,
-            'release': 100.0,
-            'knee': 5.0
-        }
-
-        # Spatializer settings (VLC defaults)
-        self.spatializer_config = {
-            'enabled': False,
-            'roomsize': 0.85,
-            'width': 0.5,
-            'wet': 0.4,
-            'dry': 0.5,
-            'damp': 0.5
-        }
-
         logger.info("AudioPlayer initialized")
 
     def _on_end(self, event) -> None:
@@ -119,35 +98,7 @@ class AudioPlayer:
                 if self.player.is_playing():
                     self.player.stop()
 
-                # Build options for audio filters
-                options = []
-                audio_filters = []
-
-                # Compressor options
-                if self.compressor_config['enabled']:
-                    audio_filters.append("compressor")
-                    c = self.compressor_config
-                    options.append(f":compressor-makeup-gain={c['makeup_gain']}")
-                    options.append(f":compressor-threshold={c['threshold']}")
-                    options.append(f":compressor-ratio={c['ratio']}")
-                    options.append(f":compressor-attack={c['attack']}")
-                    options.append(f":compressor-release={c['release']}")
-                    options.append(f":compressor-knee={c['knee']}")
-
-                # Spatializer options
-                if self.spatializer_config['enabled']:
-                    audio_filters.append("spatializer")
-                    s = self.spatializer_config
-                    options.append(f":spatializer-roomsize={s['roomsize']}")
-                    options.append(f":spatializer-width={s['width']}")
-                    options.append(f":spatializer-wet={s['wet']}")
-                    options.append(f":spatializer-dry={s['dry']}")
-                    options.append(f":spatializer-damp={s['damp']}")
-
-                if audio_filters:
-                    options.append(f":audio-filter={':'.join(audio_filters)}")
-
-                media = self.instance.media_new(path, *options)
+                media = self.instance.media_new(path)
                 self.player.set_media(media)
                 self.player.play()
 
@@ -437,47 +388,3 @@ class AudioPlayer:
                 self.player.audio_output_set_channel(mode_map[mode])
             except Exception as e:
                 logger.error(f"Failed to set stereo mode: {e}")
-
-    # --- Compressor Methods ---
-    def set_compressor_config(self, key: str, value: float) -> None:
-        """Update a specific compressor setting."""
-        if key in self.compressor_config:
-            self.compressor_config[key] = value
-
-    def get_compressor_config(self) -> dict:
-        return self.compressor_config.copy()
-
-    def set_compressor_enabled(self, enabled: bool) -> None:
-        self.compressor_config['enabled'] = enabled
-
-    # --- Spatializer Methods ---
-    def set_spatializer_config(self, key: str, value: float) -> None:
-        """Update a specific spatializer setting."""
-        if key in self.spatializer_config:
-            self.spatializer_config[key] = value
-
-    def get_spatializer_config(self) -> dict:
-        return self.spatializer_config.copy()
-
-    def set_spatializer_enabled(self, enabled: bool) -> None:
-        self.spatializer_config['enabled'] = enabled
-
-    def apply_effects_now(self) -> None:
-        """
-        Reload the current media to apply new audio filter settings.
-        This will cause a brief interruption in playback.
-        """
-        with self._lock:
-            if not self.player.get_media():
-                return
-
-            # Get current state
-            current_time = self.get_time()
-            is_playing = self.is_playing()
-            mrl = self.player.get_media().get_mrl()
-
-            # Re-play (this creates new media with updated options)
-            self.play(mrl)
-            self.set_time(current_time)
-            if not is_playing:
-                self.pause()
