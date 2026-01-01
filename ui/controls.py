@@ -30,6 +30,7 @@ class ControlsBar(ttk.Frame):
         self.is_paused = False
         self.is_playing = False
         self.is_muted = False
+        self.crossfade_triggered = False
 
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
@@ -181,6 +182,7 @@ class ControlsBar(ttk.Frame):
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
             self.player.play(path)
+            self.crossfade_triggered = False
             # Load waveform for the new track
             self.waveform_seekbar.load_waveform(path)
 
@@ -400,6 +402,15 @@ class ControlsBar(ttk.Frame):
                 len_s = int(length_ms // 1000)
                 self.current_time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d}")
                 self.total_time_var.set(f"{len_s//60:02d}:{len_s%60:02d}")
+
+                # Check for crossfade trigger
+                if self.is_playing and not self.is_paused and not self.crossfade_triggered:
+                    if self.settings and getattr(self.settings, "crossfade_enabled", False):
+                        duration = getattr(self.settings, "crossfade_duration", 5) * 1000 # ms
+                        remaining = length_ms - pos_ms
+                        if 0 < remaining <= duration:
+                            self.crossfade_triggered = True
+                            self._send_status("crossfade")
         except Exception:
             self.current_time_var.set("--:--")
             self.total_time_var.set("--:--")

@@ -56,10 +56,11 @@ class PlaylistView(ttk.Frame):
     def _setup_ui(self):
         """Initialize the UI components."""
         # Header label
+        self.header_label_font_size = 18
         self.header_label = tk.Label(
             self,
             text="Playback queue",
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 18, "bold"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), self.header_label_font_size, "bold"),
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212"),
             anchor="w"
@@ -230,7 +231,7 @@ class PlaylistView(ttk.Frame):
         self.header_label.configure(
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212"),
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 16, "bold")
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), self.header_label_font_size, "bold")
         )
 
         self.scrollbar_canvas.configure(

@@ -21,6 +21,8 @@ class PreferencesWindow(tk.Toplevel):
         self.on_bpm_preference_change = on_bpm_preference_change
         self.original_theme = settings.theme
         self.original_bpm_mode = settings.bpm_mode
+        self.original_crossfade_enabled = getattr(settings, "crossfade_enabled", False)
+        self.original_crossfade_duration = getattr(settings, "crossfade_duration", 5)
 
         self.title("Preferences")
         self.geometry("300x400")
@@ -43,6 +45,7 @@ class PreferencesWindow(tk.Toplevel):
         # Create sections
         self._create_interface_section()
         self._create_audio_section()
+        self._create_playback_section()
         # Add more sections here
 
         # Button frame
@@ -66,7 +69,8 @@ class PreferencesWindow(tk.Toplevel):
         content_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
         # Theme selection
-        ttk.Label(content_frame, text="Theme", font=("Segoe UI", 10, "bold")).pack(anchor='w', pady=(0, 10))
+        ttk.Label(content_frame, text="Theme",
+                font=(self.palette.get("ui_font", "Segoe UI"), 10, "bold")).pack(anchor='w', pady=(0, 10))
 
         # Use lowercase theme consistently
         self.var = tk.StringVar(value=self.settings.theme.lower())
@@ -91,7 +95,8 @@ class PreferencesWindow(tk.Toplevel):
         content_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
         # BPM Mode selection
-        ttk.Label(content_frame, text="BPM Mode", font=("Segoe UI", 10, "bold")).pack(anchor='w', pady=(0, 10))
+        ttk.Label(content_frame, text="BPM Mode",
+                font=(self.palette.get("ui_font", "Segoe UI"), 10, "bold")).pack(anchor='w', pady=(0, 10))
 
         self.bpm_var = tk.StringVar(value=self.settings.bpm_mode)
         bpm_frame = ttk.Frame(content_frame)
@@ -104,6 +109,51 @@ class PreferencesWindow(tk.Toplevel):
         self.rb_raw = ttk.Radiobutton(bpm_frame, text="Raw (detected tempo)",
                                      value="raw", variable=self.bpm_var)
         self.rb_raw.pack(anchor='w', pady=2)
+
+    def _create_playback_section(self):
+        """Create the Playback section with Crossfade preferences."""
+        playback_frame = ttk.Frame(self.notebook)
+        self.notebook.add(playback_frame, text="Playback")
+
+        content_frame = ttk.Frame(playback_frame)
+        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+
+        # Crossfade
+        ttk.Label(content_frame, text="Crossfade",
+                font=(self.palette.get("ui_font", "Segoe UI"), 10, "bold")).pack(anchor='w', pady=(0, 10))
+
+        self.crossfade_enabled_var = tk.BooleanVar(value=getattr(self.settings, "crossfade_enabled", False))
+
+        cf_frame = ttk.Frame(content_frame)
+        cf_frame.pack(fill='x', pady=(0, 10))
+
+        self.cb_crossfade = ttk.Checkbutton(cf_frame, text="Enable Crossfade", variable=self.crossfade_enabled_var,
+                                           command=self._toggle_crossfade_slider)
+        self.cb_crossfade.pack(anchor='w')
+
+        self.crossfade_duration_var = tk.DoubleVar(value=float(getattr(self.settings, "crossfade_duration", 5)))
+
+        self.cf_slider_frame = ttk.Frame(content_frame)
+        self.cf_slider_frame.pack(fill='x', pady=(0, 20))
+
+        ttk.Label(self.cf_slider_frame, text="Duration:",
+                foreground=self.palette.get("fg", "#FFFFFF")).pack(anchor='w')
+
+        slider_container = ttk.Frame(self.cf_slider_frame)
+        slider_container.pack(fill='x', pady=(5, 0))
+
+        self.lbl_duration = ttk.Label(slider_container, text=f"{int(self.crossfade_duration_var.get())}s", width=4,
+                                foreground=self.palette.get("fg", "#FFFFFF"))
+        self.lbl_duration.pack(side='right')
+
+        self.slider_duration = ttk.Scale(slider_container, from_=1, to=12, variable=self.crossfade_duration_var,
+                                        orient='horizontal', command=self._update_duration_label)
+        self.slider_duration.pack(side='left', fill='x', expand=True, padx=(0, 10))
+
+        self._toggle_crossfade_slider()
+
+    def _update_duration_label(self, val):
+        self.lbl_duration.configure(text=f"{int(float(val))}s")
 
     def _create_buttons(self, parent_frame):
         """Create Save and Cancel buttons."""
@@ -147,6 +197,31 @@ class PreferencesWindow(tk.Toplevel):
         )
         self.save_btn.pack(side=tk.RIGHT)
 
+    def _toggle_crossfade_slider(self):
+        state = 'normal' if self.crossfade_enabled_var.get() else 'disabled'
+
+        if state == 'normal':
+            label_color = self.palette.get("fg", "#FFFFFF")
+        else:
+            label_color = self.palette.get("disabled_fg", "#999999")
+
+        for child in self.cf_slider_frame.winfo_children():
+            try:
+                child.configure(state=state)
+                if isinstance(child, ttk.Label):
+                    child.configure(foreground=label_color)
+            except:
+                pass
+        for child in self.cf_slider_frame.winfo_children():
+             if isinstance(child, ttk.Frame):
+                 for grandchild in child.winfo_children():
+                     try:
+                         grandchild.configure(state=state)
+                         if isinstance(grandchild, ttk.Label):
+                             grandchild.configure(foreground=label_color)
+                     except:
+                         pass
+
     def _preview_theme(self):
         """Update the preferences window and main window for live preview."""
         preview_theme = self.var.get()
@@ -162,6 +237,9 @@ class PreferencesWindow(tk.Toplevel):
 
     def _apply_theme_to_this_window(self, theme_name):
         """Apply theme to all widgets in this window including padding areas."""
+        # Update palette reference to current theme
+        self.palette = self.theme_manager.palette
+
         palette = self.theme_manager.palette
         bg = palette.get("bg", "#ffffff")
         fg = palette.get("fg", "#000000")
@@ -206,6 +284,24 @@ class PreferencesWindow(tk.Toplevel):
             indicatorcolor=bg
         )
 
+        # Checkbutton style
+        style.layout("Prefs.TCheckbutton", [
+            ("Checkbutton.padding", {
+                "children": [
+                    ("Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                    ("Checkbutton.label", {"side": "left", "sticky": ""})
+                ],
+                "sticky": "nswe"
+            })
+        ])
+        style.configure(
+            "Prefs.TCheckbutton",
+            background=bg,
+            foreground=fg,
+            focuscolor=bg,
+            indicatorcolor=bg
+        )
+
         # Apply radiobutton style to all radio buttons
         if hasattr(self, 'rb_light'):
             self.rb_light.configure(style="Prefs.TRadiobutton")
@@ -229,15 +325,25 @@ class PreferencesWindow(tk.Toplevel):
                 widget.configure(style="Prefs.TFrame")
             elif isinstance(widget, ttk.Label):
                 widget.configure(style="Prefs.TLabel")
+                # Also apply to any nested labels
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Label):
+                        child.configure(style="Prefs.TLabel")
             elif isinstance(widget, tk.Label):
-                widget.configure(background=bg, foreground=fg)
+                widget.configure(background=bg, foreground=self.palette.get("fg", "#FFFFFF"))
             elif isinstance(widget, ttk.Radiobutton):
                 widget.configure(style="Prefs.TRadiobutton")
+            elif isinstance(widget, ttk.Checkbutton):
+                widget.configure(style="Prefs.TCheckbutton")
 
             for child in widget.winfo_children():
                 restyle(child)
 
         restyle(self)
+
+        # Re-apply crossfade slider state after theme refresh to ensure proper colors
+        if hasattr(self, 'crossfade_enabled_var'):
+            self._toggle_crossfade_slider()
 
         # Update buttons
         self._apply_button_theme()
@@ -260,12 +366,16 @@ class PreferencesWindow(tk.Toplevel):
     def _save(self):
         new_theme = self.var.get()
         new_bpm_mode = self.bpm_var.get()
+        new_crossfade_enabled = self.crossfade_enabled_var.get()
+        new_crossfade_duration = int(self.crossfade_duration_var.get())
 
         # Check if BPM mode changed
         bpm_mode_changed = (new_bpm_mode != self.settings.bpm_mode)
 
         self.settings.theme = new_theme
         self.settings.bpm_mode = new_bpm_mode
+        self.settings.crossfade_enabled = new_crossfade_enabled
+        self.settings.crossfade_duration = new_crossfade_duration
         self.settings.save()
 
         # Update global BPM preference
@@ -283,6 +393,8 @@ class PreferencesWindow(tk.Toplevel):
     def _cancel(self):
         self.settings.theme = self.original_theme
         self.settings.bpm_mode = self.original_bpm_mode
+        self.settings.crossfade_enabled = self.original_crossfade_enabled
+        self.settings.crossfade_duration = self.original_crossfade_duration
         self.settings.save()
 
         # Restore original BPM mode

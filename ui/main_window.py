@@ -715,6 +715,9 @@ class MainWindow:
                 self._set_temporary_status(f"Added {count} file(s) below current track in playlist")
             else:
                 self._set_temporary_status("No new songs were added to playlist (duplicates skipped)")
+        elif event_type == "crossfade":
+            # Trigger next track logic when crossfade threshold is reached
+            self.handle_track_end()
 
     # ---------- Refresh helpers ----------
     def refresh_all(self):
