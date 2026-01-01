@@ -6,15 +6,11 @@ Provides a simple, stable API to play/pause/stop and emits callbacks when a trac
 
 import logging
 import threading
-import os
-import sys
-from pathlib import Path
 
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import scipy.signal
-import audio.metadata as metadata_module
 
 logger = logging.getLogger(__name__)
 

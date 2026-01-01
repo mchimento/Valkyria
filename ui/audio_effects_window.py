@@ -16,7 +16,7 @@ class AudioEffectsWindow(tk.Toplevel):
         self._save_timer = None  # Initialize save timer
 
         self.title("Audio Effects")
-        self.geometry("750x450")
+        self.geometry("800x450")
         self.resizable(False, False)
         self.transient(parent)
 
@@ -30,6 +30,27 @@ class AudioEffectsWindow(tk.Toplevel):
         self.band_labels = ["60", "170", "310", "600", "1K", "3K", "6K", "12K", "14K", "16K"]
         self.sliders = []
         self.slider_vars = []
+
+        # EQ Presets (Preamp, [Bands])
+        self.presets = {
+            "Flat": (12, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            "Classical": (12, [0, 0, 0, 0, 0, 0, -7.2, -7.2, -7.2, -9.6]),
+            "Club": (6, [0, 0, 8, 5.6, 5.6, 5.6, 3.2, 0, 0, 0]),
+            "Dance": (5, [9.6, 7.2, 2.4, 0, 0, -5.6, -7.2, -7.2, 0, 0]),
+            "Full Bass": (5, [-6, 9.6, 9.6, 5.6, 1.6, -4, -8, -10.3, -11.2, -11.2]),
+            "Full Treble": (3, [-9.6, -9.6, -9.6, -4, 2.4, 11.2, 16, 16, 16, 16.7]),
+            "Headphones": (4, [4.8, 11.2, 5.6, -3.2, -2.4, 1.6, 4.8, 9.6, 12.8, 14.4]),
+            "Large Hall": (5, [10.3, 10.3, 5.6, 5.6, 0, -4.8, -4.8, -4.8, 0, 0]),
+            "Live": (7, [-4.8, 0, 4, 5.6, 5.6, 5.6, 4.0, 2.4, 2.4, 2.4]),
+            "Party": (6, [7.2, 7.2, 0, 0, 0, 0, 0, 0, 7.2, 7.2]),
+            "Pop": (6, [-1.6, 4.8, 7.2, 8, 5.6, 0, -2.4, -2.4, -1.6, -1.6]),
+            "Reggae": (8, [0, 0, 0, -5.6, 0, 6.4, 6.4, 0, 0, 0]),
+            "Rock": (5, [8, 4.8, -5.6, -8, -3.2, 4, 8.8, 11.2, 11.2, 11.2]),
+            "Ska": (6, [-2.4, -4.8, -4, 0, 4, 5.6, 8.8, 9.6, 11.2, 9.6]),
+            "Soft": (5, [4.8, 1.6, 0, -2.4, 0, 4, 8, 9.6, 11.2, 12]),
+            "Soft Rock": (7, [4, 4, 2.4, 0, -4, -5.6, -3.2, 0, 2.4, 8.8]),
+            "Techno": (5, [8.0, 5.6, 0, -5.6, -4.8, 0, 8, 9.6, 9.6, 8.8])
+        }
 
         # State - default to False
         self.enabled_var = tk.BooleanVar(value=False)
@@ -82,14 +103,16 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.enable_switch.pack(side=tk.LEFT)
 
-        self.reset_btn = ctk.CTkButton(
+        self.preset_var = tk.StringVar(value="")
+        self.preset_menu = ctk.CTkOptionMenu(
             top_frame,
-            text="Reset Flat",
-            width=100,
+            values=[""] + list(self.presets.keys()),
+            command=self._on_preset_change,
+            variable=self.preset_var,
+            width=150,
             height=28,
-            command=self._reset_flat
         )
-        self.reset_btn.pack(side=tk.RIGHT)
+        self.preset_menu.pack(side=tk.RIGHT)
 
         # EQ Container
         eq_container = ttk.Frame(self.main_frame)
@@ -111,12 +134,16 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.preamp_slider = ctk.CTkSlider(
             preamp_frame,
-            from_=20, to=-20,
+            from_=-20, to=20,
             orientation="vertical",
             variable=self.preamp_var,
             command=self._on_preamp_change,
             height=200,
-            width=20
+            width=16,
+            border_width=1,
+            button_length=10,
+            corner_radius=2,
+            button_corner_radius=2
         )
         self.preamp_slider.pack(pady=5)
 
@@ -150,12 +177,16 @@ class AudioEffectsWindow(tk.Toplevel):
             # Slider
             slider = ctk.CTkSlider(
                 band_frame,
-                from_=20, to=-20,
+                from_=-20, to=20,
                 orientation="vertical",
                 variable=val_var,
                 command=lambda v, idx=i: self._on_band_change(idx, v),
                 height=200,
-                width=20
+                width=16,
+                border_width=1,
+                button_length=10,
+                corner_radius=2,
+                button_corner_radius=2
             )
             slider.pack(pady=5)
             self.sliders.append(slider)
@@ -251,14 +282,17 @@ class AudioEffectsWindow(tk.Toplevel):
 
         # CTk Widgets
 
-        # Reset Button
+        # Preset Menu
         btn_bg = palette.get("button_bg_color", accent)
         btn_fg = palette.get("button_fg_color", "#ffffff")
-        self.reset_btn.configure(
+        self.preset_menu.configure(
             fg_color=btn_bg,
+            button_color=btn_bg,
+            button_hover_color=accent_hover,
             text_color=btn_fg,
-            hover_color=accent_hover,
-            bg_color=bg
+            dropdown_fg_color=bg,
+            dropdown_hover_color=accent_hover,
+            dropdown_text_color=fg
         )
 
         self.reset_speed_btn.configure(
@@ -279,13 +313,15 @@ class AudioEffectsWindow(tk.Toplevel):
         # Sliders
         slider_bg = palette.get("slider_bg", "#E0E0E0")
         slider_fg = palette.get("slider_fg", accent)
+        slider_border = palette.get("border", "#cccccc")
 
         self.preamp_slider.configure(
             fg_color=slider_bg,
             progress_color=slider_fg,
             button_color=slider_fg,
             button_hover_color=accent_hover,
-            bg_color=bg
+            bg_color=bg,
+            border_color=slider_border
         )
 
         self.speed_slider.configure(
@@ -293,7 +329,8 @@ class AudioEffectsWindow(tk.Toplevel):
             progress_color=slider_fg,
             button_color=slider_fg,
             button_hover_color=accent_hover,
-            bg_color=bg
+            bg_color=bg,
+            border_color=slider_border
         )
 
         for slider in self.sliders:
@@ -302,7 +339,8 @@ class AudioEffectsWindow(tk.Toplevel):
                 progress_color=slider_fg,
                 button_color=slider_fg,
                 button_hover_color=accent_hover,
-                bg_color=bg
+                bg_color=bg,
+                border_color=slider_border
             )
 
         # Labels
@@ -324,6 +362,7 @@ class AudioEffectsWindow(tk.Toplevel):
         self.preamp_slider.configure(state=state)
         for slider in self.sliders:
             slider.configure(state=state)
+        self.preset_menu.configure(state=state)
 
         # Call player
         if hasattr(self.player, 'set_equalizer_enabled'):
@@ -355,14 +394,19 @@ class AudioEffectsWindow(tk.Toplevel):
             except Exception as e:
                 print(f"Error setting EQ band {index}: {e}")
 
-    def _reset_flat(self):
-        """Reset all sliders to 0."""
-        self.preamp_var.set(0)
-        self._on_preamp_change(0)
+    def _on_preset_change(self, choice):
+        """Apply selected EQ preset."""
+        if choice in self.presets:
+            preamp, values = self.presets[choice]
 
-        for i, var in enumerate(self.slider_vars):
-            var.set(0)
-            self._on_band_change(i, 0)
+            # Set Preamp
+            self.preamp_var.set(preamp)
+            self._on_preamp_change(preamp)
+
+            for i, val in enumerate(values):
+                if i < len(self.slider_vars):
+                    self.slider_vars[i].set(val)
+                    self._on_band_change(i, val)
 
     def _save_settings(self):
         """Save current audio settings to persistent storage with debouncing."""
