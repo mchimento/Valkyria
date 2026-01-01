@@ -22,7 +22,7 @@ from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import BPMAnalysisWindow
-from ui.audio_effects_window import EqualizerWindow
+from ui.audio_effects_window import AudioEffectsWindow
 
 logger = logging.getLogger(__name__)
 
@@ -448,7 +448,7 @@ class MainWindow:
 
         tools_items = [
             audio_device_item,
-            {"label": "Audio Effects", "command": self.open_equalizer},
+            {"label": "Audio Effects and Filters", "command": self.open_audio_effects},
             {"separator": True},
             {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
@@ -1027,7 +1027,7 @@ class MainWindow:
                     window.update_theme()
                 except Exception:
                     pass
-            if isinstance(window, EqualizerWindow):
+            if isinstance(window, AudioEffectsWindow):
                 try:
                     window.update_theme()
                 except Exception:
@@ -1068,9 +1068,9 @@ class MainWindow:
 
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply, on_bpm_preference_change=on_bpm_preference_change)
 
-    def open_equalizer(self):
-        """Open the Equalizer window."""
-        EqualizerWindow(self.root, self.player, self.theme)
+    def open_audio_effects(self):
+        """Open the Audio Effects window."""
+        AudioEffectsWindow(self.root, self.player, self.theme)
 
     def open_media_info(self):
         """Open media information dialog for the currently selected track in playlist."""
