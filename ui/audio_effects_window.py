@@ -96,9 +96,6 @@ class AudioEffectsWindow(tk.Toplevel):
         self._create_ui()
         self._apply_theme()
 
-        # Force update to apply theme before showing
-        self.update_idletasks()
-
         # Synchronize UI state with initial values
         self._on_enable_toggle()
         self._on_compressor_toggle()
@@ -107,7 +104,6 @@ class AudioEffectsWindow(tk.Toplevel):
 
     def _create_ui(self):
         """Build the UI components."""
-        # Get theme colors upfront for widget creation
         palette = self.theme_manager.palette
         bg = palette.get("bg", "#ffffff")
         fg = palette.get("fg", "#000000")
@@ -116,6 +112,8 @@ class AudioEffectsWindow(tk.Toplevel):
         slider_bg = palette.get("slider_bg", "#2a2a2a")
         slider_fg = palette.get("slider_bg", accent)
         slider_button = palette.get("accent", "#0078d4")
+        btn_bg = palette.get("button_bg_color", accent)
+        btn_fg = palette.get("button_fg_color", "#ffffff")
 
         # Create Notebook for tabs
         self.notebook = ttk.Notebook(self)
@@ -149,7 +147,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.preset_var = tk.StringVar(value="")
 
-        # Frame wrapper for border effect
+         # Frame wrapper for border effect
         self.preset_menu_frame = ctk.CTkFrame(
             top_frame,
             fg_color="transparent",
@@ -309,9 +307,7 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        btn_bg = palette.get("button_bg_color", accent)
-        btn_fg = palette.get("button_fg_color", "#ffffff")
-
+        # Reset Speed Button
         self.reset_speed_btn = ctk.CTkButton(
             speed_frame,
             text="Reset (1.0x)",
@@ -333,8 +329,8 @@ class AudioEffectsWindow(tk.Toplevel):
         self.close_btn = ctk.CTkButton(
             button_frame,
             text="Close",
-            width=90,
-            height=40,
+            width=80,
+            height=50,
             font=("Segoe UI", 10),
             command=self._on_close,
             fg_color=btn_bg,
@@ -347,8 +343,8 @@ class AudioEffectsWindow(tk.Toplevel):
         self.save_btn = ctk.CTkButton(
             button_frame,
             text="Save",
-            width=90,
-            height=40,
+            width=80,
+            height=50,
             font=("Segoe UI", 10),
             command=self._save_to_config,
             fg_color=btn_bg,
@@ -421,7 +417,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.threshold_slider = ctk.CTkSlider(
             threshold_frame,
-            from_=0, to=-60,
+            from_=-30, to=0,
             orientation="vertical",
             variable=self.compressor_threshold_var,
             command=self._on_compressor_change,
@@ -451,7 +447,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.ratio_slider = ctk.CTkSlider(
             ratio_frame,
-            from_=20.0, to=1.0,
+            from_=1.0, to=20.0,
             orientation="vertical",
             variable=self.compressor_ratio_var,
             command=self._on_compressor_change,
@@ -481,7 +477,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.attack_slider = ctk.CTkSlider(
             attack_frame,
-            from_=500.0, to=0.1,
+            from_=1, to=400,
             orientation="vertical",
             variable=self.compressor_attack_var,
             command=self._on_compressor_change,
@@ -511,7 +507,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.release_slider = ctk.CTkSlider(
             release_frame,
-            from_=1000.0, to=1.0,
+            from_=1, to=800,
             orientation="vertical",
             variable=self.compressor_release_var,
             command=self._on_compressor_change,
@@ -541,7 +537,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.knee_slider = ctk.CTkSlider(
             knee_frame,
-            from_=10.0, to=0.0,
+            from_=0, to=10.0,
             orientation="vertical",
             variable=self.compressor_knee_var,
             command=self._on_compressor_change,
@@ -571,7 +567,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.makeup_slider = ctk.CTkSlider(
             makeup_frame,
-            from_=20, to=-20,
+            from_=0, to=24,
             orientation="vertical",
             variable=self.compressor_makeup_var,
             command=self._on_compressor_change,
@@ -747,6 +743,15 @@ class AudioEffectsWindow(tk.Toplevel):
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
 
+    def _on_rate_change(self, value):
+        self.speed_label.configure(text=f"{float(value):.2f}x")
+        if hasattr(self.player, 'set_playback_rate'):
+            self.player.set_playback_rate(float(value))
+
+    def _reset_speed(self):
+        self.rate_var.set(1.0)
+        self._on_rate_change(1.0)
+
     def _apply_theme(self):
         """Apply theme colors from palette."""
         palette = self.theme_manager.palette
@@ -754,6 +759,8 @@ class AudioEffectsWindow(tk.Toplevel):
         fg = palette.get("fg", "#000000")
         accent = palette.get("accent", "#0078d4")
         accent_hover = palette.get("accent_hover", "#106ebe")
+        btn_bg = palette.get("button_bg_color", accent)
+        btn_fg = palette.get("button_fg_color", "#ffffff")
 
         # Window background
         self.configure(bg=bg)
@@ -789,64 +796,7 @@ class AudioEffectsWindow(tk.Toplevel):
 
         # CTk Widgets
 
-        # Preset Menu - Smart recreation only when colors change
-        btn_bg = palette.get("button_bg_color", accent)
-        btn_fg = palette.get("button_fg_color", "#ffffff")
-
-        # Check if we need to recreate (store previous colors)
-        if not hasattr(self, '_last_dropdown_bg') or self._last_dropdown_bg != btn_bg:
-            # Store current selection
-            current_selection = self.preset_var.get()
-
-            # Recreate frame and dropdown
-            self.preset_menu_frame.destroy()
-            self.preset_menu_frame = ctk.CTkFrame(
-                self.preset_menu_frame.master,
-                fg_color="transparent",
-                border_width=1
-            )
-            self.preset_menu_frame.pack(side=tk.RIGHT, padx=(0, 10))
-
-            self.preset_menu = ctk.CTkOptionMenu(
-                self.preset_menu_frame,
-                values=[""] + list(self.presets.keys()),
-                command=self._on_preset_change,
-                variable=self.preset_var,
-                width=116,
-                height=26
-            )
-            self.preset_menu.pack(padx=2, pady=2)
-
-            # Recreate label to maintain order
-            self.preset_label.destroy()
-            self.preset_label = ttk.Label(self.preset_label.master, text="Preset", font=("Roboto", 10, "bold"))
-            self.preset_label.pack(side=tk.RIGHT, padx=(0, 5))
-
-            # Restore selection
-            self.preset_var.set(current_selection)
-
-            # Restore state based on equalizer enabled/disabled
-            state = "normal" if self.enabled_var.get() else "disabled"
-            self.preset_menu.configure(state=state)
-
-            # Store new color
-            self._last_dropdown_bg = btn_bg
-
-        # Apply theme colors
-        self.preset_menu_frame.configure(
-            border_color=palette.get("border", "#cccccc")
-        )
-
-        self.preset_menu.configure(
-            fg_color=bg,
-            button_color=bg,
-            button_hover_color=palette.get("dropdown_hover", "#000000"),
-            text_color=palette.get("dropdown_text", "#000000"),
-            dropdown_fg_color=palette.get("dropdown_bg", "#000000"),
-            dropdown_hover_color=palette.get("dropdown_hover", "#000000"),
-            dropdown_text_color=palette.get("dropdown_text", "#000000")
-        )
-
+        # Bottom buttons
         self.reset_speed_btn.configure(
             fg_color=btn_bg,
             text_color=btn_fg,
@@ -854,28 +804,25 @@ class AudioEffectsWindow(tk.Toplevel):
             bg_color=bg
         )
 
-        if hasattr(self, 'compressor_reset_btn'):
-            self.compressor_reset_btn.configure(
-                fg_color=btn_bg,
-                text_color=btn_fg,
-                hover_color=accent_hover,
-                bg_color=bg
-            )
+        self.compressor_reset_btn.configure(
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
+        )
 
-        # Bottom buttons
-        if hasattr(self, 'save_btn'):
-            self.save_btn.configure(
-                fg_color=btn_bg,
-                text_color=btn_fg,
-                hover_color=accent_hover,
-                bg_color=bg
-            )
-            self.close_btn.configure(
-                fg_color=btn_bg,
-                text_color=btn_fg,
-                hover_color=accent_hover,
-                bg_color=bg
-            )
+        self.save_btn.configure(
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
+        )
+        self.close_btn.configure(
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
+        )
 
         # Apply Buttons
         if hasattr(self, 'apply_btns'):
@@ -885,9 +832,9 @@ class AudioEffectsWindow(tk.Toplevel):
                     hover_color=accent_hover, bg_color=bg
                 )
 
-        # Sliders - VLC Style
+        # Sliders
         slider_bg = palette.get("slider_bg", "#2a2a2a")
-        slider_fg = palette.get("slider_bg", accent)
+        slider_fg = palette.get("slider_fg", accent)
         slider_button = palette.get("accent", "#0078d4")
 
         self.preamp_slider.configure(
@@ -908,6 +855,15 @@ class AudioEffectsWindow(tk.Toplevel):
             border_color="transparent"
         )
 
+        for slider in self.sliders:
+            slider.configure(
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_fg,
+                button_hover_color=accent_hover,
+                bg_color=bg
+            )
+
         # Compressor sliders
         if hasattr(self, 'threshold_slider'):
             for slider in [self.threshold_slider, self.ratio_slider, self.attack_slider,
@@ -921,19 +877,8 @@ class AudioEffectsWindow(tk.Toplevel):
                     border_color="transparent"
                 )
 
-        for slider in self.sliders:
-            slider.configure(
-                fg_color=slider_bg,
-                progress_color=slider_fg,
-                button_color=slider_button,
-                button_hover_color=accent_hover,
-                bg_color=bg,
-                border_color="transparent"
-            )
-
         # Labels
         self.preamp_label.configure(foreground=fg, background=bg)
-        self.preset_label.configure(foreground=fg, background=bg)
         for slider in self.sliders:
             if hasattr(slider, 'value_label'):
                 slider.value_label.configure(foreground=fg, background=bg)
@@ -973,7 +918,6 @@ class AudioEffectsWindow(tk.Toplevel):
         self.preamp_slider.configure(state=state)
         for slider in self.sliders:
             slider.configure(state=state)
-        self.preset_menu.configure(state=state)
 
         # Call player
         if hasattr(self.player, 'set_equalizer_enabled'):
@@ -1004,6 +948,15 @@ class AudioEffectsWindow(tk.Toplevel):
                 self.player.set_equalizer_band(index, val)
             except Exception as e:
                 logger.error(f"Error setting EQ band {index}: {e}")
+
+    def _reset_flat(self):
+        """Reset all sliders to 0."""
+        self.preamp_var.set(0)
+        self._on_preamp_change(0)
+
+        for i, var in enumerate(self.slider_vars):
+            var.set(0)
+            self._on_band_change(i, 0)
 
     def _on_preset_change(self, choice):
         """Apply selected EQ preset."""
