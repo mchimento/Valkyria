@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import os
 from audio.metadata import get_metadata, get_display_title, metadata_extractor, get_display_bpm
 from ui.playlist_context_menu import PlaylistContextMenu
 
@@ -57,10 +56,11 @@ class PlaylistView(ttk.Frame):
     def _setup_ui(self):
         """Initialize the UI components."""
         # Header label
+        self.header_label_font_size = 18
         self.header_label = tk.Label(
             self,
             text="Playback queue",
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 18, "bold"),
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), self.header_label_font_size, "bold"),
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212"),
             anchor="w"
@@ -231,7 +231,7 @@ class PlaylistView(ttk.Frame):
         self.header_label.configure(
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212"),
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 16, "bold")
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), self.header_label_font_size, "bold")
         )
 
         self.scrollbar_canvas.configure(
@@ -265,6 +265,9 @@ class PlaylistView(ttk.Frame):
                     bpm = metadata.get("bpm", "")
                     if bpm is None:
                         bpm = ""
+
+                    # Ensure BPM is updated in metadata cache
+                    metadata["bpm"] = round(float(bpm)) if bpm else ""
 
                     # Use display BPM function for normalized display
                     display_bpm = get_display_bpm(bpm)
@@ -301,7 +304,9 @@ class PlaylistView(ttk.Frame):
                         padded_artist = f"  {artist}"
                         padded_album = f"  {album}"
                         padded_duration = f"  {duration}"
-                        padded_bpm = f"  {bpm}" if bpm else ""
+                        # Use display BPM function for normalized display
+                        display_bpm = get_display_bpm(bpm)
+                        padded_bpm = f"  {display_bpm}" if display_bpm else ""
                         values = (title, padded_artist, padded_album, padded_duration, padded_bpm)
                         self.tree.item(item_id, values=values)
                     break

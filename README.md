@@ -25,13 +25,7 @@ local audio files.
 ## Installation
 
 1.  Install Python 3.8 or later.
-2.  Install VLC media player:
-    -   **Windows**: No action required (VLC is bundled with the
-        application).
-    -   **macOS**: `brew install vlc`
-    -   **Linux**: `sudo apt-get install vlc` (Ubuntu/Debian) or
-        equivalent for your distribution
-3.  Install Python dependencies:
+2.  Install Python dependencies:
 
 ``` bash
 pip install -r requirements.txt
@@ -57,10 +51,12 @@ python main.py
 ## Dependencies
 
 -   Python 3.8+
--   python-vlc
+-   sounddevice
+-   soundfile
+-   numpy
+-   scipy
 -   mutagen
 -   librosa
--   VLC media player (bundle included on Windows distribution)
 
 ## File Structure
 
@@ -68,7 +64,6 @@ python main.py
 -   `app/`: Core application logic and state management.
 -   `ui/`: User interface components (windows, views, controls).
 -   `audio/`: Audio playback handling.
--   `plugins/`: Bundled VLC plugins (Windows only).
 -   `themes/`: Theme definitions and management.
 -   `README.md`: Documentation for the tool.
 

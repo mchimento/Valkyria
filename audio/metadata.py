@@ -12,7 +12,6 @@ import shutil, tempfile, subprocess, math, os, glob, io
 from PIL import Image
 import librosa
 import numpy as np
-import scipy.stats
 from math import log
 
 class MetadataExtractor:
@@ -550,10 +549,10 @@ def get_best_artwork(filepath):
 
 def get_display_bpm(bpm):
     """Get BPM value formatted for display according to current preference.
-    
+
     Args:
         bpm: Raw BPM value (int or float) or None
-        
+
     Returns:
         Formatted BPM string for display, or empty string if bpm is None
     """

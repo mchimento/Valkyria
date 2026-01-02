@@ -4,7 +4,6 @@ Theme manager: loads JSON palette and exposes apply_to(root).
 
 import json
 import logging
-from pathlib import Path
 from typing import Dict, Any
 import tkinter as tk
 from ui.styles import apply_base_styles

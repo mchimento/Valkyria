@@ -3,6 +3,7 @@
   "fg": "#CCCCCB",
   "accent": "#BB86FC",
   "accent_hover": "#985EFF",
+  "border": "#3E3E3E",
   "tree_bg": "#252526",
   "tree_header": "#1E1E1E",
   "tooltip_bg": "#BB86FC",
@@ -32,6 +33,7 @@
   "slider_bg": "#404040",
   "slider_hover": "#985EFF",
   "slider_progress": "#BB86FC",
+  "switch_bg": "#4A4A4A",
   "select_bg": "#A279EB",
   "select_fg": "#1E1E1E",
   "hover_bg": "#525252",
@@ -42,5 +44,6 @@
   "waveform_bg": "#1E1E1E",
   "waveform_played": "#FF6B00",
   "waveform_unplayed": "#404040",
-  "waveform_border": "#1E1E1E"
+  "waveform_border": "#1E1E1E",
+  "disabled_fg": "#999999"
 }

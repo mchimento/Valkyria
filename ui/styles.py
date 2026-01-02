@@ -22,6 +22,10 @@ def apply_base_styles(root: tk.Tk, palette: Dict[str, Any]) -> None:
     # General widget colors
     style.configure("TFrame", background=palette["bg"])
     style.configure("TLabel", background=palette["bg"], foreground=palette["fg"], font=(palette.get("ui_font", "Segoe UI"), 10))
+    style.map("TLabel",
+              foreground=[('disabled', palette.get("disabled_fg", "#808080"))],
+              background=[('disabled', palette["bg"])])
+
     style.configure(
         "TButton",
         padding=10,
