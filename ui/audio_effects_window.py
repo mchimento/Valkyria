@@ -329,6 +329,10 @@ class AudioEffectsWindow(tk.Toplevel):
             # Restore selection
             self.preset_var.set(current_selection)
 
+            # Restore state based on equalizer enabled/disabled
+            state = "normal" if self.enabled_var.get() else "disabled"
+            self.preset_menu.configure(state=state)
+
             # Store new color
             self._last_dropdown_bg = btn_bg
 
