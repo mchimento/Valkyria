@@ -2,13 +2,21 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
 import json
+import logging
 from pathlib import Path
 from ui.utils import center_window
+
+logger = logging.getLogger(__name__)
 
 # Load audio effects configuration
 config_path = Path(__file__).parent.parent / 'audio' / 'audio_effects_config.json'
 with open(config_path, 'r') as f:
     AUDIO_CONFIG = json.load(f)
+
+# Load audio effects defaults (for reset functionality)
+defaults_path = Path(__file__).parent.parent / 'audio' / 'audio_effect_default.json'
+with open(defaults_path, 'r') as f:
+    AUDIO_DEFAULTS = json.load(f)
 
 class AudioEffectsWindow(tk.Toplevel):
     """
@@ -19,11 +27,9 @@ class AudioEffectsWindow(tk.Toplevel):
         super().__init__(parent)
         self.player = player
         self.theme_manager = theme_manager
-        self.settings = None  # Initialize settings for compatibility
-        self._save_timer = None  # Initialize save timer
 
         self.title("Audio Effects")
-        self.geometry("800x450")
+        self.geometry("800x500")
         self.resizable(False, False)
         self.transient(parent)
 
@@ -36,22 +42,23 @@ class AudioEffectsWindow(tk.Toplevel):
 
         center_window(self, parent)
 
-        # Load EQ configuration
-        eq_config = AUDIO_CONFIG['equalizer']
+        # Load EQ configuration and defaults
+        self.eq_config = AUDIO_CONFIG['equalizer']
+        self.eq_defaults = AUDIO_DEFAULTS['equalizer']
 
-        # EQ Bands (Standard ISO frequencies)
-        self.bands = eq_config['bands']
-        self.band_labels = eq_config['band_labels']
+        # EQ Bands (Standard ISO frequencies) - from defaults
+        self.bands = self.eq_defaults['bands']
+        self.band_labels = self.eq_defaults['band_labels']
         self.sliders = []
         self.slider_vars = []
 
         # EQ Presets - convert from config format to tuple format
         self.presets = {}
-        for preset_name, preset_data in eq_config['presets'].items():
+        for preset_name, preset_data in self.eq_defaults['presets'].items():
             self.presets[preset_name] = (preset_data['preamp'], preset_data['gains'])
 
-        # State - default to False
-        self.enabled_var = tk.BooleanVar(value=False)
+        # State - load from user config
+        self.enabled_var = tk.BooleanVar(value=self.eq_config['enabled'])
         # Try to get initial state from player if available
         if hasattr(self.player, 'get_equalizer_enabled'):
             try:
@@ -70,6 +77,10 @@ class AudioEffectsWindow(tk.Toplevel):
 
         # Compressor State
         comp_config = AUDIO_CONFIG['compressor']
+
+        # Store defaults from file for reset functionality
+        self._original_compressor_defaults = AUDIO_DEFAULTS['compressor']
+
         self.compressor_enabled_var = tk.BooleanVar(value=comp_config['enabled'])
         self.compressor_threshold_var = tk.DoubleVar(value=comp_config['threshold'])
         self.compressor_ratio_var = tk.DoubleVar(value=comp_config['ratio'])
@@ -102,7 +113,7 @@ class AudioEffectsWindow(tk.Toplevel):
         """Build the UI components."""
         # Create Notebook for tabs
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.notebook.pack(fill=tk.BOTH, expand=False, padx=10, pady=(10, 0))
 
         # --- Tab 1: Equalizer ---
         self.eq_tab = ttk.Frame(self.notebook)
@@ -157,8 +168,8 @@ class AudioEffectsWindow(tk.Toplevel):
 
         ttk.Label(preamp_frame, text="Preamp", font=("Segoe UI", 9, "bold")).pack(pady=(0, 10))
 
-        self.preamp_var = tk.DoubleVar(value=0)
-        # Try get initial preamp
+        self.preamp_var = tk.DoubleVar(value=self.eq_config['preamp'])
+        # Try get initial preamp from player
         if hasattr(self.player, 'get_equalizer_preamp'):
             try:
                 self.preamp_var.set(self.player.get_equalizer_preamp())
@@ -198,8 +209,8 @@ class AudioEffectsWindow(tk.Toplevel):
             # Label
             ttk.Label(band_frame, text=freq_label, font=("Segoe UI", 9)).pack(pady=(0, 10))
 
-            # Value var
-            val_var = tk.DoubleVar(value=0)
+            # Value var - initialize with saved config value
+            val_var = tk.DoubleVar(value=self.eq_config['gains'][i] if i < len(self.eq_config['gains']) else 0)
             if hasattr(self.player, 'get_equalizer_band'):
                 try:
                     val_var.set(self.player.get_equalizer_band(i))
@@ -268,6 +279,30 @@ class AudioEffectsWindow(tk.Toplevel):
             command=self._reset_speed
         )
         self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
+
+        # Bottom buttons (Save and Close) - added after notebook
+        button_frame = ttk.Frame(self)
+        button_frame.pack(fill=tk.X, padx=10, pady=(10, 10))
+
+        self.close_btn = ctk.CTkButton(
+            button_frame,
+            text="Close",
+            width=90,
+            height=40,
+            font=("Segoe UI", 10),
+            command=self._on_close
+        )
+        self.close_btn.pack(side=tk.RIGHT)
+
+        self.save_btn = ctk.CTkButton(
+            button_frame,
+            text="Save",
+            width=90,
+            height=40,
+            font=("Segoe UI", 10),
+            command=self._save_to_config
+        )
+        self.save_btn.pack(side=tk.RIGHT, padx=(0, 10))
 
     def _create_compressor_tab(self):
         """Create the Compressor tab UI."""
@@ -529,18 +564,18 @@ class AudioEffectsWindow(tk.Toplevel):
                     use_rms=self.compressor_rms_mode_var.get()
                 )
             except Exception as e:
-                print(f"Error applying compressor: {e}")
+                logger.error(f"Error applying compressor: {e}")
 
     def _reset_compressor(self):
-        """Reset compressor to default values."""
-        comp_config = AUDIO_CONFIG['compressor']
-        self.compressor_threshold_var.set(comp_config['threshold'])
-        self.compressor_ratio_var.set(comp_config['ratio'])
-        self.compressor_attack_var.set(comp_config['attack'])
-        self.compressor_release_var.set(comp_config['release'])
-        self.compressor_makeup_var.set(comp_config['makeup_gain'])
-        self.compressor_knee_var.set(comp_config['knee'])
-        self.compressor_rms_mode_var.set(comp_config['use_rms'])
+        """Reset compressor to original default values."""
+        defaults = self._original_compressor_defaults
+        self.compressor_threshold_var.set(defaults['threshold'])
+        self.compressor_ratio_var.set(defaults['ratio'])
+        self.compressor_attack_var.set(defaults['attack'])
+        self.compressor_release_var.set(defaults['release'])
+        self.compressor_makeup_var.set(defaults['makeup_gain'])
+        self.compressor_knee_var.set(defaults['knee'])
+        self.compressor_rms_mode_var.set(defaults['use_rms'])
         self._on_compressor_change()
 
     def _on_rate_change(self, value):
@@ -552,6 +587,47 @@ class AudioEffectsWindow(tk.Toplevel):
         default_rate = AUDIO_CONFIG['playback']['default_rate']
         self.rate_var.set(default_rate)
         self._on_rate_change(default_rate)
+
+    def _save_to_config(self):
+        """Save current settings as defaults to the JSON configuration file."""
+        global AUDIO_CONFIG
+
+        try:
+            # Update the config with current values
+            config_to_save = {
+                "equalizer": {
+                    "enabled": self.enabled_var.get(),
+                    "gains": [v.get() for v in self.slider_vars],
+                    "preamp": self.preamp_var.get()
+                },
+                "compressor": {
+                    "enabled": self.compressor_enabled_var.get(),
+                    "threshold": self.compressor_threshold_var.get(),
+                    "ratio": self.compressor_ratio_var.get(),
+                    "attack": self.compressor_attack_var.get(),
+                    "release": self.compressor_release_var.get(),
+                    "makeup_gain": self.compressor_makeup_var.get(),
+                    "knee": self.compressor_knee_var.get(),
+                    "use_rms": self.compressor_rms_mode_var.get(),
+                    "rms_buffer_size": AUDIO_CONFIG['compressor']['rms_buffer_size']
+                },
+                "playback": {
+                    "default_rate": self.rate_var.get(),
+                    "min_rate": AUDIO_CONFIG['playback']['min_rate'],
+                    "max_rate": AUDIO_CONFIG['playback']['max_rate']
+                }
+            }
+
+            # Write to file
+            config_path = Path(__file__).parent.parent / 'audio' / 'audio_effects_config.json'
+            with open(config_path, 'w') as f:
+                json.dump(config_to_save, f, indent=2)
+
+            # Update the global config
+            AUDIO_CONFIG = config_to_save
+
+        except Exception as e:
+            logger.error(f"Error saving configuration: {e}")
 
     def _apply_theme(self):
         """Apply theme colors from palette."""
@@ -668,6 +744,21 @@ class AudioEffectsWindow(tk.Toplevel):
                 bg_color=bg
             )
 
+        # Bottom buttons
+        if hasattr(self, 'save_btn'):
+            self.save_btn.configure(
+                fg_color=btn_bg,
+                text_color=btn_fg,
+                hover_color=accent_hover,
+                bg_color=bg
+            )
+            self.close_btn.configure(
+                fg_color=btn_bg,
+                text_color=btn_fg,
+                hover_color=accent_hover,
+                bg_color=bg
+            )
+
         # Apply Buttons
         if hasattr(self, 'apply_btns'):
             for btn in self.apply_btns:
@@ -771,7 +862,7 @@ class AudioEffectsWindow(tk.Toplevel):
             try:
                 self.player.set_equalizer_enabled(enabled)
             except Exception as e:
-                print(f"Error setting EQ enabled: {e}")
+                logger.error(f"Error setting EQ enabled: {e}")
 
     def _on_preamp_change(self, value):
         val = float(value)
@@ -781,7 +872,7 @@ class AudioEffectsWindow(tk.Toplevel):
             try:
                 self.player.set_equalizer_preamp(val)
             except Exception as e:
-                print(f"Error setting preamp: {e}")
+                logger.error(f"Error setting preamp: {e}")
 
     def _on_band_change(self, index, value):
         val = float(value)
@@ -794,7 +885,7 @@ class AudioEffectsWindow(tk.Toplevel):
             try:
                 self.player.set_equalizer_band(index, val)
             except Exception as e:
-                print(f"Error setting EQ band {index}: {e}")
+                logger.error(f"Error setting EQ band {index}: {e}")
 
     def _on_preset_change(self, choice):
         """Apply selected EQ preset."""
@@ -810,48 +901,6 @@ class AudioEffectsWindow(tk.Toplevel):
                     self.slider_vars[i].set(val)
                     self._on_band_change(i, val)
 
-    def _save_settings(self):
-        """Save current audio settings to persistent storage with debouncing."""
-        if not self.settings:
-            return
-
-        # Gather current settings
-        effects = {
-            'equalizer_enabled': self.enabled_var.get(),
-            'equalizer_preamp': self.preamp_var.get(),
-            'equalizer_bands': [v.get() for v in self.slider_vars],
-            'playback_rate': self.rate_var.get(),
-            'compressor_enabled': self.compressor_enabled_var.get(),
-            'compressor_threshold': self.compressor_threshold_var.get(),
-            'compressor_ratio': self.compressor_ratio_var.get(),
-            'compressor_attack': self.compressor_attack_var.get(),
-            'compressor_release': self.compressor_release_var.get(),
-            'compressor_makeup': self.compressor_makeup_var.get(),
-            'compressor_knee': self.compressor_knee_var.get(),
-            'compressor_use_rms': self.compressor_rms_mode_var.get()
-        }
-
-        self.settings.audio_effects = effects
-
-        # Debounce save operation (1 second)
-        if self._save_timer:
-            self.after_cancel(self._save_timer)
-        self._save_timer = self.after(1000, self._perform_save)
-
-    def _perform_save(self):
-        try:
-            self.settings.save()
-        except Exception as e:
-            print(f"Error saving settings: {e}")
-        self._save_timer = None
-
     def _on_close(self):
         """Handle window close event."""
         self.destroy()
-
-    def destroy(self):
-        """Ensure pending settings are saved when window is closed."""
-        if self._save_timer:
-            self.after_cancel(self._save_timer)
-            self._perform_save()
-        super().destroy()

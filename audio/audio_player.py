@@ -21,6 +21,11 @@ config_path = Path(__file__).parent / 'audio_effects_config.json'
 with open(config_path, 'r') as f:
     AUDIO_CONFIG = json.load(f)
 
+# Load audio effects defaults (for structure like bands, labels, presets)
+defaults_path = Path(__file__).parent / 'audio_effect_default.json'
+with open(defaults_path, 'r') as f:
+    AUDIO_DEFAULTS = json.load(f)
+
 class AudioPlayer:
     def __init__(self, on_track_end=None):
         """
@@ -44,10 +49,11 @@ class AudioPlayer:
 
         # Equalizer
         eq_config = AUDIO_CONFIG['equalizer']
+        eq_defaults = AUDIO_DEFAULTS['equalizer']
         self.equalizer_enabled = eq_config['enabled']
-        self._eq_bands = eq_config['bands']
-        self._eq_gains = eq_config['default_gains'].copy()
-        self._eq_preamp = eq_config['default_preamp']
+        self._eq_bands = eq_defaults['bands']
+        self._eq_gains = eq_config['gains'].copy()
+        self._eq_preamp = eq_config['preamp']
         self._eq_sos = None
         self._eq_zi = None
 
