@@ -417,6 +417,8 @@ class AudioPlayer:
                         continue
 
                     name = dev['name']
+                    if isinstance(name, bytes):
+                        name = name.decode('utf-8', errors='ignore')
                     # Use index as ID
                     devices.append((str(idx), name))
 

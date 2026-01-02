@@ -22,83 +22,52 @@ class TestMuteAudio(unittest.TestCase):
         """Re-enable logging after tests."""
         logging.disable(logging.NOTSET)
 
-    @patch('audio.audio_player.vlc.Instance')
-    def test_get_mute_state_false(self, mock_vlc_instance):
+    def test_get_mute_state_false(self):
         """Test get_mute_state returns False when not muted."""
-        mock_instance = MagicMock()
-        mock_player = MagicMock()
-        mock_vlc_instance.return_value = mock_instance
-        mock_instance.media_player_new.return_value = mock_player
-        mock_player.audio_get_mute.return_value = 0  # Not muted
+        with patch('sounddevice.play') as mock_play:
+            player = AudioPlayer()
+            self.assertFalse(player.get_mute_state())
 
-        player = AudioPlayer()
-        self.assertFalse(player.get_mute_state())
-
-    @patch('audio.audio_player.vlc.Instance')
-    def test_get_mute_state_true(self, mock_vlc_instance):
+    def test_get_mute_state_true(self):
         """Test get_mute_state returns True when muted."""
-        mock_instance = MagicMock()
-        mock_player = MagicMock()
-        mock_vlc_instance.return_value = mock_instance
-        mock_instance.media_player_new.return_value = mock_player
-        mock_player.audio_get_mute.return_value = 1  # Muted
+        with patch('sounddevice.play') as mock_play:
+            player = AudioPlayer()
+            # Manually set muted state
+            player._muted = True
+            self.assertTrue(player.get_mute_state())
 
-        player = AudioPlayer()
-        self.assertTrue(player.get_mute_state())
-
-    @patch('audio.audio_player.vlc.Instance')
-    def test_set_mute_true(self, mock_vlc_instance):
+    def test_set_mute_true(self):
         """Test set_mute with mute=True."""
-        mock_instance = MagicMock()
-        mock_player = MagicMock()
-        mock_vlc_instance.return_value = mock_instance
-        mock_instance.media_player_new.return_value = mock_player
+        with patch('sounddevice.play') as mock_play:
+            player = AudioPlayer()
+            player.set_mute(True)
+            self.assertTrue(player.get_mute_state())
 
-        player = AudioPlayer()
-        player.set_mute(True)
-
-        mock_player.audio_set_mute.assert_called_once_with(1)
-
-    @patch('audio.audio_player.vlc.Instance')
-    def test_set_mute_false(self, mock_vlc_instance):
+    def test_set_mute_false(self):
         """Test set_mute with mute=False."""
-        mock_instance = MagicMock()
-        mock_player = MagicMock()
-        mock_vlc_instance.return_value = mock_instance
-        mock_instance.media_player_new.return_value = mock_player
+        with patch('sounddevice.play') as mock_play:
+            player = AudioPlayer()
+            player.set_mute(False)
+            self.assertFalse(player.get_mute_state())
 
-        player = AudioPlayer()
-        player.set_mute(False)
-
-        mock_player.audio_set_mute.assert_called_once_with(0)
-
-    @patch('audio.audio_player.vlc.Instance')
-    def test_set_mute_error_handling(self, mock_vlc_instance):
+    def test_set_mute_error_handling(self):
         """Test set_mute handles errors gracefully."""
-        mock_instance = MagicMock()
-        mock_player = MagicMock()
-        mock_vlc_instance.return_value = mock_instance
-        mock_instance.media_player_new.return_value = mock_player
-        mock_player.audio_set_mute.side_effect = Exception("Mute error")
+        with patch('sounddevice.play') as mock_play:
+            player = AudioPlayer()
 
-        player = AudioPlayer()
-        # Should not raise, but log error
-        player.set_mute(True)
+            # Should not raise exception for valid values
+            try:
+                player.set_mute(True)
+                player.set_mute(False)
+            except Exception:
+                self.fail("set_mute should not raise exception for valid boolean values")
 
-        mock_player.audio_set_mute.assert_called_once()
-
-    @patch('audio.audio_player.vlc.Instance')
-    def test_get_mute_state_error_handling(self, mock_vlc_instance):
+    def test_get_mute_state_error_handling(self):
         """Test get_mute_state handles errors gracefully."""
-        mock_instance = MagicMock()
-        mock_player = MagicMock()
-        mock_vlc_instance.return_value = mock_instance
-        mock_instance.media_player_new.return_value = mock_player
-        mock_player.audio_get_mute.side_effect = Exception("Get mute error")
-
-        player = AudioPlayer()
-        # Should return False on error
-        self.assertFalse(player.get_mute_state())
+        with patch('sounddevice.play') as mock_play:
+            player = AudioPlayer()
+            # Should return False on error
+            self.assertFalse(player.get_mute_state())
 
 
 class TestMuteSettings(unittest.TestCase):

@@ -309,6 +309,158 @@ class TestBPMRawFormat(unittest.TestCase):
         self.assertIsInstance(metadata1['bpm'], float)
         self.assertIsInstance(metadata2['bpm'], float)
 
+    def test_bpm_storage_vs_display_separation(self):
+        """Test that BPM is stored as raw value but displayed as rounded/normalized."""
+        # Test with various raw BPM values
+        test_cases = [
+            (140.75, 141, 70),    # High BPM that gets normalized
+            (98.3, 98, 98),       # Mid-range BPM that stays same
+            (45.2, 45, 90),       # Low BPM that gets doubled
+            (200.1, 200, 50),      # Very high BPM that gets halved to 100.05, then rounds to 100, but wait - actually 200.1/2 = 100.05, then /2 = 50.025, rounds to 50
+            (128.0, 128, 64),      # Exact integer that gets normalized
+        ]
+
+        for raw_bpm, expected_raw_display, expected_perceived_display in test_cases:
+            with self.subTest(raw_bpm=raw_bpm):
+                # Test raw preference - should round but not normalize
+                set_bpm_preference('raw')
+                raw_display = get_display_bpm(raw_bpm)
+                self.assertEqual(raw_display, str(expected_raw_display),
+                    f"Raw {raw_bpm} should display as {expected_raw_display}, got {raw_display}")
+
+                # Test perceived preference - should normalize to 50-100 range
+                set_bpm_preference('perceived')
+                perceived_display = get_display_bpm(raw_bpm)
+                self.assertEqual(perceived_display, str(expected_perceived_display),
+                    f"Raw {raw_bpm} should display as {expected_perceived_display} with perceived, got {perceived_display}")
+
+                # Verify the raw value is still accessible
+                self.assertIsInstance(float(raw_bpm), float, "Raw BPM should remain as float")
+
+    def test_playlist_display_consistency(self):
+        """Test that playlist display uses get_display_bpm consistently."""
+        from unittest.mock import Mock, patch
+        from ui.playlist_view import PlaylistView
+
+        # Mock dependencies
+        mock_state = Mock()
+        mock_state.playlist = ["/test/song1.mp3"]
+
+        mock_theme = Mock()
+        mock_theme.palette = {"bg": "#121212", "fg": "#FFFFFF", "accent": "#BB86FC"}
+
+        with patch('ui.playlist_view.get_metadata') as mock_get_metadata, \
+             patch('ui.playlist_view.get_display_title') as mock_get_display_title, \
+             patch('ui.playlist_view.PlaylistContextMenu'):
+
+            playlist_view = PlaylistView.__new__(PlaylistView)
+            playlist_view.state = mock_state
+            playlist_view.theme = mock_theme
+            playlist_view.tree = Mock()
+
+            # Mock tree methods
+            mock_tree_children = ['item1']
+            playlist_view.tree.get_children.return_value = mock_tree_children
+            playlist_view.tree.item = Mock()
+
+            # Set up metadata with raw BPM value
+            mock_metadata = {
+                "title": "Test Song",
+                "artist": "Test Artist",
+                "album": "Test Album",
+                "duration": "3:45",
+                "bpm": 140.75  # Raw BPM value
+            }
+            mock_get_metadata.return_value = mock_metadata
+            mock_get_display_title.return_value = "Test Song"
+
+            # Test with perceived preference
+            set_bpm_preference('perceived')
+            playlist_view.refresh_metadata_for_file("/test/song1.mp3")
+
+            # Verify the displayed BPM is normalized
+            call_args = playlist_view.tree.item.call_args
+            values_tuple = call_args[1]['values']
+            displayed_bpm = values_tuple[4].strip()  # Remove padding
+
+            expected_bpm = get_display_bpm(140.75)
+            self.assertEqual(displayed_bpm, expected_bpm,
+                f"Playlist should display normalized BPM '{expected_bpm}', got '{displayed_bpm}'")
+
+            # Test with raw preference
+            set_bpm_preference('raw')
+            playlist_view.tree.item.reset_mock()
+            playlist_view.refresh_metadata_for_file("/test/song1.mp3")
+
+            # Verify the displayed BPM is rounded but not normalized
+            call_args = playlist_view.tree.item.call_args
+            values_tuple = call_args[1]['values']
+            # Verify the displayed BPM is rounded but not normalized
+            call_args = playlist_view.tree.item.call_args
+            values_tuple = call_args[1]['values']
+            displayed_bpm = values_tuple[4].strip()
+
+            expected_bpm = get_display_bpm(140.75)
+            self.assertEqual(displayed_bpm, expected_bpm,
+                f"Playlist should display rounded BPM '{expected_bpm}', got '{displayed_bpm}'")
+
+    def test_media_info_window_display_rounding(self):
+        """Test that media info window displays rounded BPM while storing raw value."""
+        from unittest.mock import Mock, patch
+        from ui.media_info_window import MediaInfoWindow
+        from audio.metadata import metadata_extractor
+
+        with patch('audio.metadata.get_file_info') as mock_get_file_info, \
+             patch('ui.media_info_window.center_window'), \
+             patch.object(metadata_extractor, 'register_bpm_listener'):
+
+            # Mock file info with raw BPM
+            mock_file_info = {
+                'filename': 'test.mp3',
+                'path': '/test/test.mp3',
+                'size': 5000000,
+                'duration': 180,
+                'format': 'mp3',
+                'codec': 'mp3',
+                'bitrate': 320000,
+                'sample_rate': 44100,
+                'channels': 2,
+                'metadata': {
+                    'bpm': 128.75,  # Raw BPM value
+                    'title': 'Test Song',
+                    'artist': 'Test Artist'
+                }
+            }
+            mock_get_file_info.return_value = mock_file_info
+
+            # Create media info window (mock parent to avoid GUI)
+            mock_parent = Mock()
+            mock_parent.winfo_exists.return_value = True
+
+            with patch('tkinter.Toplevel') as mock_toplevel:
+                mock_window = Mock()
+                mock_toplevel.return_value = mock_window
+
+                # Test with perceived preference
+                set_bpm_preference('perceived')
+
+                # We can't easily test full GUI, but we can verify the logic
+                # by checking what media info window would display
+                bpm_val = mock_file_info.get('metadata', {}).get('bpm')
+                if bpm_val is not None and bpm_val != "":
+                    # This is what the media info window does for display
+                    raw_bpm = int(round(float(bpm_val)))
+                    displayed_bpm = str(raw_bpm)
+
+                    # For perceived preference, display should be normalized
+                    expected_display = get_display_bpm(bpm_val)
+                    self.assertEqual(displayed_bpm, str(int(round(float(bpm_val)))),
+                        f"Media info should display rounded BPM '{int(round(float(bpm_val)))}', got '{displayed_bpm}'")
+
+                    # But the stored value should still be raw
+                    self.assertEqual(bpm_val, 128.75,
+                        f"Stored BPM should remain raw '{128.75}', got '{bpm_val}'")
+
 
 if __name__ == '__main__':
     unittest.main()

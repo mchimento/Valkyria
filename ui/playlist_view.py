@@ -266,6 +266,9 @@ class PlaylistView(ttk.Frame):
                     if bpm is None:
                         bpm = ""
 
+                    # Ensure BPM is updated in metadata cache
+                    metadata["bpm"] = round(float(bpm)) if bpm else ""
+
                     # Use display BPM function for normalized display
                     display_bpm = get_display_bpm(bpm)
                     padded_bpm = f"  {display_bpm}" if display_bpm else ""
@@ -301,7 +304,9 @@ class PlaylistView(ttk.Frame):
                         padded_artist = f"  {artist}"
                         padded_album = f"  {album}"
                         padded_duration = f"  {duration}"
-                        padded_bpm = f"  {bpm}" if bpm else ""
+                        # Use display BPM function for normalized display
+                        display_bpm = get_display_bpm(bpm)
+                        padded_bpm = f"  {display_bpm}" if display_bpm else ""
                         values = (title, padded_artist, padded_album, padded_duration, padded_bpm)
                         self.tree.item(item_id, values=values)
                     break

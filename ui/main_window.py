@@ -10,6 +10,7 @@ import customtkinter as ctk
 import threading, os, io
 from audio.metadata import get_metadata, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor, get_display_bpm
 from PIL import Image, ImageDraw, ImageFont
+from audio.bpm import on_bpm_updated, analyze_bpm_worker, save_bpm_worker
 
 from audio import m3u as m3u_module, playback
 from ui.playlist_view import PlaylistView
@@ -239,16 +240,7 @@ class MainWindow:
             self.btn_bpm.configure(state="normal", text="Analyze BPM")
 
     def _analyze_bpm_worker(self, filepath):
-        """Worker function to analyze BPM in background."""
-        try:
-            analyzed_bpm = analyze_bpm(filepath)
-
-            # Update UI in main thread
-            self.root.after(0, self._on_bpm_analysis_complete, filepath, analyzed_bpm)
-
-        except Exception as e:
-            logger.error(f"Error in BPM analysis worker: {e}")
-            self.root.after(0, self._reset_bpm_button_to_analyze)
+        analyze_bpm_worker(filepath, self.root, self._on_bpm_analysis_complete)
 
     def _on_bpm_analysis_complete(self, filepath, bpm_value):
         """Handle BPM analysis completion."""
@@ -317,18 +309,9 @@ class MainWindow:
             logger.error(f"Error updating meta with temporary BPM: {e}")
 
     def _save_bpm_worker(self, filepath, bpm_value):
-        """Worker function to save BPM to file metadata."""
-        try:
-            success = write_bpm(filepath, bpm_value)
+        save_bpm_worker(filepath, bpm_value, self.root, self._on_bpm_save_complete)
 
-            # Update UI in main thread
-            self.root.after(0, self._on_bpm_save_complete, filepath, bpm_value, success)
-
-        except Exception as e:
-            logger.error(f"Error in BPM save worker: {e}")
-            self.root.after(0, self._reset_bpm_button_to_analyze)
-
-    def _on_bpm_save_complete(self, filepath, bpm_value, success):
+    def _on_bpm_save_complete(self, filepath, success):
         """Handle BPM save completion."""
         try:
             if success:
@@ -336,26 +319,19 @@ class MainWindow:
                 self.current_temp_bpm = None
                 self.temporary_bpm_files.discard(filepath)  # Remove from temporary tracking
 
-                # Update metadata cache to reflect saved BPM
-                metadata_extractor.update_cache(filepath)
+                # Update UI to reflect saved state
+                self.bpm_button_state = "analyze"
+                self.btn_bpm.configure(state="normal", text="Analyze BPM")
 
-                # Update UI to show the saved BPM
-                self._restore_status()
-
-                # Hide BPM control frame since BPM is now saved
-                self.bpm_control_frame.pack_forget()
-
-                # Show success message
-                self._set_temporary_status(f"BPM value saved to file")
+                # Notify user of success
+                self._set_temporary_status("BPM saved successfully")
             else:
-                # Save failed, reset to save state
-                self.bpm_button_state = "save"
-                self.btn_bpm.configure(state="normal", text="Save BPM")
-                self._set_temporary_status("Failed to save BPM to file")
+                # Notify user of failure
+                self._set_temporary_status("Failed to save BPM")
 
         except Exception as e:
             logger.error(f"Error handling BPM save completion: {e}")
-            self._reset_bpm_button_to_analyze()
+            self._set_temporary_status("Error saving BPM")
 
     # ---------- Build UI ----------
     def _build_menu(self):

@@ -255,7 +255,8 @@ class PreferencesWindow(tk.Toplevel):
                  background=[("selected", palette.get("accent", "#0078d4")),
                            ("active", palette.get("button_hover", "#106ebe"))],
                  foreground=[("selected", "#ffffff"),
-                           ("active", fg)])
+                           ("active", fg)],
+                 padding=[("selected", [6, 6])])
 
         # Apply notebook style
         self.notebook.configure(style="Prefs.TNotebook")
