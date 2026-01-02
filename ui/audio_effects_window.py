@@ -1,7 +1,14 @@
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
+import json
+from pathlib import Path
 from ui.utils import center_window
+
+# Load audio effects configuration
+config_path = Path(__file__).parent.parent / 'audio' / 'audio_effects_config.json'
+with open(config_path, 'r') as f:
+    AUDIO_CONFIG = json.load(f)
 
 class AudioEffectsWindow(tk.Toplevel):
     """
@@ -20,37 +27,28 @@ class AudioEffectsWindow(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
 
+        # Set initial background color to match expected theme
+        initial_bg = theme_manager.palette.get("bg", "#ffffff")
+        self.configure(bg=initial_bg)
+
         # Hide initially
         self.withdraw()
 
         center_window(self, parent)
 
+        # Load EQ configuration
+        eq_config = AUDIO_CONFIG['equalizer']
+
         # EQ Bands (Standard ISO frequencies)
-        self.bands = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000]
-        self.band_labels = ["60", "170", "310", "600", "1K", "3K", "6K", "12K", "14K", "16K"]
+        self.bands = eq_config['bands']
+        self.band_labels = eq_config['band_labels']
         self.sliders = []
         self.slider_vars = []
 
-        # EQ Presets (Preamp, [Bands])
-        self.presets = {
-            "Flat": (12, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-            "Classical": (12, [0, 0, 0, 0, 0, 0, -7.2, -7.2, -7.2, -9.6]),
-            "Club": (6, [0, 0, 8, 5.6, 5.6, 5.6, 3.2, 0, 0, 0]),
-            "Dance": (5, [9.6, 7.2, 2.4, 0, 0, -5.6, -7.2, -7.2, 0, 0]),
-            "Full Bass": (5, [-6, 9.6, 9.6, 5.6, 1.6, -4, -8, -10.3, -11.2, -11.2]),
-            "Full Treble": (3, [-9.6, -9.6, -9.6, -4, 2.4, 11.2, 16, 16, 16, 16.7]),
-            "Headphones": (4, [4.8, 11.2, 5.6, -3.2, -2.4, 1.6, 4.8, 9.6, 12.8, 14.4]),
-            "Large Hall": (5, [10.3, 10.3, 5.6, 5.6, 0, -4.8, -4.8, -4.8, 0, 0]),
-            "Live": (7, [-4.8, 0, 4, 5.6, 5.6, 5.6, 4.0, 2.4, 2.4, 2.4]),
-            "Party": (6, [7.2, 7.2, 0, 0, 0, 0, 0, 0, 7.2, 7.2]),
-            "Pop": (6, [-1.6, 4.8, 7.2, 8, 5.6, 0, -2.4, -2.4, -1.6, -1.6]),
-            "Reggae": (8, [0, 0, 0, -5.6, 0, 6.4, 6.4, 0, 0, 0]),
-            "Rock": (5, [8, 4.8, -5.6, -8, -3.2, 4, 8.8, 11.2, 11.2, 11.2]),
-            "Ska": (6, [-2.4, -4.8, -4, 0, 4, 5.6, 8.8, 9.6, 11.2, 9.6]),
-            "Soft": (5, [4.8, 1.6, 0, -2.4, 0, 4, 8, 9.6, 11.2, 12]),
-            "Soft Rock": (7, [4, 4, 2.4, 0, -4, -5.6, -3.2, 0, 2.4, 8.8]),
-            "Techno": (5, [8.0, 5.6, 0, -5.6, -4.8, 0, 8, 9.6, 9.6, 8.8])
-        }
+        # EQ Presets - convert from config format to tuple format
+        self.presets = {}
+        for preset_name, preset_data in eq_config['presets'].items():
+            self.presets[preset_name] = (preset_data['preamp'], preset_data['gains'])
 
         # State - default to False
         self.enabled_var = tk.BooleanVar(value=False)
@@ -62,10 +60,29 @@ class AudioEffectsWindow(tk.Toplevel):
                 pass
 
         # Playback Rate State
-        self.rate_var = tk.DoubleVar(value=1.0)
+        playback_config = AUDIO_CONFIG['playback']
+        self.rate_var = tk.DoubleVar(value=playback_config['default_rate'])
         if hasattr(self.player, 'get_playback_rate'):
             try:
                 self.rate_var.set(self.player.get_playback_rate())
+            except:
+                pass
+
+        # Compressor State
+        comp_config = AUDIO_CONFIG['compressor']
+        self.compressor_enabled_var = tk.BooleanVar(value=comp_config['enabled'])
+        self.compressor_threshold_var = tk.DoubleVar(value=comp_config['threshold'])
+        self.compressor_ratio_var = tk.DoubleVar(value=comp_config['ratio'])
+        self.compressor_attack_var = tk.DoubleVar(value=comp_config['attack'])
+        self.compressor_release_var = tk.DoubleVar(value=comp_config['release'])
+        self.compressor_knee_var = tk.DoubleVar(value=comp_config['knee'])
+        self.compressor_makeup_var = tk.DoubleVar(value=comp_config['makeup_gain'])
+        self.compressor_rms_mode_var = tk.BooleanVar(value=comp_config['use_rms'])
+
+        # Try to get initial compressor state
+        if hasattr(self.player, 'get_compressor_enabled'):
+            try:
+                self.compressor_enabled_var.set(self.player.get_compressor_enabled())
             except:
                 pass
 
@@ -74,6 +91,10 @@ class AudioEffectsWindow(tk.Toplevel):
 
         # Synchronize UI state with initial values
         self._on_enable_toggle()
+        self._on_compressor_toggle()
+
+        # Force all pending widget updates to complete before showing window
+        self.update_idletasks()
 
         self.deiconify()
 
@@ -209,7 +230,13 @@ class AudioEffectsWindow(tk.Toplevel):
             # Store label reference on slider for easy update
             slider.value_label = lbl
 
-        # --- Tab 2: Advanced ---
+        # --- Tab 2: Compressor ---
+        self.compressor_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.compressor_tab, text="Compressor")
+
+        self._create_compressor_tab()
+
+        # --- Tab 3: Advanced ---
         self.effects_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.effects_tab, text="Advanced")
 
@@ -242,14 +269,289 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
 
+    def _create_compressor_tab(self):
+        """Create the Compressor tab UI."""
+        container = ttk.Frame(self.compressor_tab)
+        container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Enable Switch
+        top_frame = ttk.Frame(container)
+        top_frame.pack(fill=tk.X, pady=(0, 20))
+
+        self.compressor_enable_switch = ctk.CTkSwitch(
+            top_frame,
+            text="Enable Compressor",
+            variable=self.compressor_enabled_var,
+            command=self._on_compressor_toggle,
+            width=150
+        )
+        self.compressor_enable_switch.pack(side=tk.LEFT)
+
+        # Reset button
+        self.compressor_reset_btn = ctk.CTkButton(
+            top_frame,
+            text="Reset to Defaults",
+            width=120,
+            height=28,
+            font=("Segoe UI", 10),
+            command=self._reset_compressor
+        )
+        self.compressor_reset_btn.pack(side=tk.RIGHT)
+
+        # Parameters Frame with vertical sliders
+        params_frame = ttk.Frame(container)
+        params_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Threshold
+        threshold_frame = ttk.Frame(params_frame)
+        threshold_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(threshold_frame, text="Threshold", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        self.threshold_slider = ctk.CTkSlider(
+            threshold_frame,
+            from_=0, to=-60,
+            orientation="vertical",
+            variable=self.compressor_threshold_var,
+            command=self._on_compressor_change,
+            height=200,
+            width=11,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
+            button_corner_radius=2
+        )
+        self.threshold_slider.pack(pady=5)
+
+        self.threshold_label = ttk.Label(threshold_frame, text=f"{self.compressor_threshold_var.get():.1f} dB", font=("Segoe UI", 8), width=10, anchor="center")
+        self.threshold_label.pack()
+
+        # Ratio
+        ratio_frame = ttk.Frame(params_frame)
+        ratio_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(ratio_frame, text="Ratio", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        self.ratio_slider = ctk.CTkSlider(
+            ratio_frame,
+            from_=20.0, to=1.0,
+            orientation="vertical",
+            variable=self.compressor_ratio_var,
+            command=self._on_compressor_change,
+            height=200,
+            width=11,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
+            button_corner_radius=2
+        )
+        self.ratio_slider.pack(pady=5)
+
+        self.ratio_label = ttk.Label(ratio_frame, text=f"{self.compressor_ratio_var.get():.1f}:1", font=("Segoe UI", 8), width=10, anchor="center")
+        self.ratio_label.pack()
+
+        # Attack
+        attack_frame = ttk.Frame(params_frame)
+        attack_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(attack_frame, text="Attack", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        self.attack_slider = ctk.CTkSlider(
+            attack_frame,
+            from_=500.0, to=0.1,
+            orientation="vertical",
+            variable=self.compressor_attack_var,
+            command=self._on_compressor_change,
+            height=200,
+            width=11,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
+            button_corner_radius=2
+        )
+        self.attack_slider.pack(pady=5)
+
+        self.attack_label = ttk.Label(attack_frame, text=f"{self.compressor_attack_var.get():.1f} ms", font=("Segoe UI", 8), width=10, anchor="center")
+        self.attack_label.pack()
+
+        # Release
+        release_frame = ttk.Frame(params_frame)
+        release_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(release_frame, text="Release", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        self.release_slider = ctk.CTkSlider(
+            release_frame,
+            from_=1000.0, to=1.0,
+            orientation="vertical",
+            variable=self.compressor_release_var,
+            command=self._on_compressor_change,
+            height=200,
+            width=11,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
+            button_corner_radius=2
+        )
+        self.release_slider.pack(pady=5)
+
+        self.release_label = ttk.Label(release_frame, text=f"{self.compressor_release_var.get():.1f} ms", font=("Segoe UI", 8), width=10, anchor="center")
+        self.release_label.pack()
+
+        # Knee
+        knee_frame = ttk.Frame(params_frame)
+        knee_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(knee_frame, text="Knee", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        self.knee_slider = ctk.CTkSlider(
+            knee_frame,
+            from_=10.0, to=0.0,
+            orientation="vertical",
+            variable=self.compressor_knee_var,
+            command=self._on_compressor_change,
+            height=200,
+            width=11,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
+            button_corner_radius=2
+        )
+        self.knee_slider.pack(pady=5)
+
+        self.knee_label = ttk.Label(knee_frame, text=f"{self.compressor_knee_var.get():.1f} dB", font=("Segoe UI", 8), width=10, anchor="center")
+        self.knee_label.pack()
+
+        # Makeup Gain
+        makeup_frame = ttk.Frame(params_frame)
+        makeup_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(makeup_frame, text="Makeup", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        self.makeup_slider = ctk.CTkSlider(
+            makeup_frame,
+            from_=20, to=-20,
+            orientation="vertical",
+            variable=self.compressor_makeup_var,
+            command=self._on_compressor_change,
+            height=200,
+            width=11,
+            border_width=0,
+            button_length=20,
+            corner_radius=4,
+            button_corner_radius=2
+        )
+        self.makeup_slider.pack(pady=5)
+
+        self.makeup_label = ttk.Label(makeup_frame, text=f"{self.compressor_makeup_var.get():+.1f} dB", font=("Segoe UI", 8), width=10, anchor="center")
+        self.makeup_label.pack()
+
+        # Detection Mode
+        mode_frame = ttk.Frame(params_frame)
+        mode_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+        ttk.Label(mode_frame, text="Detection", font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+        # Center the switch vertically
+        mode_center = ttk.Frame(mode_frame)
+        mode_center.pack(expand=True)
+
+        self.rms_mode_switch = ctk.CTkSwitch(
+            mode_center,
+            text="RMS",
+            variable=self.compressor_rms_mode_var,
+            command=self._on_compressor_change,
+            width=60
+        )
+        self.rms_mode_switch.pack(pady=(80, 5))
+
+        self.mode_label = ttk.Label(mode_center, text="Peak" if not self.compressor_rms_mode_var.get() else "RMS", font=("Segoe UI", 8), width=10, anchor="center")
+        self.mode_label.pack()
+
+        # Info Label at bottom
+        info_frame = ttk.Frame(container)
+        info_frame.pack(fill=tk.X, pady=(20, 0))
+
+        info_label = ttk.Label(
+            info_frame,
+            text="The compressor reduces dynamic range by attenuating signals above the threshold. Use makeup gain to compensate for volume loss.",
+            font=("Segoe UI", 9),
+            justify=tk.CENTER,
+            wraplength=700
+        )
+        info_label.pack(pady=(20, 0))
+
+    def _on_compressor_toggle(self):
+        """Handle compressor enable/disable."""
+        enabled = self.compressor_enabled_var.get()
+        state = "normal" if enabled else "disabled"
+
+        # Update UI state
+        if hasattr(self, 'threshold_slider'):
+            self.threshold_slider.configure(state=state)
+            self.ratio_slider.configure(state=state)
+            self.attack_slider.configure(state=state)
+            self.release_slider.configure(state=state)
+            self.makeup_slider.configure(state=state)
+            self.knee_slider.configure(state=state)
+            self.rms_mode_switch.configure(state=state)
+
+        # Apply to player
+        self._apply_compressor()
+
+    def _on_compressor_change(self, value=None):
+        """Handle compressor parameter changes."""
+        # Update labels
+        if hasattr(self, 'threshold_label'):
+            self.threshold_label.configure(text=f"{self.compressor_threshold_var.get():.1f} dB")
+            self.ratio_label.configure(text=f"{self.compressor_ratio_var.get():.1f}:1")
+            self.attack_label.configure(text=f"{self.compressor_attack_var.get():.1f} ms")
+            self.release_label.configure(text=f"{self.compressor_release_var.get():.1f} ms")
+            self.makeup_label.configure(text=f"{self.compressor_makeup_var.get():+.1f} dB")
+            self.knee_label.configure(text=f"{self.compressor_knee_var.get():.1f} dB")
+            self.mode_label.configure(text="RMS" if self.compressor_rms_mode_var.get() else "Peak")
+
+        # Apply to player
+        self._apply_compressor()
+
+    def _apply_compressor(self):
+        """Apply current compressor settings to player."""
+        if hasattr(self.player, 'set_compressor'):
+            try:
+                self.player.set_compressor(
+                    enabled=self.compressor_enabled_var.get(),
+                    threshold=self.compressor_threshold_var.get(),
+                    ratio=self.compressor_ratio_var.get(),
+                    attack=self.compressor_attack_var.get(),
+                    release=self.compressor_release_var.get(),
+                    makeup_gain=self.compressor_makeup_var.get(),
+                    knee=self.compressor_knee_var.get(),
+                    use_rms=self.compressor_rms_mode_var.get()
+                )
+            except Exception as e:
+                print(f"Error applying compressor: {e}")
+
+    def _reset_compressor(self):
+        """Reset compressor to default values."""
+        comp_config = AUDIO_CONFIG['compressor']
+        self.compressor_threshold_var.set(comp_config['threshold'])
+        self.compressor_ratio_var.set(comp_config['ratio'])
+        self.compressor_attack_var.set(comp_config['attack'])
+        self.compressor_release_var.set(comp_config['release'])
+        self.compressor_makeup_var.set(comp_config['makeup_gain'])
+        self.compressor_knee_var.set(comp_config['knee'])
+        self.compressor_rms_mode_var.set(comp_config['use_rms'])
+        self._on_compressor_change()
+
     def _on_rate_change(self, value):
         self.speed_label.configure(text=f"{float(value):.2f}x")
         if hasattr(self.player, 'set_playback_rate'):
             self.player.set_playback_rate(float(value))
 
     def _reset_speed(self):
-        self.rate_var.set(1.0)
-        self._on_rate_change(1.0)
+        default_rate = AUDIO_CONFIG['playback']['default_rate']
+        self.rate_var.set(default_rate)
+        self._on_rate_change(default_rate)
 
     def _apply_theme(self):
         """Apply theme colors from palette."""
@@ -358,6 +660,14 @@ class AudioEffectsWindow(tk.Toplevel):
             bg_color=bg
         )
 
+        if hasattr(self, 'compressor_reset_btn'):
+            self.compressor_reset_btn.configure(
+                fg_color=btn_bg,
+                text_color=btn_fg,
+                hover_color=accent_hover,
+                bg_color=bg
+            )
+
         # Apply Buttons
         if hasattr(self, 'apply_btns'):
             for btn in self.apply_btns:
@@ -389,6 +699,19 @@ class AudioEffectsWindow(tk.Toplevel):
             border_color="transparent"
         )
 
+        # Compressor sliders
+        if hasattr(self, 'threshold_slider'):
+            for slider in [self.threshold_slider, self.ratio_slider, self.attack_slider,
+                          self.release_slider, self.makeup_slider, self.knee_slider]:
+                slider.configure(
+                    fg_color=slider_bg,
+                    progress_color=slider_fg,
+                    button_color=slider_button,
+                    button_hover_color=accent_hover,
+                    bg_color=bg,
+                    border_color="transparent"
+                )
+
         for slider in self.sliders:
             slider.configure(
                 fg_color=slider_bg,
@@ -406,6 +729,28 @@ class AudioEffectsWindow(tk.Toplevel):
             if hasattr(slider, 'value_label'):
                 slider.value_label.configure(foreground=fg, background=bg)
         self.speed_label.configure(foreground=fg, background=bg)
+
+        # Compressor labels
+        if hasattr(self, 'threshold_label'):
+            self.threshold_label.configure(foreground=fg, background=bg)
+            self.ratio_label.configure(foreground=fg, background=bg)
+            self.attack_label.configure(foreground=fg, background=bg)
+            self.release_label.configure(foreground=fg, background=bg)
+            self.makeup_label.configure(foreground=fg, background=bg)
+
+        # Compressor switch
+        if hasattr(self, 'compressor_enable_switch'):
+            self.compressor_enable_switch.configure(
+                text_color=fg, progress_color=accent, button_color=accent,
+                button_hover_color=accent_hover, fg_color=palette.get("switch_bg", "#939393"), bg_color=bg
+            )
+
+        # RMS mode switch
+        if hasattr(self, 'rms_mode_switch'):
+            self.rms_mode_switch.configure(
+                text_color=fg, progress_color=accent, button_color=accent,
+                button_hover_color=accent_hover, fg_color=palette.get("switch_bg", "#939393"), bg_color=bg
+            )
 
     def update_theme(self):
         """Public method to refresh theme."""
@@ -475,7 +820,15 @@ class AudioEffectsWindow(tk.Toplevel):
             'equalizer_enabled': self.enabled_var.get(),
             'equalizer_preamp': self.preamp_var.get(),
             'equalizer_bands': [v.get() for v in self.slider_vars],
-            'playback_rate': self.rate_var.get()
+            'playback_rate': self.rate_var.get(),
+            'compressor_enabled': self.compressor_enabled_var.get(),
+            'compressor_threshold': self.compressor_threshold_var.get(),
+            'compressor_ratio': self.compressor_ratio_var.get(),
+            'compressor_attack': self.compressor_attack_var.get(),
+            'compressor_release': self.compressor_release_var.get(),
+            'compressor_makeup': self.compressor_makeup_var.get(),
+            'compressor_knee': self.compressor_knee_var.get(),
+            'compressor_use_rms': self.compressor_rms_mode_var.get()
         }
 
         self.settings.audio_effects = effects

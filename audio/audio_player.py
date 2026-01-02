@@ -6,6 +6,8 @@ Provides a simple, stable API to play/pause/stop and emits callbacks when a trac
 
 import logging
 import threading
+import json
+from pathlib import Path
 
 import sounddevice as sd
 import soundfile as sf
@@ -13,6 +15,11 @@ import numpy as np
 import scipy.signal
 
 logger = logging.getLogger(__name__)
+
+# Load audio effects configuration
+config_path = Path(__file__).parent / 'audio_effects_config.json'
+with open(config_path, 'r') as f:
+    AUDIO_CONFIG = json.load(f)
 
 class AudioPlayer:
     def __init__(self, on_track_end=None):
@@ -32,16 +39,31 @@ class AudioPlayer:
         self._paused = False
         self._stopped_manually = False
         self._device_id = None
-        self._playback_rate = 1.0
+        self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
 
         # Equalizer
-        self.equalizer_enabled = False
-        self._eq_bands = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000]
-        self._eq_gains = [0.0] * len(self._eq_bands)
-        self._eq_preamp = 0.0
+        eq_config = AUDIO_CONFIG['equalizer']
+        self.equalizer_enabled = eq_config['enabled']
+        self._eq_bands = eq_config['bands']
+        self._eq_gains = eq_config['default_gains'].copy()
+        self._eq_preamp = eq_config['default_preamp']
         self._eq_sos = None
         self._eq_zi = None
+
+        # Compressor
+        comp_config = AUDIO_CONFIG['compressor']
+        self._compressor_enabled = comp_config['enabled']
+        self._compressor_threshold = comp_config['threshold']
+        self._compressor_ratio = comp_config['ratio']
+        self._compressor_attack = comp_config['attack']
+        self._compressor_release = comp_config['release']
+        self._compressor_makeup = comp_config['makeup_gain']
+        self._compressor_knee = comp_config['knee']
+        self._compressor_use_rms = comp_config['use_rms']
+        self._compressor_envelope = 0.0
+        self._compressor_rms_buffer = np.zeros(comp_config['rms_buffer_size'])
+        self._compressor_rms_index = 0
 
         logger.info("AudioPlayer initialized (sounddevice)")
 
@@ -111,6 +133,10 @@ class AudioPlayer:
             # Check if ZI shape matches current channels (file channels)
             if self._eq_zi is not None and self._eq_zi.shape[1] == outdata.shape[1]:
                 outdata[:], self._eq_zi = scipy.signal.sosfilt(self._eq_sos, outdata, axis=0, zi=self._eq_zi)
+
+        # Apply Compressor
+        if self._compressor_enabled:
+            outdata[:] = self._apply_compressor(outdata)
 
         # Apply Volume
         if self._muted:
@@ -482,3 +508,103 @@ class AudioPlayer:
     def get_playback_rate(self):
         """Get current playback rate."""
         return self._playback_rate
+
+    def _apply_compressor(self, data):
+        """Apply dynamic range compression to audio data."""
+        # Convert parameters
+        threshold_linear = 10 ** (self._compressor_threshold / 20.0)
+        attack_coef = np.exp(-1.0 / (self._compressor_attack * self._file.samplerate / 1000.0))
+        release_coef = np.exp(-1.0 / (self._compressor_release * self._file.samplerate / 1000.0))
+        makeup_linear = 10 ** (self._compressor_makeup / 20.0)
+        knee_db = self._compressor_knee
+
+        # Process each sample
+        compressed = np.zeros_like(data)
+        for i in range(len(data)):
+            # Get input level based on detection mode
+            if self._compressor_use_rms:
+                # RMS detection - update circular buffer
+                sample_power = np.mean(data[i] ** 2)
+                self._compressor_rms_buffer[self._compressor_rms_index] = sample_power
+                self._compressor_rms_index = (self._compressor_rms_index + 1) % len(self._compressor_rms_buffer)
+                input_level = np.sqrt(np.mean(self._compressor_rms_buffer))
+            else:
+                # Peak detection - instantaneous absolute value
+                input_level = np.max(np.abs(data[i]))
+
+            # Envelope follower
+            if input_level > self._compressor_envelope:
+                self._compressor_envelope = attack_coef * self._compressor_envelope + (1 - attack_coef) * input_level
+            else:
+                self._compressor_envelope = release_coef * self._compressor_envelope + (1 - release_coef) * input_level
+
+            # Calculate gain reduction with knee
+            envelope_db = 20 * np.log10(self._compressor_envelope + 1e-10)
+            threshold_db = self._compressor_threshold
+
+            if knee_db > 0:
+                # Soft knee
+                knee_lower = threshold_db - knee_db / 2
+                knee_upper = threshold_db + knee_db / 2
+
+                if envelope_db < knee_lower:
+                    # Below knee - no compression
+                    gain_reduction_db = 0.0
+                elif envelope_db > knee_upper:
+                    # Above knee - full compression
+                    over_db = envelope_db - threshold_db
+                    gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
+                else:
+                    # In knee - smooth transition
+                    over_db = envelope_db - knee_lower
+                    knee_ratio = over_db / knee_db
+                    gain_reduction_db = knee_ratio * knee_ratio * knee_db * (1.0 - 1.0 / self._compressor_ratio) / 2
+            else:
+                # Hard knee
+                if envelope_db > threshold_db:
+                    over_db = envelope_db - threshold_db
+                    gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
+                else:
+                    gain_reduction_db = 0.0
+
+            gain_reduction_linear = 10 ** (-gain_reduction_db / 20.0)
+
+            # Apply gain reduction and makeup gain
+            compressed[i] = data[i] * gain_reduction_linear * makeup_linear
+
+        return compressed
+
+    def set_compressor(self, enabled, threshold=-20.0, ratio=3.0, attack=5.0, release=100.0, makeup_gain=0.0, knee=0.0, use_rms=True):
+        """
+        Enable/disable and configure dynamic range compressor.
+
+        Args:
+            enabled: Enable or disable the compressor
+            threshold: Threshold in dB (-60 to 0)
+            ratio: Compression ratio (1.0 to 20.0)
+            attack: Attack time in ms (0.1 to 500)
+            release: Release time in ms (1 to 1000)
+            makeup_gain: Makeup gain in dB (-20 to 20)
+            knee: Knee width in dB (0 to 10) - 0 for hard knee
+            use_rms: Use RMS detection (True) or Peak detection (False)
+        """
+        with self._lock:
+            self._compressor_enabled = enabled
+            self._compressor_threshold = max(-60.0, min(0.0, float(threshold)))
+            self._compressor_ratio = max(1.0, min(20.0, float(ratio)))
+            self._compressor_attack = max(0.1, min(500.0, float(attack)))
+            self._compressor_release = max(1.0, min(1000.0, float(release)))
+            self._compressor_makeup = max(-20.0, min(20.0, float(makeup_gain)))
+            self._compressor_knee = max(0.0, min(10.0, float(knee)))
+            self._compressor_use_rms = bool(use_rms)
+
+            if enabled:
+                mode = "RMS" if use_rms else "Peak"
+                logger.info(f"Compressor enabled: threshold={threshold}dB, ratio={ratio}:1, attack={attack}ms, release={release}ms, makeup={makeup_gain}dB, knee={knee}dB, mode={mode}")
+            else:
+                logger.info("Compressor disabled")
+
+    def get_compressor_enabled(self):
+        """Get compressor enabled state."""
+        with self._lock:
+            return self._compressor_enabled
