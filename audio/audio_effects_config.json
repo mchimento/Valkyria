@@ -21,13 +21,13 @@
     "ratio": 3.0,
     "attack": 25.0,
     "release": 100.0,
-    "makeup_gain": 7.0,
+    "makeup_gain": 6.0,
     "knee": 5.0,
-    "use_rms": false,
+    "use_rms": true,
     "rms_buffer_size": 512
   },
   "playback": {
-    "default_rate": 0.75,
+    "default_rate": 1.0,
     "min_rate": 0.25,
     "max_rate": 4.0
   }

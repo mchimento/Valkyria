@@ -191,7 +191,7 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.preamp_slider.pack(pady=5)
 
-        self.preamp_label = ttk.Label(preamp_frame, text="0 dB", font=("Segoe UI", 8), width=10, anchor="center")
+        self.preamp_label = ttk.Label(preamp_frame, text=f"{self.preamp_var.get():+.1f} dB", font=("Segoe UI", 8), width=10, anchor="center")
         self.preamp_label.pack()
 
         # Separator
@@ -235,8 +235,9 @@ class AudioEffectsWindow(tk.Toplevel):
             slider.pack(pady=5)
             self.sliders.append(slider)
 
-            # dB Label
-            lbl = ttk.Label(band_frame, text="0 dB", font=("Segoe UI", 8), width=10, anchor="center")
+            # dB Label - initialize with actual value
+            initial_val = val_var.get()
+            lbl = ttk.Label(band_frame, text=f"{initial_val:+.1f} dB", font=("Segoe UI", 8), width=10, anchor="center")
             lbl.pack()
             # Store label reference on slider for easy update
             slider.value_label = lbl
@@ -584,7 +585,7 @@ class AudioEffectsWindow(tk.Toplevel):
             self.player.set_playback_rate(float(value))
 
     def _reset_speed(self):
-        default_rate = AUDIO_CONFIG['playback']['default_rate']
+        default_rate = AUDIO_DEFAULTS['playback']['default_rate']
         self.rate_var.set(default_rate)
         self._on_rate_change(default_rate)
 
