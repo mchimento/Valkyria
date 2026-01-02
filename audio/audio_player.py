@@ -456,6 +456,36 @@ class AudioPlayer:
 
         return np.array([b0, b1, b2, a0, a1, a2]) / a0
 
+    def _design_low_shelf(self, f0, gain_db, Q, fs):
+        """Design coefficients for a low shelf filter."""
+        A = 10 ** (gain_db / 40.0)
+        w0 = 2 * np.pi * f0 / fs
+        alpha = np.sin(w0) / (2 * Q)
+
+        b0 = A * ((A + 1) - (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha)
+        b1 = 2 * A * ((A - 1) - (A + 1) * np.cos(w0))
+        b2 = A * ((A + 1) - (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha)
+        a0 = (A + 1) + (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha
+        a1 = -2 * ((A - 1) + (A + 1) * np.cos(w0))
+        a2 = (A + 1) + (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha
+
+        return np.array([b0, b1, b2, a0, a1, a2]) / a0
+
+    def _design_high_shelf(self, f0, gain_db, Q, fs):
+        """Design coefficients for a high shelf filter."""
+        A = 10 ** (gain_db / 40.0)
+        w0 = 2 * np.pi * f0 / fs
+        alpha = np.sin(w0) / (2 * Q)
+
+        b0 = A * ((A + 1) + (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha)
+        b1 = -2 * A * ((A - 1) + (A + 1) * np.cos(w0))
+        b2 = A * ((A + 1) + (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha)
+        a0 = (A + 1) - (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha
+        a1 = 2 * ((A - 1) - (A + 1) * np.cos(w0))
+        a2 = (A + 1) - (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha
+
+        return np.array([b0, b1, b2, a0, a1, a2]) / a0
+
     def _update_equalizer(self):
         """Recalculate equalizer filter coefficients."""
         with self._lock:
@@ -467,7 +497,15 @@ class AudioPlayer:
             fs = self._file.samplerate
             sos_list = []
             for i, freq in enumerate(self._eq_bands):
-                sos = self._design_peaking_filter(freq, self._eq_gains[i], 1.414, fs)
+                if i == 0:
+                    # Low Shelf for the first band (60Hz)
+                    sos = self._design_low_shelf(freq, self._eq_gains[i], 0.707, fs)
+                elif i == len(self._eq_bands) - 1:
+                    # High Shelf for the last band (16kHz)
+                    sos = self._design_high_shelf(freq, self._eq_gains[i], 0.707, fs)
+                else:
+                    # Peaking filter for middle bands
+                    sos = self._design_peaking_filter(freq, self._eq_gains[i], 1.414, fs)
                 sos_list.append(sos)
 
             self._eq_sos = np.vstack(sos_list)
@@ -526,14 +564,25 @@ class AudioPlayer:
 
         # Process each sample
         compressed = np.zeros_like(data)
+
+        # Pre-calculate RMS alpha if needed (approximate window average)
+        # alpha = 1 - exp(-1 / (window_samples))
+        # Using buffer size as window samples
+        rms_window = len(self._compressor_rms_buffer)
+        rms_alpha = 1.0 - np.exp(-1.0 / rms_window)
+
         for i in range(len(data)):
             # Get input level based on detection mode
             if self._compressor_use_rms:
-                # RMS detection - update circular buffer
+                # RMS detection using Exponential Moving Average (EMA)
+                # This is much faster than re-calculating mean of buffer every sample
                 sample_power = np.mean(data[i] ** 2)
-                self._compressor_rms_buffer[self._compressor_rms_index] = sample_power
-                self._compressor_rms_index = (self._compressor_rms_index + 1) % len(self._compressor_rms_buffer)
-                input_level = np.sqrt(np.mean(self._compressor_rms_buffer))
+                # Use the first element of buffer to store state (hacky but avoids new variable)
+                # Ideally we should add self._compressor_rms_state
+                current_ms = self._compressor_rms_buffer[0]
+                new_ms = rms_alpha * sample_power + (1 - rms_alpha) * current_ms
+                self._compressor_rms_buffer[0] = new_ms
+                input_level = np.sqrt(new_ms)
             else:
                 # Peak detection - instantaneous absolute value
                 input_level = np.max(np.abs(data[i]))
@@ -600,7 +649,7 @@ class AudioPlayer:
             self._compressor_ratio = max(1.0, min(20.0, float(ratio)))
             self._compressor_attack = max(0.1, min(500.0, float(attack)))
             self._compressor_release = max(1.0, min(1000.0, float(release)))
-            self._compressor_makeup = max(-20.0, min(20.0, float(makeup_gain)))
+            self._compressor_makeup = max(-20.0, min(30.0, float(makeup_gain)))
             self._compressor_knee = max(0.0, min(10.0, float(knee)))
             self._compressor_use_rms = bool(use_rms)
 
