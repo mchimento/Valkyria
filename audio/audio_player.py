@@ -71,6 +71,23 @@ class AudioPlayer:
         self._compressor_rms_buffer = np.zeros(comp_config['rms_buffer_size'])
         self._compressor_rms_index = 0
 
+        # Spatializer
+        spat_config = AUDIO_CONFIG.get('spatializer', {})
+        self._spatializer_enabled = spat_config.get('enabled', False)
+        self._spat_size = spat_config.get('size', 0.85)
+        self._spat_width = spat_config.get('width', 0.5)
+        self._spat_wet = spat_config.get('wet', 0.4)
+        self._spat_dry = spat_config.get('dry', 0.5)
+        self._spat_damp = spat_config.get('damp', 0.5)
+
+        # Reverb state
+        self._spat_initialized = False
+        self._spat_comb_buffers = []
+        self._spat_comb_indices = []
+        self._spat_comb_filters = [] # Store lowpass state
+        self._spat_allpass_buffers = []
+        self._spat_allpass_indices = []
+
         logger.info("AudioPlayer initialized (sounddevice)")
 
     def _stream_callback(self, outdata, frames, time, status):
@@ -143,6 +160,10 @@ class AudioPlayer:
         # Apply Compressor
         if self._compressor_enabled:
             outdata[:] = self._apply_compressor(outdata)
+
+        # Apply Spatializer
+        if self._spatializer_enabled:
+            outdata[:] = self._apply_spatializer(outdata)
 
         # Apply Volume
         if self._muted:
@@ -663,3 +684,68 @@ class AudioPlayer:
         """Get compressor enabled state."""
         with self._lock:
             return self._compressor_enabled
+
+    def set_spatializer(self, enabled, size=0.85, width=0.5, wet=0.4, dry=0.5, damp=0.5):
+        """Configure spatializer."""
+        with self._lock:
+            self._spatializer_enabled = enabled
+            self._spat_size = max(0.0, min(1.1, float(size)))
+            self._spat_width = max(0.0, min(1.0, float(width)))
+            self._spat_wet = max(0.0, min(1.0, float(wet)))
+            self._spat_dry = max(0.0, min(1.0, float(dry)))
+            self._spat_damp = max(0.0, min(1.0, float(damp)))
+
+            if enabled:
+                logger.info(f"Spatializer enabled: size={size}, width={width}, wet={wet}, dry={dry}, damp={damp}")
+            else:
+                logger.info("Spatializer disabled")
+
+    def get_spatializer_enabled(self):
+        return self._spatializer_enabled
+
+    def _apply_spatializer(self, data):
+        """Apply spatializer effect (Width + Simple Cross-Delay)."""
+        if not self._spat_initialized:
+            # Init simple buffers
+            # 100ms max delay
+            size = int(0.1 * self._file.samplerate)
+            self._spat_buffer = np.zeros((size, 2))
+            self._spat_write_pos = 0
+            self._spat_initialized = True
+
+        # 1. Width
+        width_factor = self._spat_width * 2.0
+        mid = (data[:, 0] + data[:, 1]) * 0.5
+        side = (data[:, 0] - data[:, 1]) * 0.5
+        side *= width_factor
+
+        dry_signal = np.column_stack((mid + side, mid - side))
+
+        # 2. Simple Reverb/Ambience (Cross-Delay)
+        # Delay time based on 'size' (0-100ms)
+        delay_samples = int(self._spat_size * 0.1 * self._file.samplerate)
+        if delay_samples == 0: delay_samples = 1
+
+        # Read from buffer (circular)
+        num_frames = len(data)
+        buffer_len = len(self._spat_buffer)
+
+        # Create indices
+        read_indices = (np.arange(num_frames) + self._spat_write_pos - delay_samples) % buffer_len
+        write_indices = (np.arange(num_frames) + self._spat_write_pos) % buffer_len
+
+        # Read delayed signal
+        delayed = self._spat_buffer[read_indices]
+
+        # Cross-feed: L gets delayed R, R gets delayed L
+        reverb_signal = np.column_stack((delayed[:, 1], delayed[:, 0]))
+
+        # Write current input to buffer (with some feedback for tail)
+        # Use damp as feedback control
+        feedback = self._spat_damp * 0.6
+        self._spat_buffer[write_indices] = data + reverb_signal * feedback
+
+        self._spat_write_pos = (self._spat_write_pos + num_frames) % buffer_len
+
+        # Mix
+        return dry_signal * self._spat_dry + reverb_signal * self._spat_wet

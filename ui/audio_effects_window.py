@@ -93,11 +93,30 @@ class AudioEffectsWindow(tk.Toplevel):
             except:
                 pass
 
+        # Spatializer State
+        spat_config = AUDIO_CONFIG.get('spatializer', {})
+        spat_defaults = AUDIO_DEFAULTS.get('spatializer', {})
+        self._original_spatializer_defaults = spat_defaults
+
+        self.spatializer_enabled_var = tk.BooleanVar(value=spat_config.get('enabled', False))
+        self.spat_size_var = tk.DoubleVar(value=spat_config.get('size', 0.85))
+        self.spat_width_var = tk.DoubleVar(value=spat_config.get('width', 0.5))
+        self.spat_wet_var = tk.DoubleVar(value=spat_config.get('wet', 0.4))
+        self.spat_dry_var = tk.DoubleVar(value=spat_config.get('dry', 0.5))
+        self.spat_damp_var = tk.DoubleVar(value=spat_config.get('damp', 0.5))
+
+        if hasattr(self.player, 'get_spatializer_enabled'):
+            try:
+                self.spatializer_enabled_var.set(self.player.get_spatializer_enabled())
+            except:
+                pass
+
         self._create_ui()
 
         # Synchronize UI state with initial values
         self._on_enable_toggle()
         self._on_compressor_toggle()
+        self._on_spatializer_toggle()
 
         self.deiconify()
 
@@ -303,7 +322,13 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self._create_compressor_tab()
 
-        # --- Tab 3: Advanced ---
+        # --- Tab 3: Spatializer ---
+        self.spatializer_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.spatializer_tab, text="Spatializer")
+
+        self._create_spatializer_tab()
+
+        # --- Tab 4: Advanced ---
         self.effects_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.effects_tab, text="Advanced")
 
@@ -717,6 +742,169 @@ class AudioEffectsWindow(tk.Toplevel):
         self.compressor_rms_mode_var.set(defaults['use_rms'])
         self._on_compressor_change()
 
+    def _create_spatializer_tab(self):
+        """Create the Spatializer tab UI."""
+        # Get theme colors for widget creation
+        palette = self.theme_manager.palette
+        bg = palette.get("bg", "#ffffff")
+        fg = palette.get("fg", "#000000")
+        accent = palette.get("accent", "#0078d4")
+        accent_hover = palette.get("accent_hover", "#106ebe")
+        slider_bg = palette.get("slider_bg", "#2a2a2a")
+        slider_fg = palette.get("slider_bg", accent)
+        slider_button = palette.get("accent", "#0078d4")
+        btn_bg = palette.get("button_bg_color", accent)
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        slider_border = palette.get("border", "#cccccc")
+
+        container = ttk.Frame(self.spatializer_tab)
+        container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Enable Switch
+        top_frame = ttk.Frame(container)
+        top_frame.pack(fill=tk.X, pady=(0, 20))
+
+        self.spatializer_enable_switch = ctk.CTkSwitch(
+            top_frame,
+            text="Enable Spatializer",
+            variable=self.spatializer_enabled_var,
+            command=self._on_spatializer_toggle,
+            width=150,
+            text_color=fg,
+            progress_color=accent,
+            button_color=accent,
+            button_hover_color=accent_hover,
+            fg_color=palette.get("switch_bg", "#939393"),
+            bg_color=bg
+        )
+        self.spatializer_enable_switch.pack(side=tk.LEFT)
+
+        # Reset button
+        self.spatializer_reset_btn = ctk.CTkButton(
+            top_frame,
+            text="Reset to Defaults",
+            width=120,
+            height=28,
+            font=("Segoe UI", 10),
+            command=self._reset_spatializer,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
+        )
+        self.spatializer_reset_btn.pack(side=tk.RIGHT)
+
+        # Parameters Frame with vertical sliders
+        params_frame = ttk.Frame(container)
+        params_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Helper to create slider
+        def create_spat_slider(parent, label, var, from_, to_):
+            frame = ttk.Frame(parent)
+            frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, padx=10)
+
+            ttk.Label(frame, text=label, font=("Segoe UI", 9, "bold")).pack(pady=(0, 5))
+
+            slider = ctk.CTkSlider(
+                frame,
+                from_=from_, to=to_,
+                orientation="vertical",
+                variable=var,
+                command=self._on_spatializer_change,
+                height=200,
+                width=11,
+                border_width=1,
+                button_length=20,
+                corner_radius=4,
+                button_corner_radius=2,
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_button,
+                button_hover_color=accent_hover,
+                bg_color=bg,
+                border_color=slider_border
+            )
+            slider.pack(pady=5)
+
+            lbl = ttk.Label(frame, text=f"{var.get():.2f}", font=("Segoe UI", 8), width=10, anchor="center")
+            lbl.pack()
+            # Store label reference on slider
+            slider.value_label = lbl
+            return slider
+
+        self.spat_size_slider = create_spat_slider(params_frame, "Size", self.spat_size_var, 0.0, 1.1)
+        self.spat_width_slider = create_spat_slider(params_frame, "Width", self.spat_width_var, 0.0, 1.0)
+        self.spat_wet_slider = create_spat_slider(params_frame, "Wet", self.spat_wet_var, 0.0, 1.0)
+        self.spat_dry_slider = create_spat_slider(params_frame, "Dry", self.spat_dry_var, 0.0, 1.0)
+        self.spat_damp_slider = create_spat_slider(params_frame, "Damp", self.spat_damp_var, 0.0, 1.0)
+
+        # Info Label
+        info_frame = ttk.Frame(container)
+        info_frame.pack(fill=tk.X, pady=(20, 0))
+
+        info_label = ttk.Label(
+            info_frame,
+            text="Spatializer adds reverb and stereo widening effects to create a sense of space.",
+            font=("Segoe UI", 9),
+            justify=tk.CENTER,
+            wraplength=700
+        )
+        info_label.pack(pady=(20, 0))
+
+    def _on_spatializer_toggle(self):
+        """Handle spatializer enable/disable."""
+        enabled = self.spatializer_enabled_var.get()
+        state = "normal" if enabled else "disabled"
+
+        # Update UI state
+        if hasattr(self, 'spat_size_slider'):
+            self.spat_size_slider.configure(state=state)
+            self.spat_width_slider.configure(state=state)
+            self.spat_wet_slider.configure(state=state)
+            self.spat_dry_slider.configure(state=state)
+            self.spat_damp_slider.configure(state=state)
+
+        # Apply to player
+        self._apply_spatializer()
+
+    def _on_spatializer_change(self, value=None):
+        """Handle spatializer parameter changes."""
+        # Update labels
+        if hasattr(self, 'spat_size_slider'):
+            self.spat_size_slider.value_label.configure(text=f"{self.spat_size_var.get():.2f}")
+            self.spat_width_slider.value_label.configure(text=f"{self.spat_width_var.get():.2f}")
+            self.spat_wet_slider.value_label.configure(text=f"{self.spat_wet_var.get():.2f}")
+            self.spat_dry_slider.value_label.configure(text=f"{self.spat_dry_var.get():.2f}")
+            self.spat_damp_slider.value_label.configure(text=f"{self.spat_damp_var.get():.2f}")
+
+        # Apply to player
+        self._apply_spatializer()
+
+    def _apply_spatializer(self):
+        """Apply current spatializer settings to player."""
+        if hasattr(self.player, 'set_spatializer'):
+            try:
+                self.player.set_spatializer(
+                    enabled=self.spatializer_enabled_var.get(),
+                    size=self.spat_size_var.get(),
+                    width=self.spat_width_var.get(),
+                    wet=self.spat_wet_var.get(),
+                    dry=self.spat_dry_var.get(),
+                    damp=self.spat_damp_var.get()
+                )
+            except Exception as e:
+                logger.error(f"Error applying spatializer: {e}")
+
+    def _reset_spatializer(self):
+        """Reset spatializer to original default values."""
+        defaults = self._original_spatializer_defaults
+        self.spat_size_var.set(defaults.get('size', 0.85))
+        self.spat_width_var.set(defaults.get('width', 0.5))
+        self.spat_wet_var.set(defaults.get('wet', 0.4))
+        self.spat_dry_var.set(defaults.get('dry', 0.5))
+        self.spat_damp_var.set(defaults.get('damp', 0.5))
+        self._on_spatializer_change()
+
     def _on_rate_change(self, value):
         self.speed_label.configure(text=f"{float(value):.2f}x")
         if hasattr(self.player, 'set_playback_rate'):
@@ -749,6 +937,14 @@ class AudioEffectsWindow(tk.Toplevel):
                     "knee": self.compressor_knee_var.get(),
                     "use_rms": self.compressor_rms_mode_var.get(),
                     "rms_buffer_size": AUDIO_CONFIG['compressor']['rms_buffer_size']
+                },
+                "spatializer": {
+                    "enabled": self.spatializer_enabled_var.get(),
+                    "size": self.spat_size_var.get(),
+                    "width": self.spat_width_var.get(),
+                    "wet": self.spat_wet_var.get(),
+                    "dry": self.spat_dry_var.get(),
+                    "damp": self.spat_damp_var.get()
                 },
                 "playback": {
                     "default_rate": self.rate_var.get(),
@@ -929,6 +1125,43 @@ class AudioEffectsWindow(tk.Toplevel):
             self.rms_mode_switch.configure(
                 text_color=fg, progress_color=accent, button_color=accent,
                 button_hover_color=accent_hover, fg_color=palette.get("switch_bg", "#939393"), bg_color=bg
+            )
+
+        # Spatializer sliders
+        if hasattr(self, 'spat_size_slider'):
+            for slider in [self.spat_size_slider, self.spat_width_slider, self.spat_wet_slider,
+                          self.spat_dry_slider, self.spat_damp_slider]:
+                slider.configure(
+                    fg_color=slider_bg,
+                    progress_color=slider_fg,
+                    button_color=slider_button,
+                    button_hover_color=accent_hover,
+                    bg_color=bg,
+                    border_color="transparent"
+                )
+
+        # Spatializer labels
+        if hasattr(self, 'spat_size_slider'):
+            self.spat_size_slider.value_label.configure(foreground=fg, background=bg)
+            self.spat_width_slider.value_label.configure(foreground=fg, background=bg)
+            self.spat_wet_slider.value_label.configure(foreground=fg, background=bg)
+            self.spat_dry_slider.value_label.configure(foreground=fg, background=bg)
+            self.spat_damp_slider.value_label.configure(foreground=fg, background=bg)
+
+        # Spatializer switch
+        if hasattr(self, 'spatializer_enable_switch'):
+            self.spatializer_enable_switch.configure(
+                text_color=fg, progress_color=accent, button_color=accent,
+                button_hover_color=accent_hover, fg_color=palette.get("switch_bg", "#939393"), bg_color=bg
+            )
+
+        # Spatializer reset button
+        if hasattr(self, 'spatializer_reset_btn'):
+            self.spatializer_reset_btn.configure(
+                fg_color=btn_bg,
+                text_color=btn_fg,
+                hover_color=accent_hover,
+                bg_color=bg
             )
 
     def update_theme(self):

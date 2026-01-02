@@ -87,6 +87,14 @@
     "use_rms": true,
     "rms_buffer_size": 512
   },
+  "spatializer": {
+    "enabled": false,
+    "size": 0.85,
+    "width": 0.5,
+    "wet": 0.4,
+    "dry": 0.5,
+    "damp": 0.5
+  },
   "playback": {
     "default_rate": 1.0,
     "min_rate": 0.25,
