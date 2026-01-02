@@ -104,15 +104,24 @@ class AudioEffectsWindow(tk.Toplevel):
         self.enable_switch.pack(side=tk.LEFT)
 
         self.preset_var = tk.StringVar(value="")
-        self.preset_menu = ctk.CTkOptionMenu(
+
+        # Frame wrapper for border effect
+        self.preset_menu_frame = ctk.CTkFrame(
             top_frame,
+            fg_color="transparent",
+            border_width=1
+        )
+        self.preset_menu_frame.pack(side=tk.RIGHT, padx=(0, 10))
+
+        self.preset_menu = ctk.CTkOptionMenu(
+            self.preset_menu_frame,
             values=[""] + list(self.presets.keys()),
             command=self._on_preset_change,
             variable=self.preset_var,
-            width=150,
-            height=28,
+            width=116,
+            height=26
         )
-        self.preset_menu.pack(side=tk.RIGHT, padx=(0, 10))
+        self.preset_menu.pack(padx=2, pady=2)
 
         self.preset_label = ttk.Label(top_frame, text="Preset", font=("Roboto", 10, "bold"))
         self.preset_label.pack(side=tk.RIGHT, padx=(0, 5))
@@ -142,7 +151,7 @@ class AudioEffectsWindow(tk.Toplevel):
             variable=self.preamp_var,
             command=self._on_preamp_change,
             height=200,
-            width=10,
+            width=11,
             border_width=0,
             button_length=20,
             corner_radius=4,
@@ -185,7 +194,7 @@ class AudioEffectsWindow(tk.Toplevel):
                 variable=val_var,
                 command=lambda v, idx=i: self._on_band_change(idx, v),
                 height=200,
-                width=10,
+                width=11,
                 border_width=0,
                 button_length=20,
                 corner_radius=4,
@@ -217,13 +226,12 @@ class AudioEffectsWindow(tk.Toplevel):
         self.speed_slider = ctk.CTkSlider(
             speed_frame,
             from_=0.25, to=4.0,
-            number_of_steps=15,  # Steps: 0.25, 0.5, 0.75, 1.0, ...
+            number_of_steps=15,
             variable=self.rate_var,
             command=self._on_rate_change
         )
         self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Reset Speed Button
         self.reset_speed_btn = ctk.CTkButton(
             speed_frame,
             text="Reset (1.0x)",
@@ -285,17 +293,58 @@ class AudioEffectsWindow(tk.Toplevel):
 
         # CTk Widgets
 
-        # Preset Menu
+        # Preset Menu - Smart recreation only when colors change
         btn_bg = palette.get("button_bg_color", accent)
         btn_fg = palette.get("button_fg_color", "#ffffff")
+
+        # Check if we need to recreate (store previous colors)
+        if not hasattr(self, '_last_dropdown_bg') or self._last_dropdown_bg != btn_bg:
+            # Store current selection
+            current_selection = self.preset_var.get()
+
+            # Recreate frame and dropdown
+            self.preset_menu_frame.destroy()
+            self.preset_menu_frame = ctk.CTkFrame(
+                self.preset_menu_frame.master,
+                fg_color="transparent",
+                border_width=1
+            )
+            self.preset_menu_frame.pack(side=tk.RIGHT, padx=(0, 10))
+
+            self.preset_menu = ctk.CTkOptionMenu(
+                self.preset_menu_frame,
+                values=[""] + list(self.presets.keys()),
+                command=self._on_preset_change,
+                variable=self.preset_var,
+                width=116,
+                height=26
+            )
+            self.preset_menu.pack(padx=2, pady=2)
+
+            # Recreate label to maintain order
+            self.preset_label.destroy()
+            self.preset_label = ttk.Label(self.preset_label.master, text="Preset", font=("Roboto", 10, "bold"))
+            self.preset_label.pack(side=tk.RIGHT, padx=(0, 5))
+
+            # Restore selection
+            self.preset_var.set(current_selection)
+
+            # Store new color
+            self._last_dropdown_bg = btn_bg
+
+        # Apply theme colors
+        self.preset_menu_frame.configure(
+            border_color=palette.get("border", "#cccccc")
+        )
+
         self.preset_menu.configure(
-            fg_color=btn_bg,
-            button_color=btn_bg,
-            button_hover_color=accent_hover,
-            text_color=btn_fg,
-            dropdown_fg_color=bg,
-            dropdown_hover_color=accent_hover,
-            dropdown_text_color=fg
+            fg_color=bg,
+            button_color=bg,
+            button_hover_color=palette.get("dropdown_hover", "#000000"),
+            text_color=palette.get("dropdown_text", "#000000"),
+            dropdown_fg_color=palette.get("dropdown_bg", "#000000"),
+            dropdown_hover_color=palette.get("dropdown_hover", "#000000"),
+            dropdown_text_color=palette.get("dropdown_text", "#000000")
         )
 
         self.reset_speed_btn.configure(
@@ -314,9 +363,9 @@ class AudioEffectsWindow(tk.Toplevel):
                 )
 
         # Sliders - VLC Style
-        slider_bg = palette.get("slider_bg", "#2a2a2a")  # Darker track background
-        slider_fg = palette.get("slider_fg", accent)     # Active progress color
-        slider_button = palette.get("accent", "#0078d4") # Button/handle color
+        slider_bg = palette.get("slider_bg", "#2a2a2a")
+        slider_fg = palette.get("slider_bg", accent)
+        slider_button = palette.get("accent", "#0078d4")
 
         self.preamp_slider.configure(
             fg_color=slider_bg,
@@ -324,7 +373,7 @@ class AudioEffectsWindow(tk.Toplevel):
             button_color=slider_button,
             button_hover_color=accent_hover,
             bg_color=bg,
-            border_color="transparent"  # No border for VLC style
+            border_color="transparent"
         )
 
         self.speed_slider.configure(
@@ -333,7 +382,7 @@ class AudioEffectsWindow(tk.Toplevel):
             button_color=slider_button,
             button_hover_color=accent_hover,
             bg_color=bg,
-            border_color="transparent"  # No border for VLC style
+            border_color="transparent"
         )
 
         for slider in self.sliders:
@@ -343,7 +392,7 @@ class AudioEffectsWindow(tk.Toplevel):
                 button_color=slider_button,
                 button_hover_color=accent_hover,
                 bg_color=bg,
-                border_color="transparent"  # No border for VLC style
+                border_color="transparent"
             )
 
         # Labels
