@@ -94,7 +94,6 @@ class AudioEffectsWindow(tk.Toplevel):
                 pass
 
         self._create_ui()
-        self._apply_theme()
 
         # Synchronize UI state with initial values
         self._on_enable_toggle()
@@ -115,9 +114,35 @@ class AudioEffectsWindow(tk.Toplevel):
         btn_bg = palette.get("button_bg_color", accent)
         btn_fg = palette.get("button_fg_color", "#ffffff")
 
+        # Window background
+        self.configure(bg=bg)
+
         # Create Notebook for tabs
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=False, padx=10, pady=(10, 0))
+
+        # TTK Styles
+        style = ttk.Style(self)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("TLabelframe", background=bg, foreground=fg)
+        style.configure("TLabelframe.Label", background=bg, foreground=fg)
+        style.configure("TSeparator", background=palette.get("border", "#cccccc"))
+
+        # Notebook style
+        style.configure("TNotebook", background=bg, borderwidth=0)
+        style.configure("TNotebook.Tab", background=palette.get("tree_bg", "#f0f0f0"), foreground=fg, padding=[10, 5])
+        style.map("TNotebook.Tab",
+                  background=[("selected", accent)],
+                  foreground=[("selected", "#ffffff")])
+
+        # Update frames
+        for widget in self.winfo_children():
+            if isinstance(widget, (ttk.Frame, ttk.LabelFrame)):
+                widget.configure(style="TFrame")
+                for child in widget.winfo_children():
+                    if isinstance(child, (ttk.Frame, ttk.LabelFrame)):
+                        child.configure(style="TFrame")
 
         # --- Tab 1: Equalizer ---
         self.eq_tab = ttk.Frame(self.notebook)
@@ -759,6 +784,9 @@ class AudioEffectsWindow(tk.Toplevel):
         fg = palette.get("fg", "#000000")
         accent = palette.get("accent", "#0078d4")
         accent_hover = palette.get("accent_hover", "#106ebe")
+        slider_bg = palette.get("slider_bg", "#0078d4")
+        slider_fg = palette.get("slider_bg", accent)
+        slider_button = palette.get("accent", "#0078d4")
         btn_bg = palette.get("button_bg_color", accent)
         btn_fg = palette.get("button_fg_color", "#ffffff")
 
@@ -833,10 +861,6 @@ class AudioEffectsWindow(tk.Toplevel):
                 )
 
         # Sliders
-        slider_bg = palette.get("slider_bg", "#2a2a2a")
-        slider_fg = palette.get("slider_fg", accent)
-        slider_button = palette.get("accent", "#0078d4")
-
         self.preamp_slider.configure(
             fg_color=slider_bg,
             progress_color=slider_fg,
@@ -859,9 +883,10 @@ class AudioEffectsWindow(tk.Toplevel):
             slider.configure(
                 fg_color=slider_bg,
                 progress_color=slider_fg,
-                button_color=slider_fg,
+                button_color=slider_button,
                 button_hover_color=accent_hover,
-                bg_color=bg
+                bg_color=bg,
+                border_color="transparent"
             )
 
         # Compressor sliders
