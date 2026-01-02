@@ -96,6 +96,9 @@ class AudioEffectsWindow(tk.Toplevel):
         self._create_ui()
         self._apply_theme()
 
+        # Force update to apply theme before showing
+        self.update_idletasks()
+
         # Synchronize UI state with initial values
         self._on_enable_toggle()
         self._on_compressor_toggle()
