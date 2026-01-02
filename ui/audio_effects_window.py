@@ -33,10 +33,6 @@ class AudioEffectsWindow(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
 
-        # Set initial background color to match expected theme
-        initial_bg = theme_manager.palette.get("bg", "#ffffff")
-        self.configure(bg=initial_bg)
-
         # Hide initially
         self.withdraw()
 
@@ -104,13 +100,20 @@ class AudioEffectsWindow(tk.Toplevel):
         self._on_enable_toggle()
         self._on_compressor_toggle()
 
-        # Force all pending widget updates to complete before showing window
-        self.update_idletasks()
-
         self.deiconify()
 
     def _create_ui(self):
         """Build the UI components."""
+        # Get theme colors upfront for widget creation
+        palette = self.theme_manager.palette
+        bg = palette.get("bg", "#ffffff")
+        fg = palette.get("fg", "#000000")
+        accent = palette.get("accent", "#0078d4")
+        accent_hover = palette.get("accent_hover", "#106ebe")
+        slider_bg = palette.get("slider_bg", "#2a2a2a")
+        slider_fg = palette.get("slider_bg", accent)
+        slider_button = palette.get("accent", "#0078d4")
+
         # Create Notebook for tabs
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=False, padx=10, pady=(10, 0))
@@ -131,7 +134,13 @@ class AudioEffectsWindow(tk.Toplevel):
             text="Enable Equalizer",
             variable=self.enabled_var,
             command=self._on_enable_toggle,
-            width=150
+            width=150,
+            text_color=fg,
+            progress_color=accent,
+            button_color=accent,
+            button_hover_color=accent_hover,
+            fg_color=palette.get("switch_bg", "#939393"),
+            bg_color=bg
         )
         self.enable_switch.pack(side=tk.LEFT)
 
@@ -141,7 +150,8 @@ class AudioEffectsWindow(tk.Toplevel):
         self.preset_menu_frame = ctk.CTkFrame(
             top_frame,
             fg_color="transparent",
-            border_width=1
+            border_width=1,
+            border_color=palette.get("border", "#cccccc")
         )
         self.preset_menu_frame.pack(side=tk.RIGHT, padx=(0, 10))
 
@@ -151,7 +161,14 @@ class AudioEffectsWindow(tk.Toplevel):
             command=self._on_preset_change,
             variable=self.preset_var,
             width=116,
-            height=26
+            height=26,
+            fg_color=bg,
+            button_color=bg,
+            button_hover_color=palette.get("dropdown_hover", "#000000"),
+            text_color=palette.get("dropdown_text", "#000000"),
+            dropdown_fg_color=palette.get("dropdown_bg", "#000000"),
+            dropdown_hover_color=palette.get("dropdown_hover", "#000000"),
+            dropdown_text_color=palette.get("dropdown_text", "#000000")
         )
         self.preset_menu.pack(padx=2, pady=2)
 
@@ -187,7 +204,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.preamp_slider.pack(pady=5)
 
@@ -230,7 +253,13 @@ class AudioEffectsWindow(tk.Toplevel):
                 border_width=0,
                 button_length=20,
                 corner_radius=4,
-                button_corner_radius=2
+                button_corner_radius=2,
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_button,
+                button_hover_color=accent_hover,
+                bg_color=bg,
+                border_color="transparent"
             )
             slider.pack(pady=5)
             self.sliders.append(slider)
@@ -267,9 +296,18 @@ class AudioEffectsWindow(tk.Toplevel):
             from_=0.25, to=4.0,
             number_of_steps=15,
             variable=self.rate_var,
-            command=self._on_rate_change
+            command=self._on_rate_change,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        btn_bg = palette.get("button_bg_color", accent)
+        btn_fg = palette.get("button_fg_color", "#ffffff")
 
         self.reset_speed_btn = ctk.CTkButton(
             speed_frame,
@@ -277,7 +315,11 @@ class AudioEffectsWindow(tk.Toplevel):
             width=80,
             height=24,
             font=("Segoe UI", 9),
-            command=self._reset_speed
+            command=self._reset_speed,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
         )
         self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
 
@@ -291,7 +333,11 @@ class AudioEffectsWindow(tk.Toplevel):
             width=90,
             height=40,
             font=("Segoe UI", 10),
-            command=self._on_close
+            command=self._on_close,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
         )
         self.close_btn.pack(side=tk.RIGHT)
 
@@ -301,12 +347,28 @@ class AudioEffectsWindow(tk.Toplevel):
             width=90,
             height=40,
             font=("Segoe UI", 10),
-            command=self._save_to_config
+            command=self._save_to_config,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
         )
         self.save_btn.pack(side=tk.RIGHT, padx=(0, 10))
 
     def _create_compressor_tab(self):
         """Create the Compressor tab UI."""
+        # Get theme colors for widget creation
+        palette = self.theme_manager.palette
+        bg = palette.get("bg", "#ffffff")
+        fg = palette.get("fg", "#000000")
+        accent = palette.get("accent", "#0078d4")
+        accent_hover = palette.get("accent_hover", "#106ebe")
+        slider_bg = palette.get("slider_bg", "#2a2a2a")
+        slider_fg = palette.get("slider_bg", accent)
+        slider_button = palette.get("accent", "#0078d4")
+        btn_bg = palette.get("button_bg_color", accent)
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+
         container = ttk.Frame(self.compressor_tab)
         container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
@@ -319,7 +381,13 @@ class AudioEffectsWindow(tk.Toplevel):
             text="Enable Compressor",
             variable=self.compressor_enabled_var,
             command=self._on_compressor_toggle,
-            width=150
+            width=150,
+            text_color=fg,
+            progress_color=accent,
+            button_color=accent,
+            button_hover_color=accent_hover,
+            fg_color=palette.get("switch_bg", "#939393"),
+            bg_color=bg
         )
         self.compressor_enable_switch.pack(side=tk.LEFT)
 
@@ -330,7 +398,11 @@ class AudioEffectsWindow(tk.Toplevel):
             width=120,
             height=28,
             font=("Segoe UI", 10),
-            command=self._reset_compressor
+            command=self._reset_compressor,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
         )
         self.compressor_reset_btn.pack(side=tk.RIGHT)
 
@@ -355,7 +427,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.threshold_slider.pack(pady=5)
 
@@ -379,7 +457,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.ratio_slider.pack(pady=5)
 
@@ -403,7 +487,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.attack_slider.pack(pady=5)
 
@@ -427,7 +517,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.release_slider.pack(pady=5)
 
@@ -451,7 +547,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.knee_slider.pack(pady=5)
 
@@ -475,7 +577,13 @@ class AudioEffectsWindow(tk.Toplevel):
             border_width=0,
             button_length=20,
             corner_radius=4,
-            button_corner_radius=2
+            button_corner_radius=2,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
         )
         self.makeup_slider.pack(pady=5)
 
@@ -497,7 +605,13 @@ class AudioEffectsWindow(tk.Toplevel):
             text="RMS",
             variable=self.compressor_rms_mode_var,
             command=self._on_compressor_change,
-            width=60
+            width=60,
+            text_color=fg,
+            progress_color=accent,
+            button_color=accent,
+            button_hover_color=accent_hover,
+            fg_color=palette.get("switch_bg", "#939393"),
+            bg_color=bg
         )
         self.rms_mode_switch.pack(pady=(80, 5))
 
