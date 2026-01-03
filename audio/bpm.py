@@ -14,7 +14,6 @@ def on_bpm_updated(filepath, state):
         if idx is not None and idx < len(state.playlist):
             current_path = state.playlist[idx]
             if current_path == filepath:
-                # Use _update_meta_with_temp_bpm instead of _restore_status to preserve button states
                 state.update_meta_with_temp_bpm()
     except Exception:
         # Fail silently - BPM updates are not critical

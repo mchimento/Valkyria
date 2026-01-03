@@ -160,7 +160,6 @@ class MainWindow:
             if idx is not None and idx < len(self.state.playlist):
                 current_path = self.state.playlist[idx]
                 if current_path == filepath:
-                    # Use _update_meta_with_temp_bpm instead of _restore_status to preserve button states
                     self._update_meta_with_temp_bpm()
         except Exception:
             # Fail silently - BPM updates are not critical
@@ -280,7 +279,7 @@ class MainWindow:
         # Don't clear temporary_bpm_files here as other files might still have temporary BPMs
 
     def _update_meta_with_temp_bpm(self):
-        """Update the meta label to include temporary BPM without calling _restore_status."""
+        """Update the meta label to include temporary BPM."""
         try:
             idx = self.state.current_index
             if idx is None or idx >= len(self.state.playlist):
@@ -652,10 +651,7 @@ class MainWindow:
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "pause":
-            if self.status_var.get().startswith("Pause:"):
-                self._restore_status()
-            else:
-                self._restore_status(prefix="Pause")
+            self._restore_status()
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "stop":
@@ -1623,7 +1619,7 @@ class MainWindow:
             self.state.repeat_mode = 'none'
             self.repeat_mode_var.set('none')
 
-            self._restore_status(prefix="Repeat")
+            self._restore_status()
             if self._status_restore_job is not None:
                 try:
                     self.root.after_cancel(self._status_restore_job)
@@ -1669,7 +1665,7 @@ class MainWindow:
         # Restore after timeout
         self._status_restore_job = self.root.after(duration, self._restore_status)
 
-    def _restore_status(self, prefix="Playing"):
+    def _restore_status(self):
         """
         Restore playing status and populate metadata line.
 
@@ -1711,9 +1707,9 @@ class MainWindow:
         self._update_artwork(path)
 
         if artist:
-            self.status_var.set(f"{prefix}: {title} — {artist}")
+            self.status_var.set(f"{title} — {artist}")
         else:
-            self.status_var.set(f"{prefix}: {title}")
+            self.status_var.set(f"{title}")
 
         # Build metadata line parts (duration, bitrate, bpm, format)
         parts = []
