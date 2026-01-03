@@ -24,12 +24,15 @@ class PlaybackFeaturesView(tk.Toplevel):
         main_frame = ttk.Frame(self)
         main_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
-        # Play on double click switch
+        # Play on double click switch with status label
+        switch_frame = ttk.Frame(main_frame)
+        switch_frame.pack(anchor='w', pady=10, fill='x')
+
         self.play_on_double_var = tk.BooleanVar(value=self.app_state.play_on_double)
 
         self.switch = ctk.CTkSwitch(
-            main_frame,
-            text="Play on double-click",
+            switch_frame,
+            text="Play on double-click:",
             variable=self.play_on_double_var,
             command=self._on_play_on_double_change,
             progress_color=self.palette.get("accent", "#0078d4"),
@@ -38,7 +41,16 @@ class PlaybackFeaturesView(tk.Toplevel):
             button_color=self.palette.get("accent", "#ffffff"),
             button_hover_color=self.palette.get("button_hover", "#106ebe")
         )
-        self.switch.pack(anchor='w', pady=10)
+        self.switch.pack(side='left')
+
+        self.switch_status_label = ctk.CTkLabel(
+            switch_frame,
+            text="Enabled" if self.app_state.play_on_double else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if self.app_state.play_on_double else self.palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=self.palette.get("bg", "#ffffff")
+        )
+        self.switch_status_label.pack(side='left', padx=(10, 0))
 
         # Close button
         btn_frame = ttk.Frame(main_frame)
@@ -73,6 +85,12 @@ class PlaybackFeaturesView(tk.Toplevel):
         # Update state as well since playlist view checks state.play_on_double
         self.app_state.play_on_double = new_value
 
+        # Update status label
+        self.switch_status_label.configure(
+            text="Enabled" if new_value else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if new_value else self.palette.get("fg", "#808080")
+        )
+
     def _apply_theme(self):
         """Apply theme to widgets."""
         bg = self.palette.get("bg", "#ffffff")
@@ -91,6 +109,14 @@ class PlaybackFeaturesView(tk.Toplevel):
                 bg_color=bg,
                 button_color=self.palette.get("accent", "#ffffff"),
                 button_hover_color=self.palette.get("button_hover", "#106ebe")
+            )
+
+        # Update switch status label colors
+        if hasattr(self, 'switch_status_label'):
+            is_enabled = self.play_on_double_var.get()
+            self.switch_status_label.configure(
+                text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
+                bg_color=bg
             )
 
         # Update close button colors

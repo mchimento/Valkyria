@@ -27,6 +27,7 @@ class AudioEffectsWindow(tk.Toplevel):
         super().__init__(parent)
         self.player = player
         self.theme_manager = theme_manager
+        self.palette = theme_manager.palette  # Set palette early for callbacks
 
         self.title("Audio Effects")
         self.geometry("800x500")
@@ -197,10 +198,10 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.enable_switch = ctk.CTkSwitch(
             top_frame,
-            text="Enable Equalizer",
+            text="Equalizer:",
             variable=self.enabled_var,
             command=self._on_enable_toggle,
-            width=150,
+            width=100,
             text_color=fg,
             progress_color=accent,
             button_color=accent,
@@ -209,6 +210,15 @@ class AudioEffectsWindow(tk.Toplevel):
             bg_color=bg
         )
         self.enable_switch.pack(side=tk.LEFT)
+
+        self.enable_status_label = ctk.CTkLabel(
+            top_frame,
+            text="Enabled" if self.enabled_var.get() else "Disabled",
+            text_color=accent if self.enabled_var.get() else palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=bg
+        )
+        self.enable_status_label.pack(side=tk.LEFT)
 
         self.preset_var = tk.StringVar(value="")
 
@@ -427,11 +437,14 @@ class AudioEffectsWindow(tk.Toplevel):
         vocal_frame = ttk.LabelFrame(effects_container, text="Vocal Remover", padding=15)
         vocal_frame.pack(fill=tk.X, pady=(0, 15))
 
-        # Enable Switch
+        # Enable Switch with horizontal layout
+        vocal_top_frame = ttk.Frame(vocal_frame)
+        vocal_top_frame.pack(fill=tk.X, pady=(0, 10))
+
         self.vocal_remover_var = tk.BooleanVar(value=self.player.get_vocal_remover_enabled())
         self.vocal_remover_switch = ctk.CTkSwitch(
-            vocal_frame,
-            text="Enable Vocal Remover",
+            vocal_top_frame,
+            text="Vocal Remover:",
             variable=self.vocal_remover_var,
             command=self._on_vocal_remover_toggle,
             progress_color=accent,
@@ -439,9 +452,19 @@ class AudioEffectsWindow(tk.Toplevel):
             button_hover_color=accent_hover,
             fg_color=palette.get("switch_bg", "#939393"),
             bg_color=bg,
-            text_color=fg
+            text_color=fg,
+            width=120
         )
-        self.vocal_remover_switch.pack(side=tk.TOP, anchor="w", pady=(0, 10))
+        self.vocal_remover_switch.pack(side=tk.LEFT)
+
+        self.vocal_status_label = ctk.CTkLabel(
+            vocal_top_frame,
+            text="Enabled" if self.vocal_remover_var.get() else "Disabled",
+            text_color=accent if self.vocal_remover_var.get() else palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=bg
+        )
+        self.vocal_status_label.pack(side=tk.LEFT)
 
         # Intensity Slider
         intensity_container = ttk.Frame(vocal_frame)
@@ -538,10 +561,10 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.compressor_enable_switch = ctk.CTkSwitch(
             top_frame,
-            text="Enable Compressor",
+            text="Compressor:",
             variable=self.compressor_enabled_var,
             command=self._on_compressor_toggle,
-            width=150,
+            width=120,
             text_color=fg,
             progress_color=accent,
             button_color=accent,
@@ -550,6 +573,15 @@ class AudioEffectsWindow(tk.Toplevel):
             bg_color=bg
         )
         self.compressor_enable_switch.pack(side=tk.LEFT)
+
+        self.compressor_status_label = ctk.CTkLabel(
+            top_frame,
+            text="Enabled" if self.compressor_enabled_var.get() else "Disabled",
+            text_color=accent if self.compressor_enabled_var.get() else palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=bg
+        )
+        self.compressor_status_label.pack(side=tk.LEFT)
 
         # Reset button
         self.compressor_reset_btn = ctk.CTkButton(
@@ -806,6 +838,13 @@ class AudioEffectsWindow(tk.Toplevel):
             self.knee_slider.configure(state=state)
             self.rms_mode_switch.configure(state=state)
 
+        # Update status label
+        if hasattr(self, 'compressor_status_label'):
+            self.compressor_status_label.configure(
+                text="Enabled" if enabled else "Disabled",
+                text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+            )
+
         # Apply to player
         self._apply_compressor()
 
@@ -877,10 +916,10 @@ class AudioEffectsWindow(tk.Toplevel):
 
         self.spatializer_enable_switch = ctk.CTkSwitch(
             top_frame,
-            text="Enable Spatializer",
+            text="Spatializer:",
             variable=self.spatializer_enabled_var,
             command=self._on_spatializer_toggle,
-            width=150,
+            width=110,
             text_color=fg,
             progress_color=accent,
             button_color=accent,
@@ -889,6 +928,15 @@ class AudioEffectsWindow(tk.Toplevel):
             bg_color=bg
         )
         self.spatializer_enable_switch.pack(side=tk.LEFT)
+
+        self.spatializer_status_label = ctk.CTkLabel(
+            top_frame,
+            text="Enabled" if self.spatializer_enabled_var.get() else "Disabled",
+            text_color=accent if self.spatializer_enabled_var.get() else palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=bg
+        )
+        self.spatializer_status_label.pack(side=tk.LEFT)
 
         # Reset button
         self.spatializer_reset_btn = ctk.CTkButton(
@@ -975,6 +1023,13 @@ class AudioEffectsWindow(tk.Toplevel):
             self.spat_dry_slider.configure(state=state)
             self.spat_damp_slider.configure(state=state)
 
+        # Update status label
+        if hasattr(self, 'spatializer_status_label'):
+            self.spatializer_status_label.configure(
+                text="Enabled" if enabled else "Disabled",
+                text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+            )
+
         # Apply to player
         self._apply_spatializer()
 
@@ -1029,6 +1084,13 @@ class AudioEffectsWindow(tk.Toplevel):
     def _on_vocal_remover_toggle(self):
         enabled = self.vocal_remover_var.get()
         self.player.set_vocal_remover_enabled(enabled)
+
+        # Update status label
+        if hasattr(self, 'vocal_status_label'):
+            self.vocal_status_label.configure(
+                text="Enabled" if enabled else "Disabled",
+                text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+            )
 
     def _on_channel_mode_change(self, value):
         if hasattr(self.player, 'set_channel_mode'):
@@ -1337,6 +1399,35 @@ class AudioEffectsWindow(tk.Toplevel):
                     border_color=palette.get("switch_bg", "#939393")
                 )
 
+        # Update all status labels
+        if hasattr(self, 'enable_status_label'):
+            is_enabled = self.enabled_var.get()
+            self.enable_status_label.configure(
+                text_color=accent if is_enabled else palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        if hasattr(self, 'vocal_status_label'):
+            is_enabled = self.vocal_remover_var.get()
+            self.vocal_status_label.configure(
+                text_color=accent if is_enabled else palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        if hasattr(self, 'compressor_status_label'):
+            is_enabled = self.compressor_enabled_var.get()
+            self.compressor_status_label.configure(
+                text_color=accent if is_enabled else palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        if hasattr(self, 'spatializer_status_label'):
+            is_enabled = self.spatializer_enabled_var.get()
+            self.spatializer_status_label.configure(
+                text_color=accent if is_enabled else palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
     def update_theme(self):
         """Public method to refresh theme."""
         self._apply_theme()
@@ -1349,6 +1440,13 @@ class AudioEffectsWindow(tk.Toplevel):
         self.preamp_slider.configure(state=state)
         for slider in self.sliders:
             slider.configure(state=state)
+
+        # Update status label
+        if hasattr(self, 'enable_status_label'):
+            self.enable_status_label.configure(
+                text="Enabled" if enabled else "Disabled",
+                text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+            )
 
         # Call player
         if hasattr(self.player, 'set_equalizer_enabled'):
