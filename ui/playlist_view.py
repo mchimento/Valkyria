@@ -28,6 +28,9 @@ class PlaylistView(ttk.Frame):
         # Track clicked item for distinguishing click vs drag
         self._clicked_item = None
 
+        # Track last highlighted index for efficient updates
+        self._last_highlighted_index = None
+
         # Column resize tracking
         self._resize_indicators = []  # List to hold multiple indicators
         self._last_hover_region = None
@@ -376,6 +379,9 @@ class PlaylistView(ttk.Frame):
         # Update scrollbar
         self._update_scrollbar()
 
+        # Update last highlighted index
+        self._last_highlighted_index = self.state.current_index
+
         # Hide/show tree and scrollbar based on playlist content
         is_empty = len(self.state.playlist) == 0
         if is_empty:
@@ -399,21 +405,36 @@ class PlaylistView(ttk.Frame):
         return get_metadata(filepath)
 
     def _highlight_current(self):
-        """Update visual highlighting for currently playing track."""
+        """Update visual highlighting for currently playing track efficiently."""
         children = self.tree.get_children()
 
-        for i, iid in enumerate(children):
-            # Base tag (striping)
-            tags = ["odd" if i % 2 == 1 else "even"]
-            icon = ""
+        # Handle previous highlight
+        if self._last_highlighted_index is not None:
+            if 0 <= self._last_highlighted_index < len(children):
+                prev_iid = children[self._last_highlighted_index]
+                # Reset to base tag
+                tags = ["odd" if self._last_highlighted_index % 2 == 1 else "even"]
+                # Check if it's hovered (optional, but good for consistency)
+                current_tags = self.tree.item(prev_iid, "tags")
+                if "hover" in current_tags:
+                    tags.append("hover")
 
-            # Only add playing tag and icon if this is the actual current playing track
-            if self.state.current_index is not None and i == self.state.current_index:
-                icon = "▶"
+                self.tree.item(prev_iid, text="", tags=tuple(tags))
+
+        # Handle new highlight
+        if self.state.current_index is not None:
+            if 0 <= self.state.current_index < len(children):
+                curr_iid = children[self.state.current_index]
+                tags = ["odd" if self.state.current_index % 2 == 1 else "even"]
                 tags.append("playing")
+                # Preserve hover
+                current_tags = self.tree.item(curr_iid, "tags")
+                if "hover" in current_tags:
+                    tags.append("hover")
 
-            # Update the item
-            self.tree.item(iid, text=icon, tags=tuple(tags))
+                self.tree.item(curr_iid, text="▶", tags=tuple(tags))
+
+        self._last_highlighted_index = self.state.current_index
 
     # ========== Event Handlers ==========
 
