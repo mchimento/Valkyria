@@ -55,3 +55,12 @@ def get_resource_path(relative_path: str) -> Path:
         Path: Absolute path to the resource.
     """
     return get_app_base_path() / relative_path
+
+def get_docs_path() -> Path:
+    """
+    Get the path to the documentation folder.
+
+    Returns:
+        Path: Absolute path to the docs/ directory.
+    """
+    return get_app_base_path() / "docs"

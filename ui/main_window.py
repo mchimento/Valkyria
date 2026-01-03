@@ -22,7 +22,8 @@ from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
-from ui.documentation_view import BPMAnalysisWindow
+from ui.booklet_viewer import BookletViewer
+from ui.documentation_view import DocumentationWindow
 from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
 
@@ -436,8 +437,13 @@ class MainWindow:
         self.menu_item_refs["audio_device"] = audio_device_item
 
         # Help menu
+        documentation_submenu = [
+            {"label": "User Guide", "command": lambda: self.open_documentation("user_guide.md")},
+            {"label": "BPM Analysis", "command": lambda: self.open_documentation("bpm_analysis.md")}
+        ]
+
         help_items = [
-            {"label": "BPM Analysis", "command": self.open_bpm_analysis},
+            {"label": "Documentation", "submenu": documentation_submenu},
             {"separator": True},
             {"label": "About", "command": self.open_about, "accelerator": "F1"}
         ]
@@ -1002,7 +1008,7 @@ class MainWindow:
 
         # Update open documentation windows
         for window in self.root.winfo_children():
-            if isinstance(window, BPMAnalysisWindow):
+            if isinstance(window, DocumentationWindow):
                 try:
                     window.update_theme()
                 except Exception:
@@ -1221,9 +1227,9 @@ class MainWindow:
         # Show window after all setup is complete
         about_window.deiconify()
 
-    def open_bpm_analysis(self):
-        """Open BPM Analysis documentation window."""
-        BPMAnalysisWindow(self.root, self.theme, self.settings)
+    def open_documentation(self, doc_filename):
+        """Open a documentation window for the specified markdown file."""
+        DocumentationWindow(self.root, self.theme, self.settings, doc_filename)
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")

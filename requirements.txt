@@ -6,3 +6,5 @@ numpy
 soundfile
 sounddevice
 scipy
+tkhtmlview
+markdown
