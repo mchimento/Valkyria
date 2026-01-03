@@ -372,6 +372,66 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
 
+        # 2. Vocal Remover
+        vocal_frame = ttk.LabelFrame(effects_container, text="Vocal Remover", padding=15)
+        vocal_frame.pack(fill=tk.X, pady=(0, 15))
+
+        # Enable Switch
+        self.vocal_remover_var = tk.BooleanVar(value=self.player.get_vocal_remover_enabled())
+        self.vocal_remover_switch = ctk.CTkSwitch(
+            vocal_frame,
+            text="Enable Vocal Remover",
+            variable=self.vocal_remover_var,
+            command=self._on_vocal_remover_toggle,
+            progress_color=accent,
+            button_color=accent,
+            button_hover_color=accent_hover,
+            fg_color=palette.get("switch_bg", "#939393"),
+            bg_color=bg,
+            text_color=fg
+        )
+        self.vocal_remover_switch.pack(side=tk.TOP, anchor="w", pady=(0, 10))
+
+        # Intensity Slider
+        intensity_container = ttk.Frame(vocal_frame)
+        intensity_container.pack(fill=tk.X)
+
+        ttk.Label(intensity_container, text="Intensity:").pack(side=tk.LEFT, padx=(0, 10))
+
+        self.vocal_intensity_var = tk.DoubleVar(value=self.player.get_vocal_remover_intensity())
+        self.vocal_intensity_slider = ctk.CTkSlider(
+            intensity_container,
+            from_=0.0, to=1.0,
+            number_of_steps=20,
+            variable=self.vocal_intensity_var,
+            command=self._on_vocal_intensity_change,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
+        )
+        self.vocal_intensity_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.vocal_intensity_label = ttk.Label(intensity_container, text=f"{self.vocal_intensity_var.get():.2f}", width=4)
+        self.vocal_intensity_label.pack(side=tk.RIGHT, padx=(10, 0))
+
+        # Reset Vocal Remover Button
+        self.reset_vocal_btn = ctk.CTkButton(
+            vocal_frame,
+            text="Reset",
+            width=80,
+            height=24,
+            font=("Segoe UI", 9),
+            command=self._reset_vocal_remover,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
+        )
+        self.reset_vocal_btn.pack(side=tk.TOP, anchor="e", pady=(10, 0))
+
         # Bottom buttons (Save and Close) - added after notebook
         button_frame = ttk.Frame(self)
         button_frame.pack(fill=tk.X, padx=10, pady=(10, 10))
@@ -915,6 +975,22 @@ class AudioEffectsWindow(tk.Toplevel):
         self.rate_var.set(default_rate)
         self._on_rate_change(default_rate)
 
+    def _on_vocal_remover_toggle(self):
+        enabled = self.vocal_remover_var.get()
+        self.player.set_vocal_remover_enabled(enabled)
+
+    def _on_vocal_intensity_change(self, value):
+        intensity = float(value)
+        self.vocal_intensity_label.configure(text=f"{intensity:.2f}")
+        self.player.set_vocal_remover_intensity(intensity)
+
+    def _reset_vocal_remover(self):
+        default_intensity = 0.5
+        self.vocal_remover_var.set(False)
+        self.vocal_intensity_var.set(default_intensity)
+        self._on_vocal_remover_toggle()
+        self._on_vocal_intensity_change(default_intensity)
+
     def _save_to_config(self):
         """Save current settings as defaults to the JSON configuration file."""
         global AUDIO_CONFIG
@@ -950,6 +1026,10 @@ class AudioEffectsWindow(tk.Toplevel):
                     "default_rate": self.rate_var.get(),
                     "min_rate": AUDIO_CONFIG['playback']['min_rate'],
                     "max_rate": AUDIO_CONFIG['playback']['max_rate']
+                },
+                "vocal_remover": {
+                    "enabled": self.vocal_remover_var.get(),
+                    "intensity": self.vocal_intensity_var.get()
                 }
             }
 
@@ -1010,6 +1090,12 @@ class AudioEffectsWindow(tk.Toplevel):
             button_hover_color=accent_hover, fg_color=palette.get("switch_bg", "#939393"), bg_color=bg
         )
 
+        if hasattr(self, 'vocal_remover_switch'):
+            self.vocal_remover_switch.configure(
+                text_color=fg, progress_color=accent, button_color=accent,
+                button_hover_color=accent_hover, fg_color=palette.get("switch_bg", "#939393"), bg_color=bg
+            )
+
         # Update frames
         for widget in self.winfo_children():
             if isinstance(widget, (ttk.Frame, ttk.LabelFrame)):
@@ -1027,6 +1113,14 @@ class AudioEffectsWindow(tk.Toplevel):
             hover_color=accent_hover,
             bg_color=bg
         )
+
+        if hasattr(self, 'reset_vocal_btn'):
+            self.reset_vocal_btn.configure(
+                fg_color=btn_bg,
+                text_color=btn_fg,
+                hover_color=accent_hover,
+                bg_color=bg
+            )
 
         self.compressor_reset_btn.configure(
             fg_color=btn_bg,
@@ -1074,6 +1168,16 @@ class AudioEffectsWindow(tk.Toplevel):
             bg_color=bg,
             border_color="transparent"
         )
+
+        if hasattr(self, 'vocal_intensity_slider'):
+            self.vocal_intensity_slider.configure(
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_button,
+                button_hover_color=accent_hover,
+                bg_color=bg,
+                border_color="transparent"
+            )
 
         for slider in self.sliders:
             slider.configure(

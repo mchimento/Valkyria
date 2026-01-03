@@ -88,6 +88,13 @@ class AudioPlayer:
         self._spat_allpass_buffers = []
         self._spat_allpass_indices = []
 
+        # Vocal Remover
+        vr_config = AUDIO_CONFIG.get('vocal_remover', {})
+        self._vocal_remover_enabled = vr_config.get('enabled', False)
+        self._vocal_remover_intensity = vr_config.get('intensity', 0.5)
+        self._vocal_remover_sos = None
+        self._vocal_remover_zi = None
+
         logger.info("AudioPlayer initialized (sounddevice)")
 
     def _stream_callback(self, outdata, frames, time, status):
@@ -165,6 +172,10 @@ class AudioPlayer:
         if self._spatializer_enabled:
             outdata[:] = self._apply_spatializer(outdata)
 
+        # Apply Vocal Remover
+        if self._vocal_remover_enabled:
+            outdata[:] = self._apply_vocal_remover(outdata)
+
         # Apply Volume
         if self._muted:
             outdata[:] = 0
@@ -215,6 +226,7 @@ class AudioPlayer:
                 )
                 self._stream.start()
                 self._update_equalizer()
+                self._update_vocal_remover()
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
                 # Cleanup manually since we can't call stop() safely inside lock if it blocks
@@ -751,3 +763,81 @@ class AudioPlayer:
 
         # Mix
         return dry_signal * self._spat_dry + reverb_signal * self._spat_wet
+
+    def set_vocal_remover_enabled(self, enabled):
+        self._vocal_remover_enabled = enabled
+        self._update_vocal_remover()
+
+    def set_vocal_remover_intensity(self, intensity):
+        self._vocal_remover_intensity = intensity
+        self._update_vocal_remover()
+
+    def get_vocal_remover_enabled(self):
+        return self._vocal_remover_enabled
+
+    def get_vocal_remover_intensity(self):
+        return self._vocal_remover_intensity
+
+    def _update_vocal_remover(self):
+        """Update vocal remover filter coefficients."""
+        if not self._file:
+            return
+
+        if self._vocal_remover_enabled and self._vocal_remover_intensity > 0:
+            # Design a more aggressive band-stop filter for the vocal range
+            # Vocals typically span from 250Hz to 8kHz (including harmonics and sibilance)
+            # We keep frequencies below 250Hz to preserve bass and kick drums
+            low_cut = 250
+            high_cut = 8000
+
+            # Ensure frequencies are within Nyquist limit
+            nyq = self._file.samplerate / 2
+            low = max(20, low_cut) / nyq
+            high = min(nyq - 100, high_cut) / nyq
+
+            # Use Chebyshev Type II filter for very high stopband attenuation (60dB)
+            # 8th order provides a very steep roll-off to preserve bass and highs
+            self._vocal_remover_sos = scipy.signal.cheby2(
+                8, 60, [low, high],
+                btype='bandstop',
+                output='sos'
+            )
+
+            # Initialize filter state for 1 channel (the center channel)
+            if self._vocal_remover_zi is None or self._vocal_remover_zi.ndim != 2 or self._vocal_remover_zi.shape[0] != len(self._vocal_remover_sos):
+                self._vocal_remover_zi = np.zeros((len(self._vocal_remover_sos), 2))
+        else:
+            self._vocal_remover_sos = None
+            self._vocal_remover_zi = None
+
+    def _apply_vocal_remover(self, data):
+        """Apply vocal remover using center channel band-stop technique."""
+        if self._vocal_remover_sos is not None and self._vocal_remover_zi is not None and data.shape[1] >= 2:
+            # For stereo: L and R channels
+            left = data[:, 0]
+            right = data[:, 1]
+
+            # Calculate center (L+R) and side (L-R) channels
+            # We use 0.5 to keep the scale consistent
+            center = (left + right) * 0.5
+            side = (left - right) * 0.5
+
+            # Apply band-stop filter to center channel only
+            # This removes vocals while keeping bass and highs in the center,
+            # and keeping all side-panned instruments untouched.
+            center_filtered, self._vocal_remover_zi = scipy.signal.sosfilt(
+                self._vocal_remover_sos, center, zi=self._vocal_remover_zi
+            )
+
+            # Blend the filtered center with the original center based on intensity
+            # Use a non-linear curve to make the effect more prominent at lower slider positions
+            intensity = self._vocal_remover_intensity ** 0.7
+            center_processed = (center_filtered * intensity) + (center * (1.0 - intensity))
+
+            # Reconstruct stereo
+            # L = Center + Side, R = Center - Side
+            data[:, 0] = center_processed + side
+            data[:, 1] = center_processed - side
+
+            return data
+        return data
