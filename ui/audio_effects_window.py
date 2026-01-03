@@ -360,6 +360,21 @@ class AudioEffectsWindow(tk.Toplevel):
         speed_frame = ttk.LabelFrame(effects_container, text="Playback Speed", padding=15)
         speed_frame.pack(fill=tk.X, pady=(0, 15))
 
+        # Reset Speed Button
+        self.reset_speed_btn = ctk.CTkButton(
+            speed_frame,
+            text="Reset (1.0x)",
+            width=80,
+            height=24,
+            font=("Segoe UI", 9),
+            command=self._reset_speed,
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            hover_color=accent_hover,
+            bg_color=bg
+        )
+        self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
+
         self.speed_label = ttk.Label(speed_frame, text=f"{self.rate_var.get():.2f}x", width=6, anchor="center")
         self.speed_label.pack(side=tk.RIGHT, padx=(10, 0))
 
@@ -377,21 +392,6 @@ class AudioEffectsWindow(tk.Toplevel):
             border_color="transparent"
         )
         self.speed_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        # Reset Speed Button
-        self.reset_speed_btn = ctk.CTkButton(
-            speed_frame,
-            text="Reset (1.0x)",
-            width=80,
-            height=24,
-            font=("Segoe UI", 9),
-            command=self._reset_speed,
-            fg_color=btn_bg,
-            text_color=btn_fg,
-            hover_color=accent_hover,
-            bg_color=bg
-        )
-        self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
 
         # 2. Channel Mode (Band Check)
         channel_frame = ttk.LabelFrame(effects_container, text="Channel Mode", padding=15)
