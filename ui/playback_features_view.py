@@ -6,7 +6,7 @@ from ui.utils import center_window
 class PlaybackFeaturesView(tk.Toplevel):
     def __init__(self, master, state, settings, theme_manager):
         super().__init__(master)
-        self.state = state
+        self.app_state = state
         self.settings = settings
         self.theme_manager = theme_manager
         self.palette = theme_manager.palette
@@ -26,13 +26,13 @@ class PlaybackFeaturesView(tk.Toplevel):
         main_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
         # Play on double click checkbox
-        self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
-        self.play_on_double_var.trace_add('write', lambda *args: self._on_play_on_double_change())
+        self.play_on_double_var = tk.BooleanVar(value=self.app_state.play_on_double)
 
         cb = ttk.Checkbutton(
             main_frame,
             text="Play on double-click",
             variable=self.play_on_double_var,
+            command=self._on_play_on_double_change,
             style='TCheckbutton'
         )
         cb.pack(anchor='w', pady=10)
@@ -68,7 +68,7 @@ class PlaybackFeaturesView(tk.Toplevel):
                 pass
 
         # Update state as well since playlist view checks state.play_on_double
-        self.state.play_on_double = new_value
+        self.app_state.play_on_double = new_value
 
     def _apply_theme(self):
         """Apply theme to widgets."""
