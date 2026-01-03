@@ -1016,6 +1016,11 @@ class MainWindow:
                     window.update_theme()
                 except Exception:
                     pass
+            if isinstance(window, PlaybackFeaturesView):
+                try:
+                    window.update_theme()
+                except Exception:
+                    pass
 
         # Trigger refresh to redraw
         self.refresh_all()

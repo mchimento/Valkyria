@@ -18,30 +18,33 @@ class PlaybackFeaturesView(tk.Toplevel):
 
         center_window(self, master)
 
-        # Apply theme
         self.configure(bg=self.palette.get("bg", "#ffffff"))
 
         # Main container
         main_frame = ttk.Frame(self)
         main_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
-        # Play on double click checkbox
+        # Play on double click switch
         self.play_on_double_var = tk.BooleanVar(value=self.app_state.play_on_double)
 
-        cb = ttk.Checkbutton(
+        self.switch = ctk.CTkSwitch(
             main_frame,
             text="Play on double-click",
             variable=self.play_on_double_var,
             command=self._on_play_on_double_change,
-            style='TCheckbutton'
+            progress_color=self.palette.get("accent", "#0078d4"),
+            text_color=self.palette.get("fg", "#000000"),
+            bg_color=self.palette.get("bg", "#ffffff"),
+            button_color=self.palette.get("accent", "#ffffff"),
+            button_hover_color=self.palette.get("button_hover", "#106ebe")
         )
-        cb.pack(anchor='w', pady=10)
+        self.switch.pack(anchor='w', pady=10)
 
         # Close button
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(side='bottom', fill='x', pady=(20, 0))
 
-        close_btn = ctk.CTkButton(
+        self.close_btn = ctk.CTkButton(
             btn_frame,
             text="Close",
             command=self.destroy,
@@ -51,7 +54,7 @@ class PlaybackFeaturesView(tk.Toplevel):
             text_color=self.palette.get("button_fg_color", "#ffffff"),
             hover_color=self.palette.get("button_hover", "#106ebe")
         )
-        close_btn.pack(side='right')
+        self.close_btn.pack(side='right')
 
         self._apply_theme()
 
@@ -77,9 +80,27 @@ class PlaybackFeaturesView(tk.Toplevel):
 
         style = ttk.Style(self)
         style.configure("TFrame", background=bg)
-        style.configure("TCheckbutton", background=bg, foreground=fg)
 
         self.configure(bg=bg)
+
+        # Update switch colors
+        if hasattr(self, 'switch'):
+            self.switch.configure(
+                progress_color=self.palette.get("accent", "#0078d4"),
+                text_color=fg,
+                bg_color=bg,
+                button_color=self.palette.get("accent", "#ffffff"),
+                button_hover_color=self.palette.get("button_hover", "#106ebe")
+            )
+
+        # Update close button colors
+        if hasattr(self, 'close_btn'):
+            self.close_btn.configure(
+                bg_color=bg,
+                fg_color=self.palette.get("button_bg_color", "#0078d4"),
+                text_color=self.palette.get("button_fg_color", "#ffffff"),
+                hover_color=self.palette.get("button_hover", "#106ebe")
+            )
 
         # Recursive restyle
         def restyle(widget):
@@ -87,11 +108,14 @@ class PlaybackFeaturesView(tk.Toplevel):
                 widget.configure(style="TFrame")
             elif isinstance(widget, tk.Frame):
                 widget.configure(bg=bg)
-            elif isinstance(widget, ttk.Checkbutton):
-                widget.configure(style="TCheckbutton")
 
             for child in widget.winfo_children():
-                if not isinstance(child, (ctk.CTkButton, ctk.CTkLabel)):
+                if not isinstance(child, (ctk.CTkButton, ctk.CTkLabel, ctk.CTkSwitch)):
                     restyle(child)
 
         restyle(self)
+
+    def update_theme(self):
+        """Update theme when theme changes."""
+        self.palette = self.theme_manager.palette
+        self._apply_theme()
