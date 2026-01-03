@@ -42,5 +42,8 @@
   "vocal_remover": {
     "enabled": false,
     "intensity": 0.5
+  },
+  "channel_mode": {
+    "mode": "Stereo"
   }
 }

@@ -111,6 +111,27 @@ class AudioEffectsWindow(tk.Toplevel):
             except:
                 pass
 
+        # Channel Mode State
+        cm_config = AUDIO_CONFIG.get('channel_mode', {})
+        self.channel_mode_var = tk.StringVar(value=cm_config.get('mode', 'Stereo'))
+        if hasattr(self.player, 'get_channel_mode'):
+            try:
+                # Capitalize for UI consistency if needed, but the player returns lowercase
+                mode = self.player.get_channel_mode()
+                # Map back to UI string if needed, or just title case
+                # The options are ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff)"]
+                # Simple mapping:
+                mode_map = {
+                    'stereo': 'Stereo',
+                    'mono': 'Mono',
+                    'left channel': 'Left Channel',
+                    'right channel': 'Right Channel',
+                    'side (diff)': 'Side (Diff)'
+                }
+                self.channel_mode_var.set(mode_map.get(mode, 'Stereo'))
+            except:
+                pass
+
         self._create_ui()
 
         # Synchronize UI state with initial values
@@ -372,7 +393,37 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.reset_speed_btn.pack(side=tk.RIGHT, padx=(10, 10))
 
-        # 2. Vocal Remover
+        # 2. Channel Mode (Band Check)
+        channel_frame = ttk.LabelFrame(effects_container, text="Channel Mode", padding=15)
+        channel_frame.pack(fill=tk.X, pady=(0, 15))
+
+        # Description
+        ttk.Label(channel_frame, text="Select channel to analyze mix structure:", font=("Segoe UI", 9, "italic")).pack(anchor="w", pady=(0, 10))
+
+        # Radio Buttons Container
+        radio_container = ttk.Frame(channel_frame)
+        radio_container.pack(fill=tk.X)
+
+        options = AUDIO_DEFAULTS.get('channel_mode', {}).get('options', ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff)"])
+        self.channel_radios = []
+
+        for option in options:
+            radio = ctk.CTkRadioButton(
+                radio_container,
+                text=option,
+                variable=self.channel_mode_var,
+                value=option,
+                command=lambda: self._on_channel_mode_change(self.channel_mode_var.get()),
+                text_color=fg,
+                fg_color=accent,
+                hover_color=accent_hover,
+                border_color=palette.get("switch_bg", "#939393"),
+                bg_color=bg
+            )
+            radio.pack(side=tk.LEFT, padx=(0, 15))
+            self.channel_radios.append(radio)
+
+        # 3. Vocal Remover
         vocal_frame = ttk.LabelFrame(effects_container, text="Vocal Remover", padding=15)
         vocal_frame.pack(fill=tk.X, pady=(0, 15))
 
@@ -979,6 +1030,10 @@ class AudioEffectsWindow(tk.Toplevel):
         enabled = self.vocal_remover_var.get()
         self.player.set_vocal_remover_enabled(enabled)
 
+    def _on_channel_mode_change(self, value):
+        if hasattr(self.player, 'set_channel_mode'):
+            self.player.set_channel_mode(value)
+
     def _on_vocal_intensity_change(self, value):
         intensity = float(value)
         self.vocal_intensity_label.configure(text=f"{intensity:.2f}")
@@ -1030,6 +1085,9 @@ class AudioEffectsWindow(tk.Toplevel):
                 "vocal_remover": {
                     "enabled": self.vocal_remover_var.get(),
                     "intensity": self.vocal_intensity_var.get()
+                },
+                "channel_mode": {
+                    "mode": self.channel_mode_var.get()
                 }
             }
 
@@ -1267,6 +1325,17 @@ class AudioEffectsWindow(tk.Toplevel):
                 hover_color=accent_hover,
                 bg_color=bg
             )
+
+        # Channel Mode Radios
+        if hasattr(self, 'channel_radios'):
+            for radio in self.channel_radios:
+                radio.configure(
+                    text_color=fg,
+                    fg_color=accent,
+                    hover_color=accent_hover,
+                    bg_color=bg,
+                    border_color=palette.get("switch_bg", "#939393")
+                )
 
     def update_theme(self):
         """Public method to refresh theme."""

@@ -100,6 +100,10 @@
     "min_rate": 0.25,
     "max_rate": 4.0
   },
+  "channel_mode": {
+    "mode": "stereo",
+    "options": ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff)"]
+  },
   "vocal_remover": {
     "enabled": false,
     "intensity": 0.5

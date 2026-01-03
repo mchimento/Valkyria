@@ -97,6 +97,10 @@ class AudioPlayer:
         self._vr_rms_center = 0.0
         self._vr_rms_side = 0.0
 
+        # Channel Mode
+        cm_config = AUDIO_CONFIG.get('channel_mode', {})
+        self._channel_mode = cm_config.get('mode', 'stereo').lower()
+
         logger.info("AudioPlayer initialized (sounddevice)")
 
     def _stream_callback(self, outdata, frames, time, status):
@@ -173,6 +177,9 @@ class AudioPlayer:
         # Apply Spatializer
         if self._spatializer_enabled:
             outdata[:] = self._apply_spatializer(outdata)
+
+        # Apply Channel Mode
+        outdata[:] = self._apply_channel_mode(outdata)
 
         # Apply Vocal Remover
         if self._vocal_remover_enabled:
@@ -765,6 +772,49 @@ class AudioPlayer:
 
         # Mix
         return dry_signal * self._spat_dry + reverb_signal * self._spat_wet
+
+    def set_channel_mode(self, mode):
+        """
+        Set the channel processing mode.
+
+        Args:
+            mode: One of 'Stereo', 'Mono', 'Left Channel', 'Right Channel', 'Side (Diff)'.
+        """
+        with self._lock:
+            self._channel_mode = mode.lower()
+            logger.info(f"Channel mode set to: {self._channel_mode}")
+
+    def get_channel_mode(self):
+        return self._channel_mode
+
+    def _apply_channel_mode(self, data):
+        """Apply channel mode processing (Stereo, Mono, Left, Right, Side)."""
+        if self._channel_mode == 'stereo' or data.shape[1] < 2:
+            return data
+
+        left = data[:, 0]
+        right = data[:, 1]
+
+        if self._channel_mode == 'mono':
+            # (L+R) / 2
+            mono = (left + right) * 0.5
+            data[:, 0] = mono
+            data[:, 1] = mono
+        elif self._channel_mode == 'left channel':
+            # L to both
+            data[:, 1] = left
+            data[:, 0] = left
+        elif self._channel_mode == 'right channel':
+            # R to both
+            data[:, 0] = right
+            data[:, 1] = right
+        elif self._channel_mode == 'side (diff)':
+            # (L-R) / 2
+            side = (left - right) * 0.5
+            data[:, 0] = side
+            data[:, 1] = side
+
+        return data
 
     def set_vocal_remover_enabled(self, enabled):
         self._vocal_remover_enabled = enabled
