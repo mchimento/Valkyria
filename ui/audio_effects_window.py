@@ -787,7 +787,7 @@ class AudioEffectsWindow(tk.Toplevel):
             text="The compressor reduces dynamic range by attenuating signals above the threshold. Use makeup gain to compensate for volume loss.",
             font=("Segoe UI", 9),
             justify=tk.CENTER,
-            wraplength=700
+            wraplength=760
         )
         info_label.pack(pady=(20, 0))
 
