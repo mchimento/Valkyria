@@ -9,7 +9,7 @@ class TestAudioPlayer(unittest.TestCase):
         """Test that AudioPlayer initializes correctly."""
         with patch('sounddevice.play') as mock_play:
             player = AudioPlayer()  # Don't pass path to avoid file opening
-            self.assertIsNone(player._file)  # _file is None until play() is called
+            self.assertIsNone(player._buffer)  # _buffer is None until play() is called
             self.assertFalse(player._muted)
             self.assertFalse(player._paused)
             self.assertFalse(player._stopped_manually)
@@ -42,7 +42,7 @@ class TestAudioPlayer(unittest.TestCase):
             player = AudioPlayer()
             player.stop()
             self.assertTrue(player._stopped_manually)
-            self.assertIsNone(player._file)
+            self.assertIsNone(player._buffer)
 
     def test_set_volume(self):
         """Test that set_volume method sets volume."""

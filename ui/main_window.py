@@ -85,6 +85,9 @@ class MainWindow:
         self.current_artwork_image = None
         self.current_artwork_photo = None
 
+        # Timer job for status restoration
+        self._status_restore_job = None
+
         # Register as BPM listener to refresh status when BPM is calculated
         metadata_extractor.register_bpm_listener(self._on_bpm_updated)
 
@@ -660,8 +663,11 @@ class MainWindow:
                 self.status_var.set("")
             self.meta_var.set("")
 
-            if hasattr(self, "_status_restore_job"):
-                self.root.after_cancel(self._status_restore_job)
+            if self._status_restore_job is not None:
+                try:
+                    self.root.after_cancel(self._status_restore_job)
+                except ValueError:
+                    pass
                 self._status_restore_job = None
 
             self.state.current_index = None
@@ -1611,7 +1617,14 @@ class MainWindow:
             # Reset repeat mode to 'none' after replaying
             self.state.repeat_mode = 'none'
             self.repeat_mode_var.set('none')
-            self._set_temporary_status("Repeat: None")
+
+            self._restore_status(prefix="Repeat")
+            if self._status_restore_job is not None:
+                try:
+                    self.root.after_cancel(self._status_restore_job)
+                except ValueError:
+                    pass
+            self._status_restore_job = self.root.after(3000, self._restore_status)
         elif repeat_mode == 'all':
             # Loop to beginning
             if self.state.current_index + 1 < len(self.state.playlist):
@@ -1642,8 +1655,11 @@ class MainWindow:
         self.status_var.set(message)
 
         # Cancel prior restore timer if any
-        if hasattr(self, "_status_restore_job"):
-            self.root.after_cancel(self._status_restore_job)
+        if self._status_restore_job is not None:
+            try:
+                self.root.after_cancel(self._status_restore_job)
+            except ValueError:
+                pass
 
         # Restore after timeout
         self._status_restore_job = self.root.after(duration, self._restore_status)

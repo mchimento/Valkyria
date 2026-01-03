@@ -7,6 +7,7 @@ Provides a simple, stable API to play/pause/stop and emits callbacks when a trac
 import logging
 import threading
 import json
+import time
 from pathlib import Path
 
 import sounddevice as sd
@@ -16,6 +17,131 @@ import numpy as np
 from audio.audio_effects import AudioEffects
 
 logger = logging.getLogger(__name__)
+
+class AudioBuffer:
+    """
+    Thread-safe ring buffer for audio streaming.
+    Decouples file I/O from the audio callback to prevent underruns.
+    """
+    def __init__(self, file_path, capacity_frames=176400): # ~4 seconds at 44.1k
+        self.file = sf.SoundFile(file_path)
+        self.samplerate = self.file.samplerate
+        self.channels = self.file.channels
+        self.capacity = capacity_frames
+
+        # Ring buffer
+        self.buffer = np.zeros((self.capacity, self.channels), dtype='float32')
+        self.write_pos = 0
+        self.read_pos = 0
+        self.count = 0 # Frames available to read
+        self.absolute_read_pos = 0
+
+        self.lock = threading.Lock()
+        self.running = True
+        self.eof = False
+
+        # Start producer thread
+        self.thread = threading.Thread(target=self._producer_loop, daemon=True)
+        self.thread.start()
+
+    def _producer_loop(self):
+        while self.running:
+            # Determine how much space is available
+            with self.lock:
+                space = self.capacity - self.count
+
+            # If buffer is nearly full, sleep a bit
+            if space < 4096:
+                time.sleep(0.01)
+                continue
+
+            # Read a chunk (without holding lock)
+            read_size = min(space, 8192)
+
+            try:
+                data = self.file.read(read_size, dtype='float32')
+            except Exception as e:
+                logger.error(f"Error reading audio file: {e}")
+                self.eof = True
+                break
+
+            if len(data) == 0:
+                self.eof = True
+                time.sleep(0.05)
+                continue
+
+            # Ensure 2D
+            if data.ndim == 1:
+                data = data[:, np.newaxis]
+
+            n = len(data)
+
+            # Write to buffer (holding lock)
+            with self.lock:
+                if not self.running:
+                    break
+
+                end = self.write_pos + n
+                if end <= self.capacity:
+                    self.buffer[self.write_pos:end] = data
+                else:
+                    split = self.capacity - self.write_pos
+                    self.buffer[self.write_pos:] = data[:split]
+                    self.buffer[:n-split] = data[split:]
+
+                self.write_pos = (self.write_pos + n) % self.capacity
+                self.count += n
+
+    def read(self, frames):
+        """Read frames from the buffer. Returns None if EOF and empty."""
+        with self.lock:
+            if self.count == 0:
+                if self.eof:
+                    return None # Real EOF
+                return np.zeros((frames, self.channels), dtype='float32') # Underrun
+
+            n = min(frames, self.count)
+
+            end = self.read_pos + n
+            if end <= self.capacity:
+                data = self.buffer[self.read_pos:end].copy()
+            else:
+                split = self.capacity - self.read_pos
+                p1 = self.buffer[self.read_pos:]
+                p2 = self.buffer[:n-split]
+                data = np.concatenate((p1, p2))
+
+            self.read_pos = (self.read_pos + n) % self.capacity
+            self.count -= n
+            self.absolute_read_pos += n
+
+            # If we requested more than available, pad with zeros (underrun)
+            if n < frames:
+                padding = np.zeros((frames - n, self.channels), dtype='float32')
+                data = np.concatenate((data, padding))
+
+            return data
+
+    def seek(self, frame_pos):
+        with self.lock:
+            try:
+                self.file.seek(frame_pos)
+                self.read_pos = 0
+                self.write_pos = 0
+                self.count = 0
+                self.absolute_read_pos = frame_pos
+                self.eof = False
+            except Exception as e:
+                logger.error(f"Error seeking: {e}")
+
+    def close(self):
+        self.running = False
+        if self.thread.is_alive():
+            self.thread.join(timeout=0.5)
+        try:
+            self.file.close()
+        except:
+            pass
 
 # Load audio effects configuration
 config_path = Path(__file__).parent / 'audio_effects_config.json'
@@ -39,7 +165,7 @@ class AudioPlayer:
         self._lock = threading.RLock()
 
         self._stream = None
-        self._file = None
+        self._buffer = None
         self._volume = 100  # 0-100
         self._muted = False
         self._paused = False
@@ -62,7 +188,7 @@ class AudioPlayer:
         frames_to_read = frames
 
         with self._lock:
-            if not self._file:
+            if not self._buffer:
                 outdata[:] = 0
                 raise sd.CallbackStop
 
@@ -76,38 +202,25 @@ class AudioPlayer:
                 frames_to_read = int(target_read)
                 self._rate_remainder = target_read - frames_to_read
 
-            # Read data from file
-            data = self._file.read(frames_to_read)
-            # Ensure data is 2D for consistent processing (N, C)
-            if data.ndim == 1:
-                data = data[:, np.newaxis]
+            # Read data from buffer
+            data = self._buffer.read(frames_to_read)
 
-        # Handle End of File
-        if len(data) < frames_to_read:
-            # End of file reached, handle partial data
-            if abs(self._playback_rate - 1.0) < 0.01:
-                outdata[:len(data)] = data
-                outdata[len(data):] = 0
-            else:
-                # Resample partial data
-                valid_frames = int(len(data) / self._playback_rate)
-                valid_frames = min(valid_frames, frames)
-                if valid_frames > 0:
-                    x_old = np.linspace(0, 1, len(data))
-                    x_new = np.linspace(0, 1, valid_frames)
-                    for ch in range(data.shape[1]):
-                        outdata[:valid_frames, ch] = np.interp(x_new, x_old, data[:, ch])
-                outdata[valid_frames:] = 0
-            raise sd.CallbackStop
+            if data is None:
+                # EOF
+                outdata[:] = 0
+                raise sd.CallbackStop
+
+        # Resample if needed
+        if abs(self._playback_rate - 1.0) < 0.01:
+            outdata[:] = data
         else:
-            if abs(self._playback_rate - 1.0) < 0.01:
-                outdata[:] = data
-            else:
-                # Resample full block: stretch read data to fit output frames
-                x_old = np.linspace(0, 1, len(data))
-                x_new = np.linspace(0, 1, frames)
-                for ch in range(data.shape[1]):
-                    outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
+            # Resample full block: stretch read data to fit output frames
+            # Note: This simple interpolation does not maintain continuity across blocks
+            # but is sufficient for basic speed control.
+            x_old = np.linspace(0, 1, len(data))
+            x_new = np.linspace(0, 1, frames)
+            for ch in range(data.shape[1]):
+                outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
 
         # Apply Audio Effects
         outdata[:] = self.effects.process(outdata)
@@ -141,7 +254,7 @@ class AudioPlayer:
 
         with self._lock:
             try:
-                self._file = sf.SoundFile(path)
+                self._buffer = AudioBuffer(path)
                 self._paused = False
                 self._stopped_manually = False
 
@@ -154,15 +267,15 @@ class AudioPlayer:
                         device = None
 
                 self._stream = sd.OutputStream(
-                    samplerate=self._file.samplerate,
-                    channels=self._file.channels,
+                    samplerate=self._buffer.samplerate,
+                    channels=self._buffer.channels,
                     device=device,
                     callback=self._stream_callback,
                     finished_callback=self._on_stream_finished
                 )
 
                 # Prepare effects for this file
-                self.effects.prepare(self._file.samplerate, self._file.channels)
+                self.effects.prepare(self._buffer.samplerate, self._buffer.channels)
 
                 self._stream.start()
             except Exception:
@@ -171,9 +284,9 @@ class AudioPlayer:
                 if self._stream:
                     self._stream.close()
                     self._stream = None
-                if self._file:
-                    self._file.close()
-                    self._file = None
+                if self._buffer:
+                    self._buffer.close()
+                    self._buffer = None
 
     def pause(self):
         """Pause or resume playback."""
@@ -202,16 +315,16 @@ class AudioPlayer:
     def stop(self):
         """Stop playback."""
         stream_to_close = None
-        file_to_close = None
+        buffer_to_close = None
 
         with self._lock:
             self._stopped_manually = True
             if self._stream:
                 stream_to_close = self._stream
                 self._stream = None
-            if self._file:
-                file_to_close = self._file
-                self._file = None
+            if self._buffer:
+                buffer_to_close = self._buffer
+                self._buffer = None
             self._paused = False
 
         # Perform cleanup outside lock to avoid deadlock with callback
@@ -222,11 +335,11 @@ class AudioPlayer:
             except Exception:
                 logger.error("Failed to stop stream", exc_info=True)
 
-        if file_to_close:
+        if buffer_to_close:
             try:
-                file_to_close.close()
+                buffer_to_close.close()
             except Exception:
-                logger.error("Failed to close file", exc_info=True)
+                logger.error("Failed to close buffer", exc_info=True)
 
     def set_volume(self, val):
         """
@@ -285,9 +398,8 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                if self._file:
-                    # tell() returns frames, convert to ms
-                    return int((self._file.tell() / self._file.samplerate) * 1000)
+                if self._buffer:
+                    return int((self._buffer.absolute_read_pos / self._buffer.samplerate) * 1000)
                 return 0
             except Exception:
                 logger.error("Failed to get playback time", exc_info=True)
@@ -302,8 +414,8 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                if self._file:
-                    return int((len(self._file) / self._file.samplerate) * 1000)
+                if self._buffer:
+                    return int((len(self._buffer.file) / self._buffer.samplerate) * 1000)
                 return 0
             except Exception:
                 logger.error("Failed to get track length", exc_info=True)
@@ -318,10 +430,10 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                if self._file:
+                if self._buffer:
                     # Convert ms to frames
-                    frame_pos = int((time_ms / 1000.0) * self._file.samplerate)
-                    self._file.seek(frame_pos)
+                    frame_pos = int((time_ms / 1000.0) * self._buffer.samplerate)
+                    self._buffer.seek(frame_pos)
                     # Reset filter state on seek to prevent artifacts
                     self.effects.reset_state()
             except Exception:
@@ -398,10 +510,10 @@ class AudioPlayer:
                 logger.info(f"Audio device set to: {device_id}")
 
                 # If currently playing or paused, restart stream to apply new device
-                if self._stream and self._file:
+                if self._stream and self._buffer:
                     restart_needed = True
-                    restart_path = self._file.name
-                    restart_pos = int((self._file.tell() / self._file.samplerate) * 1000)
+                    restart_path = self._buffer.file.name
+                    restart_pos = int((self._buffer.absolute_read_pos / self._buffer.samplerate) * 1000)
                     restart_paused = self._paused
             except Exception as e:
                 logger.error(f"Failed to set audio device to {device_id}: {e}")
