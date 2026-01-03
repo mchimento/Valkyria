@@ -176,7 +176,10 @@ class ControlsBar(ttk.Frame):
 
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
-            self.player.play(path)
+
+            # Run player.play in a thread to prevent UI blocking
+            threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
+
             self.crossfade_triggered = False
             # Load waveform for the new track
             self.waveform_seekbar.load_waveform(path)
