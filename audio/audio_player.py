@@ -12,7 +12,8 @@ from pathlib import Path
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
-import scipy.signal
+
+from audio.audio_effects import AudioEffects
 
 logger = logging.getLogger(__name__)
 
@@ -47,59 +48,8 @@ class AudioPlayer:
         self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
 
-        # Equalizer
-        eq_config = AUDIO_CONFIG['equalizer']
-        eq_defaults = AUDIO_DEFAULTS['equalizer']
-        self.equalizer_enabled = eq_config['enabled']
-        self._eq_bands = eq_defaults['bands']
-        self._eq_gains = eq_config['gains'].copy()
-        self._eq_preamp = eq_config['preamp']
-        self._eq_sos = None
-        self._eq_zi = None
-
-        # Compressor
-        comp_config = AUDIO_CONFIG['compressor']
-        self._compressor_enabled = comp_config['enabled']
-        self._compressor_threshold = comp_config['threshold']
-        self._compressor_ratio = comp_config['ratio']
-        self._compressor_attack = comp_config['attack']
-        self._compressor_release = comp_config['release']
-        self._compressor_makeup = comp_config['makeup_gain']
-        self._compressor_knee = comp_config['knee']
-        self._compressor_use_rms = comp_config['use_rms']
-        self._compressor_envelope = 0.0
-        self._compressor_rms_buffer = np.zeros(comp_config['rms_buffer_size'])
-        self._compressor_rms_index = 0
-
-        # Spatializer
-        spat_config = AUDIO_CONFIG.get('spatializer', {})
-        self._spatializer_enabled = spat_config.get('enabled', False)
-        self._spat_size = spat_config.get('size', 0.85)
-        self._spat_width = spat_config.get('width', 0.5)
-        self._spat_wet = spat_config.get('wet', 0.4)
-        self._spat_dry = spat_config.get('dry', 0.5)
-        self._spat_damp = spat_config.get('damp', 0.5)
-
-        # Reverb state
-        self._spat_initialized = False
-        self._spat_comb_buffers = []
-        self._spat_comb_indices = []
-        self._spat_comb_filters = [] # Store lowpass state
-        self._spat_allpass_buffers = []
-        self._spat_allpass_indices = []
-
-        # Vocal Remover
-        vr_config = AUDIO_CONFIG.get('vocal_remover', {})
-        self._vocal_remover_enabled = vr_config.get('enabled', False)
-        self._vocal_remover_intensity = vr_config.get('intensity', 0.5)
-        self._vocal_remover_sos = None
-        self._vocal_remover_zi = None
-        self._vr_rms_center = 0.0
-        self._vr_rms_side = 0.0
-
-        # Channel Mode
-        cm_config = AUDIO_CONFIG.get('channel_mode', {})
-        self._channel_mode = cm_config.get('mode', 'stereo').lower()
+        # Initialize Audio Effects Processor
+        self.effects = AudioEffects(AUDIO_CONFIG, AUDIO_DEFAULTS)
 
         logger.info("AudioPlayer initialized (sounddevice)")
 
@@ -159,31 +109,8 @@ class AudioPlayer:
                 for ch in range(data.shape[1]):
                     outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
 
-        # Apply Equalizer
-        if self.equalizer_enabled and self._eq_sos is not None:
-            # Apply Preamp
-            if self._eq_preamp != 0.0:
-                outdata[:] *= (10 ** (self._eq_preamp / 20.0))
-
-            # Apply SOS filters
-            # Check if ZI shape matches current channels (file channels)
-            if self._eq_zi is not None and self._eq_zi.shape[1] == outdata.shape[1]:
-                outdata[:], self._eq_zi = scipy.signal.sosfilt(self._eq_sos, outdata, axis=0, zi=self._eq_zi)
-
-        # Apply Compressor
-        if self._compressor_enabled:
-            outdata[:] = self._apply_compressor(outdata)
-
-        # Apply Spatializer
-        if self._spatializer_enabled:
-            outdata[:] = self._apply_spatializer(outdata)
-
-        # Apply Channel Mode
-        outdata[:] = self._apply_channel_mode(outdata)
-
-        # Apply Vocal Remover
-        if self._vocal_remover_enabled:
-            outdata[:] = self._apply_vocal_remover(outdata)
+        # Apply Audio Effects
+        outdata[:] = self.effects.process(outdata)
 
         # Apply Volume
         if self._muted:
@@ -233,9 +160,11 @@ class AudioPlayer:
                     callback=self._stream_callback,
                     finished_callback=self._on_stream_finished
                 )
+
+                # Prepare effects for this file
+                self.effects.prepare(self._file.samplerate, self._file.channels)
+
                 self._stream.start()
-                self._update_equalizer()
-                self._update_vocal_remover()
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
                 # Cleanup manually since we can't call stop() safely inside lock if it blocks
@@ -394,8 +323,7 @@ class AudioPlayer:
                     frame_pos = int((time_ms / 1000.0) * self._file.samplerate)
                     self._file.seek(frame_pos)
                     # Reset filter state on seek to prevent artifacts
-                    if self._eq_zi is not None:
-                        self._eq_zi.fill(0)
+                    self.effects.reset_state()
             except Exception:
                 logger.error(f"Failed to set time to {time_ms}", exc_info=True)
 
@@ -485,104 +413,26 @@ class AudioPlayer:
             if restart_paused:
                 self.pause()
 
-    def _design_peaking_filter(self, f0, gain_db, Q, fs):
-        """Design coefficients for a peaking EQ filter."""
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * f0 / fs
-        alpha = np.sin(w0) / (2 * Q)
-
-        b0 = 1 + alpha * A
-        b1 = -2 * np.cos(w0)
-        b2 = 1 - alpha * A
-        a0 = 1 + alpha / A
-        a1 = -2 * np.cos(w0)
-        a2 = 1 - alpha / A
-
-        return np.array([b0, b1, b2, a0, a1, a2]) / a0
-
-    def _design_low_shelf(self, f0, gain_db, Q, fs):
-        """Design coefficients for a low shelf filter."""
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * f0 / fs
-        alpha = np.sin(w0) / (2 * Q)
-
-        b0 = A * ((A + 1) - (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha)
-        b1 = 2 * A * ((A - 1) - (A + 1) * np.cos(w0))
-        b2 = A * ((A + 1) - (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha)
-        a0 = (A + 1) + (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha
-        a1 = -2 * ((A - 1) + (A + 1) * np.cos(w0))
-        a2 = (A + 1) + (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha
-
-        return np.array([b0, b1, b2, a0, a1, a2]) / a0
-
-    def _design_high_shelf(self, f0, gain_db, Q, fs):
-        """Design coefficients for a high shelf filter."""
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * f0 / fs
-        alpha = np.sin(w0) / (2 * Q)
-
-        b0 = A * ((A + 1) + (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha)
-        b1 = -2 * A * ((A - 1) + (A + 1) * np.cos(w0))
-        b2 = A * ((A + 1) + (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha)
-        a0 = (A + 1) - (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha
-        a1 = 2 * ((A - 1) - (A + 1) * np.cos(w0))
-        a2 = (A + 1) - (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha
-
-        return np.array([b0, b1, b2, a0, a1, a2]) / a0
-
-    def _update_equalizer(self):
-        """Recalculate equalizer filter coefficients."""
-        with self._lock:
-            if not self._file or not self.equalizer_enabled:
-                self._eq_sos = None
-                self._eq_zi = None
-                return
-
-            fs = self._file.samplerate
-            sos_list = []
-            for i, freq in enumerate(self._eq_bands):
-                if i == 0:
-                    # Low Shelf for the first band (60Hz)
-                    sos = self._design_low_shelf(freq, self._eq_gains[i], 0.707, fs)
-                elif i == len(self._eq_bands) - 1:
-                    # High Shelf for the last band (16kHz)
-                    sos = self._design_high_shelf(freq, self._eq_gains[i], 0.707, fs)
-                else:
-                    # Peaking filter for middle bands
-                    sos = self._design_peaking_filter(freq, self._eq_gains[i], 1.414, fs)
-                sos_list.append(sos)
-
-            self._eq_sos = np.vstack(sos_list)
-
-            # Initialize state if needed
-            if self._eq_zi is None or self._eq_zi.shape != (len(self._eq_bands), self._file.channels, 2):
-                self._eq_zi = np.zeros((len(self._eq_bands), self._file.channels, 2))
-
     def set_equalizer_enabled(self, enabled):
         """Enable or disable the equalizer."""
-        self.equalizer_enabled = enabled
-        self._update_equalizer()
+        self.effects.set_equalizer_enabled(enabled)
 
     def get_equalizer_enabled(self):
-        return self.equalizer_enabled
+        return self.effects.get_equalizer_enabled()
 
     def set_equalizer_preamp(self, preamp):
         """Set preamp level in dB (-20 to 20)."""
-        self._eq_preamp = max(-20.0, min(20.0, float(preamp)))
+        self.effects.set_equalizer_preamp(preamp)
 
     def get_equalizer_preamp(self):
-        return self._eq_preamp
+        return self.effects.get_equalizer_preamp()
 
     def set_equalizer_band(self, band_index, value):
         """Set gain for a specific band in dB (-20 to 20)."""
-        if 0 <= band_index < len(self._eq_bands):
-            self._eq_gains[band_index] = max(-20.0, min(20.0, float(value)))
-            self._update_equalizer()
+        self.effects.set_equalizer_band(band_index, value)
 
     def get_equalizer_band(self, band_index):
-        if 0 <= band_index < len(self._eq_bands):
-            return self._eq_gains[band_index]
-        return 0.0
+        return self.effects.get_equalizer_band(band_index)
 
     def set_playback_rate(self, rate):
         """
@@ -596,82 +446,6 @@ class AudioPlayer:
     def get_playback_rate(self):
         """Get current playback rate."""
         return self._playback_rate
-
-    def _apply_compressor(self, data):
-        """Apply dynamic range compression to audio data."""
-        # Convert parameters
-        threshold_linear = 10 ** (self._compressor_threshold / 20.0)
-        attack_coef = np.exp(-1.0 / (self._compressor_attack * self._file.samplerate / 1000.0))
-        release_coef = np.exp(-1.0 / (self._compressor_release * self._file.samplerate / 1000.0))
-        makeup_linear = 10 ** (self._compressor_makeup / 20.0)
-        knee_db = self._compressor_knee
-
-        # Process each sample
-        compressed = np.zeros_like(data)
-
-        # Pre-calculate RMS alpha if needed (approximate window average)
-        # alpha = 1 - exp(-1 / (window_samples))
-        # Using buffer size as window samples
-        rms_window = len(self._compressor_rms_buffer)
-        rms_alpha = 1.0 - np.exp(-1.0 / rms_window)
-
-        for i in range(len(data)):
-            # Get input level based on detection mode
-            if self._compressor_use_rms:
-                # RMS detection using Exponential Moving Average (EMA)
-                # This is much faster than re-calculating mean of buffer every sample
-                sample_power = np.mean(data[i] ** 2)
-                # Use the first element of buffer to store state (hacky but avoids new variable)
-                # Ideally we should add self._compressor_rms_state
-                current_ms = self._compressor_rms_buffer[0]
-                new_ms = rms_alpha * sample_power + (1 - rms_alpha) * current_ms
-                self._compressor_rms_buffer[0] = new_ms
-                input_level = np.sqrt(new_ms)
-            else:
-                # Peak detection - instantaneous absolute value
-                input_level = np.max(np.abs(data[i]))
-
-            # Envelope follower
-            if input_level > self._compressor_envelope:
-                self._compressor_envelope = attack_coef * self._compressor_envelope + (1 - attack_coef) * input_level
-            else:
-                self._compressor_envelope = release_coef * self._compressor_envelope + (1 - release_coef) * input_level
-
-            # Calculate gain reduction with knee
-            envelope_db = 20 * np.log10(self._compressor_envelope + 1e-10)
-            threshold_db = self._compressor_threshold
-
-            if knee_db > 0:
-                # Soft knee
-                knee_lower = threshold_db - knee_db / 2
-                knee_upper = threshold_db + knee_db / 2
-
-                if envelope_db < knee_lower:
-                    # Below knee - no compression
-                    gain_reduction_db = 0.0
-                elif envelope_db > knee_upper:
-                    # Above knee - full compression
-                    over_db = envelope_db - threshold_db
-                    gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
-                else:
-                    # In knee - smooth transition
-                    over_db = envelope_db - knee_lower
-                    knee_ratio = over_db / knee_db
-                    gain_reduction_db = knee_ratio * knee_ratio * knee_db * (1.0 - 1.0 / self._compressor_ratio) / 2
-            else:
-                # Hard knee
-                if envelope_db > threshold_db:
-                    over_db = envelope_db - threshold_db
-                    gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
-                else:
-                    gain_reduction_db = 0.0
-
-            gain_reduction_linear = 10 ** (-gain_reduction_db / 20.0)
-
-            # Apply gain reduction and makeup gain
-            compressed[i] = data[i] * gain_reduction_linear * makeup_linear
-
-        return compressed
 
     def set_compressor(self, enabled, threshold=-20.0, ratio=3.0, attack=5.0, release=100.0, makeup_gain=0.0, knee=0.0, use_rms=True):
         """
@@ -688,90 +462,20 @@ class AudioPlayer:
             use_rms: Use RMS detection (True) or Peak detection (False)
         """
         with self._lock:
-            self._compressor_enabled = enabled
-            self._compressor_threshold = max(-60.0, min(0.0, float(threshold)))
-            self._compressor_ratio = max(1.0, min(20.0, float(ratio)))
-            self._compressor_attack = max(0.1, min(500.0, float(attack)))
-            self._compressor_release = max(1.0, min(1000.0, float(release)))
-            self._compressor_makeup = max(-20.0, min(30.0, float(makeup_gain)))
-            self._compressor_knee = max(0.0, min(10.0, float(knee)))
-            self._compressor_use_rms = bool(use_rms)
-
-            if enabled:
-                mode = "RMS" if use_rms else "Peak"
-                logger.info(f"Compressor enabled: threshold={threshold}dB, ratio={ratio}:1, attack={attack}ms, release={release}ms, makeup={makeup_gain}dB, knee={knee}dB, mode={mode}")
-            else:
-                logger.info("Compressor disabled")
+            self.effects.set_compressor(enabled, threshold, ratio, attack, release, makeup_gain, knee, use_rms)
 
     def get_compressor_enabled(self):
         """Get compressor enabled state."""
         with self._lock:
-            return self._compressor_enabled
+            return self.effects.get_compressor_enabled()
 
     def set_spatializer(self, enabled, size=0.85, width=0.5, wet=0.4, dry=0.5, damp=0.5):
         """Configure spatializer."""
         with self._lock:
-            self._spatializer_enabled = enabled
-            self._spat_size = max(0.0, min(1.1, float(size)))
-            self._spat_width = max(0.0, min(1.0, float(width)))
-            self._spat_wet = max(0.0, min(1.0, float(wet)))
-            self._spat_dry = max(0.0, min(1.0, float(dry)))
-            self._spat_damp = max(0.0, min(1.0, float(damp)))
-
-            if enabled:
-                logger.info(f"Spatializer enabled: size={size}, width={width}, wet={wet}, dry={dry}, damp={damp}")
-            else:
-                logger.info("Spatializer disabled")
+            self.effects.set_spatializer(enabled, size, width, wet, dry, damp)
 
     def get_spatializer_enabled(self):
-        return self._spatializer_enabled
-
-    def _apply_spatializer(self, data):
-        """Apply spatializer effect (Width + Simple Cross-Delay)."""
-        if not self._spat_initialized:
-            # Init simple buffers
-            # 100ms max delay
-            size = int(0.1 * self._file.samplerate)
-            self._spat_buffer = np.zeros((size, 2))
-            self._spat_write_pos = 0
-            self._spat_initialized = True
-
-        # 1. Width
-        width_factor = self._spat_width * 2.0
-        mid = (data[:, 0] + data[:, 1]) * 0.5
-        side = (data[:, 0] - data[:, 1]) * 0.5
-        side *= width_factor
-
-        dry_signal = np.column_stack((mid + side, mid - side))
-
-        # 2. Simple Reverb/Ambience (Cross-Delay)
-        # Delay time based on 'size' (0-100ms)
-        delay_samples = int(self._spat_size * 0.1 * self._file.samplerate)
-        if delay_samples == 0: delay_samples = 1
-
-        # Read from buffer (circular)
-        num_frames = len(data)
-        buffer_len = len(self._spat_buffer)
-
-        # Create indices
-        read_indices = (np.arange(num_frames) + self._spat_write_pos - delay_samples) % buffer_len
-        write_indices = (np.arange(num_frames) + self._spat_write_pos) % buffer_len
-
-        # Read delayed signal
-        delayed = self._spat_buffer[read_indices]
-
-        # Cross-feed: L gets delayed R, R gets delayed L
-        reverb_signal = np.column_stack((delayed[:, 1], delayed[:, 0]))
-
-        # Write current input to buffer (with some feedback for tail)
-        # Use damp as feedback control
-        feedback = self._spat_damp * 0.6
-        self._spat_buffer[write_indices] = data + reverb_signal * feedback
-
-        self._spat_write_pos = (self._spat_write_pos + num_frames) % buffer_len
-
-        # Mix
-        return dry_signal * self._spat_dry + reverb_signal * self._spat_wet
+        return self.effects.get_spatializer_enabled()
 
     def set_channel_mode(self, mode):
         """
@@ -781,133 +485,23 @@ class AudioPlayer:
             mode: One of 'Stereo', 'Mono', 'Left Channel', 'Right Channel', 'Side (Diff)'.
         """
         with self._lock:
-            self._channel_mode = mode.lower()
-            logger.info(f"Channel mode set to: {self._channel_mode}")
+            self.effects.set_channel_mode(mode)
 
     def get_channel_mode(self):
-        return self._channel_mode
-
-    def _apply_channel_mode(self, data):
-        """Apply channel mode processing (Stereo, Mono, Left, Right, Side)."""
-        if self._channel_mode == 'stereo' or data.shape[1] < 2:
-            return data
-
-        left = data[:, 0]
-        right = data[:, 1]
-
-        if self._channel_mode == 'mono':
-            # (L+R) / 2
-            mono = (left + right) * 0.5
-            data[:, 0] = mono
-            data[:, 1] = mono
-        elif self._channel_mode == 'left channel':
-            # L to both
-            data[:, 1] = left
-            data[:, 0] = left
-        elif self._channel_mode == 'right channel':
-            # R to both
-            data[:, 0] = right
-            data[:, 1] = right
-        elif self._channel_mode == 'side (diff)':
-            # (L-R) / 2
-            side = (left - right) * 0.5
-            data[:, 0] = side
-            data[:, 1] = side
-
-        return data
+        return self.effects.get_channel_mode()
 
     def set_vocal_remover_enabled(self, enabled):
-        self._vocal_remover_enabled = enabled
-        self._update_vocal_remover()
-
-    def set_vocal_remover_intensity(self, intensity):
-        self._vocal_remover_intensity = intensity
-        self._update_vocal_remover()
+        """Enable or disable the vocal remover."""
+        with self._lock:
+            self.effects.set_vocal_remover_enabled(enabled)
 
     def get_vocal_remover_enabled(self):
-        return self._vocal_remover_enabled
+        return self.effects.get_vocal_remover_enabled()
+
+    def set_vocal_remover_intensity(self, intensity):
+        """Set the intensity of the vocal remover (0.0 to 1.0)."""
+        with self._lock:
+            self.effects.set_vocal_remover_intensity(intensity)
 
     def get_vocal_remover_intensity(self):
-        return self._vocal_remover_intensity
-
-    def _update_vocal_remover(self):
-        """Update vocal remover filter coefficients."""
-        if not self._file:
-            return
-
-        if self._vocal_remover_enabled and self._vocal_remover_intensity > 0:
-            # Design a more aggressive band-stop filter for the vocal range
-            # Vocals typically span from 280Hz to 6kHz (core range)
-            # Narrowing the band slightly helps preserve instrumental body and air
-            low_cut = 280
-            high_cut = 6000
-
-            # Ensure frequencies are within Nyquist limit
-            nyq = self._file.samplerate / 2
-            low = max(20, low_cut) / nyq
-            high = min(nyq - 100, high_cut) / nyq
-
-            # Use Chebyshev Type II filter for very high stopband attenuation (60dB)
-            # 8th order provides a very steep roll-off to preserve bass and highs
-            self._vocal_remover_sos = scipy.signal.cheby2(
-                8, 60, [low, high],
-                btype='bandstop',
-                output='sos'
-            )
-
-            # Initialize filter state for 1 channel (the center channel)
-            if self._vocal_remover_zi is None or self._vocal_remover_zi.ndim != 2 or self._vocal_remover_zi.shape[0] != len(self._vocal_remover_sos):
-                self._vocal_remover_zi = np.zeros((len(self._vocal_remover_sos), 2))
-        else:
-            self._vocal_remover_sos = None
-            self._vocal_remover_zi = None
-
-    def _apply_vocal_remover(self, data):
-        """Apply vocal remover using width-aware dynamic center channel band-stop."""
-        if self._vocal_remover_sos is not None and self._vocal_remover_zi is not None and data.shape[1] >= 2:
-            # For stereo: L and R channels
-            left = data[:, 0]
-            right = data[:, 1]
-
-            # Calculate center (L+R) and side (L-R) channels
-            center = (left + right) * 0.5
-            side = (left - right) * 0.5
-
-            # Width-Aware Dynamic Intensity:
-            # We calculate the stereo width (Side vs Center energy).
-            # If the signal is "wide" (high side energy), it's likely an instrument,
-            # so we reduce the filter intensity to preserve it.
-            # If the signal is "narrow" (high center energy), it's likely a vocal,
-            # so we apply full intensity.
-
-            current_rms_center = np.sqrt(np.mean(center**2)) + 1e-6
-            current_rms_side = np.sqrt(np.mean(side**2)) + 1e-6
-
-            # Smooth the RMS values to avoid rapid "pumping" artifacts
-            alpha = 0.05 # Slow smoothing for musicality
-            self._vr_rms_center = alpha * current_rms_center + (1 - alpha) * self._vr_rms_center
-            self._vr_rms_side = alpha * current_rms_side + (1 - alpha) * self._vr_rms_side
-
-            # Width ratio: 0 (pure mono/vocal) to 1 (pure side/instrument)
-            width = self._vr_rms_side / (self._vr_rms_center + self._vr_rms_side)
-
-            # Calculate dynamic intensity:
-            # We reduce the effect as width increases.
-            # Instruments panned to the side will "protect" the center channel from being filtered.
-            reduction = np.clip(width * 1.5, 0, 0.7) # Max 70% reduction of the effect
-            dynamic_intensity = (self._vocal_remover_intensity ** 0.7) * (1.0 - reduction)
-
-            # Apply band-stop filter to center channel only
-            center_filtered, self._vocal_remover_zi = scipy.signal.sosfilt(
-                self._vocal_remover_sos, center, zi=self._vocal_remover_zi
-            )
-
-            # Blend based on dynamic intensity
-            center_processed = (center_filtered * dynamic_intensity) + (center * (1.0 - dynamic_intensity))
-
-            # Reconstruct stereo
-            data[:, 0] = center_processed + side
-            data[:, 1] = center_processed - side
-
-            return data
-        return data
+        return self.effects.get_vocal_remover_intensity()
