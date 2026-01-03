@@ -329,6 +329,13 @@ class ControlsBar(ttk.Frame):
         except Exception:
             pass
 
+    def _volume_step(self, delta):
+        """Adjust volume by delta amount (+/- 5 typically)."""
+        current = self.volume.get()
+        new_volume = max(0, min(100, current + delta))
+        self.volume.set(new_volume)
+        self._on_volume_change(new_volume)
+
     def _get_mute_label(self, is_muted: bool) -> str:
         """Get the mute button symbol based on mute state."""
         return "🔇" if is_muted else "🔊"

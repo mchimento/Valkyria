@@ -119,9 +119,6 @@ class AudioEffectsWindow(tk.Toplevel):
             try:
                 # Capitalize for UI consistency if needed, but the player returns lowercase
                 mode = self.player.get_channel_mode()
-                # Map back to UI string if needed, or just title case
-                # The options are ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff)"]
-                # Simple mapping:
                 mode_map = {
                     'stereo': 'Stereo',
                     'mono': 'Mono',
@@ -227,6 +224,7 @@ class AudioEffectsWindow(tk.Toplevel):
             top_frame,
             fg_color="transparent",
             border_width=1,
+            corner_radius=0,
             border_color=palette.get("border", "#cccccc")
         )
         self.preset_menu_frame.pack(side=tk.RIGHT, padx=(0, 10))
@@ -444,7 +442,7 @@ class AudioEffectsWindow(tk.Toplevel):
         self.vocal_remover_var = tk.BooleanVar(value=self.player.get_vocal_remover_enabled())
         self.vocal_remover_switch = ctk.CTkSwitch(
             vocal_top_frame,
-            text="Vocal Remover:",
+            text="Vocal Remover: ",
             variable=self.vocal_remover_var,
             command=self._on_vocal_remover_toggle,
             progress_color=accent,
@@ -1426,6 +1424,26 @@ class AudioEffectsWindow(tk.Toplevel):
             self.spatializer_status_label.configure(
                 text_color=accent if is_enabled else palette.get("fg", "#808080"),
                 bg_color=bg
+            )
+
+        # Preset dropdown styling
+        if hasattr(self, 'preset_menu'):
+            self.preset_menu.configure(
+                fg_color=bg,
+                button_color=bg,
+                button_hover_color=palette.get("dropdown_hover", "#000000"),
+                text_color=palette.get("dropdown_text", "#000000"),
+                dropdown_fg_color=palette.get("dropdown_bg", "#000000"),
+                dropdown_hover_color=palette.get("dropdown_hover", "#000000"),
+                dropdown_text_color=palette.get("dropdown_text", "#000000")
+            )
+
+        if hasattr(self, 'preset_menu_frame'):
+            self.preset_menu_frame.configure(
+                fg_color="transparent",
+                border_width=2,
+                border_color=palette.get("border", "#cccccc"),
+                corner_radius=0
             )
 
     def update_theme(self):

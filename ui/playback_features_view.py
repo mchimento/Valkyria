@@ -39,7 +39,8 @@ class PlaybackFeaturesView(tk.Toplevel):
             text_color=self.palette.get("fg", "#000000"),
             bg_color=self.palette.get("bg", "#ffffff"),
             button_color=self.palette.get("accent", "#ffffff"),
-            button_hover_color=self.palette.get("button_hover", "#106ebe")
+            button_hover_color=self.palette.get("button_hover", "#106ebe"),
+            width=90
         )
         self.switch.pack(side='left')
 
