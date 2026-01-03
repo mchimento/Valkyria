@@ -8,7 +8,10 @@ import logging
 import threading
 import json
 import time
+import os
+import sys
 from pathlib import Path
+from contextlib import contextmanager
 
 import sounddevice as sd
 import soundfile as sf
@@ -17,6 +20,31 @@ import numpy as np
 from audio.audio_effects import AudioEffects
 
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def suppress_c_stderr():
+    """
+    Context manager to suppress C-level stderr output.
+    Useful for silencing libmpg123 warnings.
+    """
+    try:
+        # Open a null file
+        with open(os.devnull, 'w') as fnull:
+            # Save the original stderr file descriptor
+            original_stderr_fd = sys.stderr.fileno()
+            saved_stderr_fd = os.dup(original_stderr_fd)
+
+            try:
+                # Redirect stderr to null
+                os.dup2(fnull.fileno(), original_stderr_fd)
+                yield
+            finally:
+                # Restore stderr
+                os.dup2(saved_stderr_fd, original_stderr_fd)
+                os.close(saved_stderr_fd)
+    except Exception:
+        # If anything goes wrong (e.g. no fileno), just execute code
+        yield
 
 class AudioBuffer:
     """
@@ -59,7 +87,9 @@ class AudioBuffer:
             read_size = min(space, 8192)
 
             try:
-                data = self.file.read(read_size, dtype='float32')
+                # Suppress libmpg123 warnings during read
+                with suppress_c_stderr():
+                    data = self.file.read(read_size, dtype='float32')
             except Exception as e:
                 logger.error(f"Error reading audio file: {e}")
                 self.eof = True

@@ -101,8 +101,8 @@ class AudioEffects:
                 data[:] *= (10 ** (self._eq_preamp / 20.0))
 
             # Apply SOS filters
-            # Check if ZI shape matches current channels
-            if self._eq_zi is not None and self._eq_zi.shape[1] == data.shape[1]:
+            # Check if ZI shape matches current channels (zi shape is (n_sections, 2, channels))
+            if self._eq_zi is not None and self._eq_zi.shape[2] == data.shape[1]:
                 data[:], self._eq_zi = scipy.signal.sosfilt(self._eq_sos, data, axis=0, zi=self._eq_zi)
 
         # Apply Compressor
@@ -177,24 +177,29 @@ class AudioEffects:
             return
 
         fs = self.samplerate
+        nyquist = fs / 2.0
         sos_list = []
         for i, freq in enumerate(self._eq_bands):
+            # Ensure frequency is below Nyquist to prevent instability
+            safe_freq = min(freq, nyquist - 10.0)
+
             if i == 0:
                 # Low Shelf for the first band (60Hz)
-                sos = self._design_low_shelf(freq, self._eq_gains[i], 0.707, fs)
+                sos = self._design_low_shelf(safe_freq, self._eq_gains[i], 0.707, fs)
             elif i == len(self._eq_bands) - 1:
                 # High Shelf for the last band (16kHz)
-                sos = self._design_high_shelf(freq, self._eq_gains[i], 0.707, fs)
+                sos = self._design_high_shelf(safe_freq, self._eq_gains[i], 0.707, fs)
             else:
                 # Peaking filter for middle bands
-                sos = self._design_peaking_filter(freq, self._eq_gains[i], 1.414, fs)
+                sos = self._design_peaking_filter(safe_freq, self._eq_gains[i], 1.414, fs)
             sos_list.append(sos)
 
         self._eq_sos = np.vstack(sos_list)
 
         # Initialize state if needed
-        if self._eq_zi is None or self._eq_zi.shape != (len(self._eq_bands), self.channels, 2):
-            self._eq_zi = np.zeros((len(self._eq_bands), self.channels, 2))
+        # Shape must be (n_sections, 2, channels) for scipy.signal.sosfilt with axis=0
+        if self._eq_zi is None or self._eq_zi.shape != (len(self._eq_bands), 2, self.channels):
+            self._eq_zi = np.zeros((len(self._eq_bands), 2, self.channels))
 
     def set_equalizer_enabled(self, enabled):
         """Enable or disable the equalizer."""
