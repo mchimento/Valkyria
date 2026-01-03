@@ -53,8 +53,6 @@ class AudioEffects:
         self._vocal_remover_intensity = vr_config.get('intensity', 0.5)
         self._vocal_remover_sos = None
         self._vocal_remover_zi = None
-        self._vr_rms_center = 0.0
-        self._vr_rms_side = 0.0
 
         # Channel Mode State
         cm_config = config.get('channel_mode', {})
@@ -85,8 +83,6 @@ class AudioEffects:
         # Reset Vocal Remover state
         if self._vocal_remover_zi is not None:
             self._vocal_remover_zi.fill(0)
-        self._vr_rms_center = 0.0
-        self._vr_rms_side = 0.0
 
         # Reset Compressor state
         self._compressor_envelope = 0.0
@@ -440,13 +436,15 @@ class AudioEffects:
     def _update_vocal_remover(self):
         """Update vocal remover filter coefficients."""
         if self._vocal_remover_enabled and self._vocal_remover_intensity > 0:
-            low_cut = 280
-            high_cut = 6000
+            # Vocals typically span from 200Hz to 8kHz
+            low_cut = 200
+            high_cut = 8000
 
             nyq = self.samplerate / 2
             low = max(20, low_cut) / nyq
             high = min(nyq - 100, high_cut) / nyq
 
+            # Use Chebyshev Type II filter for very high stopband attenuation (60dB)
             self._vocal_remover_sos = scipy.signal.cheby2(
                 8, 60, [low, high],
                 btype='bandstop',
@@ -460,32 +458,26 @@ class AudioEffects:
             self._vocal_remover_zi = None
 
     def _apply_vocal_remover(self, data):
-        """Apply vocal remover using width-aware dynamic center channel band-stop."""
+        """Apply vocal remover using center channel band-stop."""
         if self._vocal_remover_sos is not None and self._vocal_remover_zi is not None and data.shape[1] >= 2:
             left = data[:, 0]
             right = data[:, 1]
 
+            # Calculate center (L+R) and side (L-R) channels
             center = (left + right) * 0.5
             side = (left - right) * 0.5
 
-            current_rms_center = np.sqrt(np.mean(center**2)) + 1e-6
-            current_rms_side = np.sqrt(np.mean(side**2)) + 1e-6
-
-            alpha = 0.05
-            self._vr_rms_center = alpha * current_rms_center + (1 - alpha) * self._vr_rms_center
-            self._vr_rms_side = alpha * current_rms_side + (1 - alpha) * self._vr_rms_side
-
-            width = self._vr_rms_side / (self._vr_rms_center + self._vr_rms_side)
-
-            reduction = np.clip(width * 1.5, 0, 0.7)
-            dynamic_intensity = (self._vocal_remover_intensity ** 0.7) * (1.0 - reduction)
-
+            # Apply band-stop filter to center channel only
+            # This removes the vocal range from the center channel while preserving bass and highs
             center_filtered, self._vocal_remover_zi = scipy.signal.sosfilt(
                 self._vocal_remover_sos, center, zi=self._vocal_remover_zi
             )
 
-            center_processed = (center_filtered * dynamic_intensity) + (center * (1.0 - dynamic_intensity))
+            # Blend based on intensity
+            intensity = self._vocal_remover_intensity
+            center_processed = (center_filtered * intensity) + (center * (1.0 - intensity))
 
+            # Reconstruct stereo
             data[:, 0] = center_processed + side
             data[:, 1] = center_processed - side
 
