@@ -98,11 +98,6 @@ class ControlsBar(ttk.Frame):
         self.total_time_label = ttk.Label(middle, textvariable=self.total_time_var, width=8, anchor="center")
         self.total_time_label.pack(side=tk.LEFT)
 
-        # Play on double-click checkbutton
-        self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
-        self.play_on_double_var.trace_add('write', lambda *args: self._on_play_on_double_change())
-        ttk.Checkbutton(middle, text="Play on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(side=tk.LEFT, padx=(12, 0))
-
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, padx=6)
@@ -478,21 +473,6 @@ class ControlsBar(ttk.Frame):
     def _send_status(self, event_type):
         if callable(self.status_callback):
             self.status_callback(event_type)
-
-    def _on_play_on_double_change(self):
-        """Handle play on double-click setting change."""
-        new_value = self.play_on_double_var.get()
-
-        # Update both settings and state
-        if self.settings:
-            self.settings.play_on_double = new_value
-            try:
-                self.settings.save()
-            except Exception:
-                pass
-
-        # Update state as well since playlist view checks state.play_on_double
-        self.state.play_on_double = new_value
 
     def _check_and_analyze_bpm(self, filepath):
         """Check if BPM is missing and analyze it in a background thread."""
