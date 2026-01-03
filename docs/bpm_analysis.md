@@ -379,9 +379,3 @@ BPM detection is an active area of research in Music Information Retrieval (MIR)
 - **Beatmatching**: Future updates may include automatic crossfade alignment based on BPM
 - **Tempo Visualization**: Future updates may display BPM-synchronized waveform grid lines
 - **Key Detection**: Harmonic mixing (key detection) is a planned feature for future releases
-
----
-
-**Thank you for using Tango Studio's BPM Analysis!**
-
-For questions or issues, consult the main User Guide or contact support.

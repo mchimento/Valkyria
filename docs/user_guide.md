@@ -543,14 +543,6 @@ Once you've browsed to a folder containing audio files:
 - Switch to a different audio device
 - Update audio drivers
 
-**Problem**: Audio plays too fast or too slow (wrong pitch)
-
-**Solutions**:
-- This usually indicates a sample rate mismatch
-- Check your audio device settings and ensure it's set to 44.1 kHz or 48 kHz
-- Verify the file is not corrupted
-- Try playing the file in another player to confirm it's not a file issue
-
 ### Playlist Issues
 
 **Problem**: Playlist won't load from M3U/M3U8 file
@@ -562,18 +554,10 @@ Once you've browsed to a folder containing audio files:
 - Check file encoding (should be UTF-8 for M3U8)
 - Recreate the playlist from scratch if corrupted
 
-**Problem**: Duplicate files appear in playlist despite duplicate detection
-
-**Solutions**:
-- Files may have different paths (symbolic links, network drives, etc.)
-- Check for hidden characters or spaces in filenames
-- This is expected behavior if the same song exists at different filesystem locations
-
 **Problem**: Tracks in wrong order after sorting
 
 **Solutions**:
 - Ensure metadata (title/artist tags) is correct - sorting uses metadata, not filenames
-- Use a tag editor like Mp3tag or MusicBrainz Picard to correct metadata
 - Try sorting by a different field
 - Manually reorder with Move Up/Down if metadata can't be fixed
 
@@ -630,15 +614,6 @@ Once you've browsed to a folder containing audio files:
 - Check available disk space
 - Try running as administrator
 - Configuration file may be corrupted - delete it to reset
-
-## Support
-
-For additional help, bug reports, or feature requests:
-
-- Check the documentation thoroughly for solutions
-- Visit the project repository for updates and known issues
-- Report bugs with detailed steps to reproduce
-- Share logs when reporting technical issues
 
 ---
 

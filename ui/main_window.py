@@ -23,7 +23,7 @@ from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
 from ui.booklet_viewer import BookletViewer
-from ui.documentation_view import DocumentationWindow
+from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
 
@@ -1006,13 +1006,8 @@ class MainWindow:
             except:
                 pass
 
-        # Update open documentation windows
+        # Update open windows
         for window in self.root.winfo_children():
-            if isinstance(window, DocumentationWindow):
-                try:
-                    window.update_theme()
-                except Exception:
-                    pass
             if isinstance(window, AudioEffectsWindow):
                 try:
                     window.update_theme()
@@ -1228,8 +1223,8 @@ class MainWindow:
         about_window.deiconify()
 
     def open_documentation(self, doc_filename):
-        """Open a documentation window for the specified markdown file."""
-        DocumentationWindow(self.root, self.theme, self.settings, doc_filename)
+        """Open a documentation file in the default web browser."""
+        open_doc_in_browser(doc_filename, self.theme)
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")
