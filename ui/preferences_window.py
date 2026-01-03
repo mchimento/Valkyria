@@ -55,6 +55,9 @@ class PreferencesWindow(tk.Toplevel):
 
         self._apply_theme_to_this_window(self.settings.theme)
 
+        # Bind window close (X button) to cancel instead of default destroy
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
         # Show window after all setup is complete
         self.deiconify()
 
