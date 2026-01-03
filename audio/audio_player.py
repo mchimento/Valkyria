@@ -94,6 +94,8 @@ class AudioPlayer:
         self._vocal_remover_intensity = vr_config.get('intensity', 0.5)
         self._vocal_remover_sos = None
         self._vocal_remover_zi = None
+        self._vr_rms_center = 0.0
+        self._vr_rms_side = 0.0
 
         logger.info("AudioPlayer initialized (sounddevice)")
 
@@ -785,10 +787,10 @@ class AudioPlayer:
 
         if self._vocal_remover_enabled and self._vocal_remover_intensity > 0:
             # Design a more aggressive band-stop filter for the vocal range
-            # Vocals typically span from 250Hz to 8kHz (including harmonics and sibilance)
-            # We keep frequencies below 250Hz to preserve bass and kick drums
-            low_cut = 250
-            high_cut = 8000
+            # Vocals typically span from 280Hz to 6kHz (core range)
+            # Narrowing the band slightly helps preserve instrumental body and air
+            low_cut = 280
+            high_cut = 6000
 
             # Ensure frequencies are within Nyquist limit
             nyq = self._file.samplerate / 2
@@ -811,31 +813,49 @@ class AudioPlayer:
             self._vocal_remover_zi = None
 
     def _apply_vocal_remover(self, data):
-        """Apply vocal remover using center channel band-stop technique."""
+        """Apply vocal remover using width-aware dynamic center channel band-stop."""
         if self._vocal_remover_sos is not None and self._vocal_remover_zi is not None and data.shape[1] >= 2:
             # For stereo: L and R channels
             left = data[:, 0]
             right = data[:, 1]
 
             # Calculate center (L+R) and side (L-R) channels
-            # We use 0.5 to keep the scale consistent
             center = (left + right) * 0.5
             side = (left - right) * 0.5
 
+            # Width-Aware Dynamic Intensity:
+            # We calculate the stereo width (Side vs Center energy).
+            # If the signal is "wide" (high side energy), it's likely an instrument,
+            # so we reduce the filter intensity to preserve it.
+            # If the signal is "narrow" (high center energy), it's likely a vocal,
+            # so we apply full intensity.
+
+            current_rms_center = np.sqrt(np.mean(center**2)) + 1e-6
+            current_rms_side = np.sqrt(np.mean(side**2)) + 1e-6
+
+            # Smooth the RMS values to avoid rapid "pumping" artifacts
+            alpha = 0.05 # Slow smoothing for musicality
+            self._vr_rms_center = alpha * current_rms_center + (1 - alpha) * self._vr_rms_center
+            self._vr_rms_side = alpha * current_rms_side + (1 - alpha) * self._vr_rms_side
+
+            # Width ratio: 0 (pure mono/vocal) to 1 (pure side/instrument)
+            width = self._vr_rms_side / (self._vr_rms_center + self._vr_rms_side)
+
+            # Calculate dynamic intensity:
+            # We reduce the effect as width increases.
+            # Instruments panned to the side will "protect" the center channel from being filtered.
+            reduction = np.clip(width * 1.5, 0, 0.7) # Max 70% reduction of the effect
+            dynamic_intensity = (self._vocal_remover_intensity ** 0.7) * (1.0 - reduction)
+
             # Apply band-stop filter to center channel only
-            # This removes vocals while keeping bass and highs in the center,
-            # and keeping all side-panned instruments untouched.
             center_filtered, self._vocal_remover_zi = scipy.signal.sosfilt(
                 self._vocal_remover_sos, center, zi=self._vocal_remover_zi
             )
 
-            # Blend the filtered center with the original center based on intensity
-            # Use a non-linear curve to make the effect more prominent at lower slider positions
-            intensity = self._vocal_remover_intensity ** 0.7
-            center_processed = (center_filtered * intensity) + (center * (1.0 - intensity))
+            # Blend based on dynamic intensity
+            center_processed = (center_filtered * dynamic_intensity) + (center * (1.0 - dynamic_intensity))
 
             # Reconstruct stereo
-            # L = Center + Side, R = Center - Side
             data[:, 0] = center_processed + side
             data[:, 1] = center_processed - side
 
