@@ -44,19 +44,29 @@ def open_documentation(doc_filename, theme_manager):
                         line
                     )
 
+            # Convert 2-space nested lists to 4-space (standard markdown)
+            # This ensures proper nesting in rendered HTML
+            match = re.match(r'^(\s*)[*-] ', line)
+            if match:
+                indent = match.group(1)
+                if len(indent) == 2:
+                    # Convert 2-space to 4-space
+                    line = '    ' + line[2:]
+                elif len(indent) == 4:
+                    # Convert 4-space to 8-space (second level)
+                    line = '        ' + line[4:]
+
             processed_lines.append(line)
 
         markdown_content = '\n'.join(processed_lines)
 
-        # Convert markdown to HTML with proper list handling
+        # Convert markdown to HTML
         html_content = markdown.markdown(
             markdown_content,
             extensions=[
                 'tables',
                 'fenced_code',
-                'toc',
-                'sane_lists',
-                'nl2br'
+                'toc'
             ]
         )
 

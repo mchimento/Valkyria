@@ -30,6 +30,7 @@ BPM detection is powered by the industry-standard **librosa** audio analysis lib
 * BPM is a **musical property**, not a technical audio property like bitrate or sample rate
 * It must be **computed from the audio signal** itself through analysis
 * Different musical genres have characteristic BPM ranges:
+
   - **Hip-Hop**: 70-110 BPM
   - **House**: 120-130 BPM
   - **Techno**: 125-135 BPM
@@ -72,7 +73,7 @@ The BPM detection algorithm follows these steps:
 
 **What Happens**: The audio file is decoded into a mono waveform at a fixed sample rate (typically 22.05 kHz).
 
-**Why Mono?**: Tempo is a monophonic property — it doesn't vary between left and right channels. Converting to mono reduces computational complexity by half.
+**Why Mono?**: Tempo is a monophonic property, i.e. it doesn't vary between left and right channels. Converting to mono reduces computational complexity by half.
 
 **MP3 Optimization**: For MP3 files, a short segment is first decoded using FFmpeg to ensure reliable analysis. This pre-decode step helps avoid artifacts from VBR (Variable Bit Rate) encoding.
 
@@ -85,6 +86,7 @@ The BPM detection algorithm follows these steps:
 **What are Onsets?**: Onsets are moments where musical energy suddenly increases — drum hits, bass kicks, snare claps, piano attacks, etc. These are the rhythmic "events" that define the beat.
 
 **Processing**:
+
 * The audio is divided into short frames (typically 23 ms each)
 * Each frame is analyzed with a Mel-frequency spectrogram
 * Spectral flux (energy change between consecutive frames) is computed
@@ -97,6 +99,7 @@ The BPM detection algorithm follows these steps:
 **What Happens**: A **tempogram** is generated from the onset envelope. The tempogram is a 2D representation showing how strong different tempo hypotheses are over time.
 
 **How It Works**:
+
 * A bank of comb filters is applied to the onset envelope
 * Each filter is tuned to a specific tempo (e.g., 90 BPM, 120 BPM, 140 BPM)
 * Filters resonate (give high output) when the onset pattern matches their tempo
@@ -109,6 +112,7 @@ The BPM detection algorithm follows these steps:
 **What Happens**: The strongest rhythmic periodicity is selected from the tempogram and converted into BPM.
 
 **Process**:
+
 * The tempogram is averaged across time to get a single tempo strength curve
 * The peak in this curve corresponds to the most likely tempo
 * This tempo (in Hz) is converted to BPM
@@ -121,6 +125,7 @@ The BPM detection algorithm follows these steps:
 **What Happens**: Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range.
 
 **The Problem**: Algorithms often produce "correct but perceptually wrong" results:
+
 * **Half-time**: A 140 BPM track detected as 70 BPM
 * **Double-time**: An 80 BPM track detected as 160 BPM
 
@@ -133,6 +138,7 @@ The BPM detection algorithm follows these steps:
 **What Happens**: The resulting BPM value is written back into the audio file's metadata using the **Mutagen** library.
 
 **Storage Format**:
+
 * BPM is stored in the standard "BPM" ID3 tag (MP3), Vorbis comment (OGG/FLAC), or iTunes metadata (M4A)
 * Values are always stored as integers (rounded to nearest whole number)
 * **Raw values are stored** — normalization is only applied for display, not storage
@@ -191,6 +197,7 @@ BPM is displayed in multiple locations:
 Tempo detection algorithms face an ambiguity: given a repeating rhythm, is the "beat" the fastest pulse, or a slower pulse that groups multiple fast events?
 
 **Example**: A drum & bass track at 174 BPM has:
+
 * **High-hat** hits every 87 BPM (half-time)
 * **Snare** hits every 87 BPM (on the backbeat)
 * **Kick drum** patterns at 174 BPM
@@ -301,11 +308,13 @@ If the detected BPM is incorrect:
 ### Analysis Fails or Returns No Result
 
 **Causes**:
+
 * File corruption or unreadable format
 * Insufficient CPU resources
 * Extremely long track (>30 minutes)
 
 **Solutions**:
+
 * Verify file plays correctly in the player
 * Close other CPU-intensive applications
 * Try analyzing a short test track first
@@ -314,11 +323,13 @@ If the detected BPM is incorrect:
 ### BPM Result is Clearly Wrong
 
 **Causes**:
+
 * Half-time or double-time detection (common with drum & bass, dubstep, some hip-hop)
 * Tempo changes during the track
 * Complex polyrhythmic patterns
 
 **Solutions**:
+
 * Toggle BPM normalization in Preferences
 * Multiply or divide result by 2 manually
 * Compare with online BPM databases (MusicBrainz, Discogs)
@@ -327,11 +338,13 @@ If the detected BPM is incorrect:
 ### Cannot Save BPM to File
 
 **Causes**:
+
 * File is read-only (check permissions)
 * File format doesn't support metadata (rare with modern formats)
 * File is on a read-only filesystem (CD, locked network drive)
 
 **Solutions**:
+
 * Right-click file → Properties → Uncheck "Read-only"
 * Copy file to a writable location (local hard drive)
 * Ensure you have write permissions to the file's directory
@@ -340,11 +353,13 @@ If the detected BPM is incorrect:
 ### Analysis is Very Slow
 
 **Causes**:
+
 * High CPU usage from other applications
 * Very long audio file (>10 minutes)
 * Slow or fragmented hard drive
 
 **Solutions**:
+
 * Close background applications
 * Analyze shorter tracks first
 * Consider analyzing during idle time (overnight for large libraries)
@@ -353,11 +368,13 @@ If the detected BPM is incorrect:
 ### BPM Doesn't Match Professional DJ Software
 
 **Causes**:
+
 * Different normalization strategies
 * Different analysis algorithms
 * Tango Studio stores raw values, other software may display normalized values
 
 **Solutions**:
+
 * Enable BPM normalization in Tango Studio preferences
 * Check if other software has normalization settings
 * Use the same BPM field (some software uses "TBPM" vs "BPM" tags)

@@ -527,6 +527,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: No sound output
 
 **Solutions**:
+
 * Verify system volume is not muted (check both Tango Studio and OS volume mixer)
 * Confirm correct audio device is selected in Tools → Audio Device
 * Test with a different audio file to rule out file corruption
@@ -536,6 +537,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: Crackling, popping, or distortion
 
 **Solutions**:
+
 * Reduce equalizer boost levels (try setting all bands to 0 dB)
 * Disable compressor or reduce ratio/threshold
 * Check CPU usage - high CPU load can cause audio dropouts
@@ -557,6 +559,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: Tracks in wrong order after sorting
 
 **Solutions**:
+
 * Ensure metadata (title/artist tags) is correct - sorting uses metadata, not filenames
 * Try sorting by a different field
 * Manually reorder with Move Up/Down if metadata can't be fixed
@@ -566,6 +569,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: BPM analysis fails or returns no result
 
 **Solutions**:
+
 * Ensure the audio file is not corrupted - try playing it fully
 * Verify sufficient CPU resources are available
 * Try analyzing a simpler track first (electronic music with clear beats)
@@ -575,6 +579,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: BPM result is clearly wrong (half or double the correct value)
 
 **Solutions**:
+
 * This is a common issue with tempo detection algorithms
 * Enable BPM normalization in Preferences to automatically correct common errors
 * Manually correct the BPM value if needed (feature may be added in future updates)
@@ -583,6 +588,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: Cannot save BPM to file
 
 **Solutions**:
+
 * Ensure file is not read-only (check file permissions)
 * WAV files don't support metadata tags - convert to FLAC for metadata support
 * Some file systems (FAT32, network drives) may have permission issues
@@ -593,6 +599,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: Application won't start or crashes on startup
 
 **Solutions**:
+
 * Delete the config file (see app data folder) to reset to defaults
 * Ensure all dependencies are installed (check requirements.txt)
 * Check for Windows updates and install pending updates
@@ -602,6 +609,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: High memory usage
 
 **Solutions**:
+
 * This is usually normal for large playlists
 * Clear playlist and reload only needed tracks
 * Restart application to free accumulated memory
@@ -610,6 +618,7 @@ Once you've browsed to a folder containing audio files:
 **Problem**: Settings not saving between sessions
 
 **Solutions**:
+
 * Ensure Tango Studio has write permissions to its configuration directory
 * Check available disk space
 * Try running as administrator
