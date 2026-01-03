@@ -72,12 +72,10 @@ python main.py
 Comprehensive documentation is available within the application and in the `docs/` folder:
 
 ### User Guide
-Complete guide covering all features, controls, and workflows. Access via **Help → Documentation → User Guide** in the application, or view the file directly:
-- [User Guide](docs/user_guide.md) - Getting started, playback controls, playlist management, audio effects, keyboard shortcuts, tips & tricks, and troubleshooting.
+Complete guide covering all features, controls, and workflows. Access via **Help → Documentation → User Guide** in the application, or view the file directly here: [User Guide](docs/user_guide.md).
 
 ### BPM Analysis
-Detailed technical documentation about the automatic tempo detection system. Access via **Help → Documentation → BPM Analysis** in the application, or view the file directly:
-- [BPM Analysis](docs/bpm_analysis.md) - How BPM detection works, analysis process, accuracy expectations, normalization, and technical details.
+Detailed technical documentation about the automatic tempo detection system. Access via **Help → Documentation → BPM Analysis** in the application, or view the file directly here: [BPM Analysis](docs/bpm_analysis.md).
 
 
 ## Troubleshooting

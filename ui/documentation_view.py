@@ -5,8 +5,10 @@ Opens markdown documentation in the default web browser.
 
 import webbrowser
 import tempfile
-import os
-from pathlib import Path
+import logging
+import re
+
+logger = logging.getLogger(__name__)
 
 
 def open_documentation(doc_filename, theme_manager):
@@ -28,10 +30,34 @@ def open_documentation(doc_filename, theme_manager):
         with open(doc_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
 
-        # Convert markdown to HTML
+        # Preprocess markdown content
+        lines = markdown_content.split('\n')
+        processed_lines = []
+
+        for line in lines:
+            # Convert plain URLs to markdown links
+            if 'http://' in line or 'https://' in line:
+                if not re.search(r'\[.+?\]\(https?://.+?\)', line):
+                    line = re.sub(
+                        r'(?<!\()(https?://[^\s,;)]+)',
+                        r'[\1](\1)',
+                        line
+                    )
+
+            processed_lines.append(line)
+
+        markdown_content = '\n'.join(processed_lines)
+
+        # Convert markdown to HTML with proper list handling
         html_content = markdown.markdown(
             markdown_content,
-            extensions=['tables', 'fenced_code', 'toc', 'nl2br']
+            extensions=[
+                'tables',
+                'fenced_code',
+                'toc',
+                'sane_lists',
+                'nl2br'
+            ]
         )
 
         # Get colors from theme palette
@@ -149,6 +175,13 @@ def open_documentation(doc_filename, theme_manager):
         li {{
             margin: 8px 0;
         }}
+        ul ul, ol ol, ul ol, ol ul {{
+            margin: 5px 0;
+            padding-left: 25px;
+        }}
+        ul ul li, ol ol li {{
+            margin: 5px 0;
+        }}
         hr {{
             border: none;
             border-top: 1px solid {border_color};
@@ -182,8 +215,8 @@ def open_documentation(doc_filename, theme_manager):
         webbrowser.open('file://' + temp_file.name)
 
     except FileNotFoundError:
-        print(f"Documentation file not found: {doc_filename}")
+        logger.error(f"Documentation file not found: {doc_filename}")
     except ImportError:
-        print("Markdown library not installed. Please run: pip install markdown")
+        logger.error("Markdown library not installed. Please run: pip install markdown")
     except Exception as e:
-        print(f"Error opening documentation: {e}")
+        logger.error(f"Error opening documentation: {e}", exc_info=True)

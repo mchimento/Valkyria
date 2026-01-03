@@ -2,15 +2,16 @@
 
 ## Table of Contents
 
-- [Introduction](#introduction)
-- [What is BPM?](#what-is-bpm)
-- [How BPM is Calculated](#how-bpm-is-calculated)
-- [Analysis Process](#analysis-process)
-- [Using BPM Analysis](#using-bpm-analysis)
-- [BPM Normalization](#bpm-normalization)
-- [Technical Details](#technical-details)
-- [Limitations and Accuracy](#limitations-and-accuracy)
-- [Troubleshooting](#troubleshooting)
+* [Introduction](#introduction)
+* [What is BPM?](#what-is-bpm)
+* [How BPM is Calculated](#how-bpm-is-calculated)
+* [Analysis Process](#analysis-process)
+* [Using BPM Analysis](#using-bpm-analysis)
+* [BPM Normalization](#bpm-normalization)
+* [Technical Details](#technical-details)
+* [Limitations and Accuracy](#limitations-and-accuracy)
+* [Troubleshooting](#troubleshooting)
+* [Further Reading](#further-reading)
 
 ---
 
@@ -26,9 +27,9 @@ BPM detection is powered by the industry-standard **librosa** audio analysis lib
 
 ### Key Points
 
-- BPM is a **musical property**, not a technical audio property like bitrate or sample rate
-- It must be **computed from the audio signal** itself through analysis
-- Different musical genres have characteristic BPM ranges:
+* BPM is a **musical property**, not a technical audio property like bitrate or sample rate
+* It must be **computed from the audio signal** itself through analysis
+* Different musical genres have characteristic BPM ranges:
   - **Hip-Hop**: 70-110 BPM
   - **House**: 120-130 BPM
   - **Techno**: 125-135 BPM
@@ -84,10 +85,10 @@ The BPM detection algorithm follows these steps:
 **What are Onsets?**: Onsets are moments where musical energy suddenly increases — drum hits, bass kicks, snare claps, piano attacks, etc. These are the rhythmic "events" that define the beat.
 
 **Processing**:
-- The audio is divided into short frames (typically 23 ms each)
-- Each frame is analyzed with a Mel-frequency spectrogram
-- Spectral flux (energy change between consecutive frames) is computed
-- Result: A curve showing where rhythmic energy peaks occur
+* The audio is divided into short frames (typically 23 ms each)
+* Each frame is analyzed with a Mel-frequency spectrogram
+* Spectral flux (energy change between consecutive frames) is computed
+* Result: A curve showing where rhythmic energy peaks occur
 
 **Example**: In a typical house track, the onset envelope shows clear peaks on each kick drum hit (every beat) and snare hit (backbeat).
 
@@ -96,10 +97,10 @@ The BPM detection algorithm follows these steps:
 **What Happens**: A **tempogram** is generated from the onset envelope. The tempogram is a 2D representation showing how strong different tempo hypotheses are over time.
 
 **How It Works**:
-- A bank of comb filters is applied to the onset envelope
-- Each filter is tuned to a specific tempo (e.g., 90 BPM, 120 BPM, 140 BPM)
-- Filters resonate (give high output) when the onset pattern matches their tempo
-- Result: A time-frequency representation where bright regions indicate strong tempo evidence
+* A bank of comb filters is applied to the onset envelope
+* Each filter is tuned to a specific tempo (e.g., 90 BPM, 120 BPM, 140 BPM)
+* Filters resonate (give high output) when the onset pattern matches their tempo
+* Result: A time-frequency representation where bright regions indicate strong tempo evidence
 
 **Visualization**: If you could see a tempogram, you'd see horizontal "stripes" at BPM values where the music has consistent rhythm.
 
@@ -108,10 +109,10 @@ The BPM detection algorithm follows these steps:
 **What Happens**: The strongest rhythmic periodicity is selected from the tempogram and converted into BPM.
 
 **Process**:
-- The tempogram is averaged across time to get a single tempo strength curve
-- The peak in this curve corresponds to the most likely tempo
-- This tempo (in Hz) is converted to BPM
-- Secondary peaks are analyzed to detect tempo changes or alternative interpretations
+* The tempogram is averaged across time to get a single tempo strength curve
+* The peak in this curve corresponds to the most likely tempo
+* This tempo (in Hz) is converted to BPM
+* Secondary peaks are analyzed to detect tempo changes or alternative interpretations
 
 **Confidence**: Librosa also computes a confidence score based on how sharp and isolated the peak is. Tracks with clear, steady beats produce high confidence; tracks with tempo changes or weak beats produce lower confidence.
 
@@ -120,8 +121,8 @@ The BPM detection algorithm follows these steps:
 **What Happens**: Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range.
 
 **The Problem**: Algorithms often produce "correct but perceptually wrong" results:
-- **Half-time**: A 140 BPM track detected as 70 BPM
-- **Double-time**: An 80 BPM track detected as 160 BPM
+* **Half-time**: A 140 BPM track detected as 70 BPM
+* **Double-time**: An 80 BPM track detected as 160 BPM
 
 **The Solution**: Normalization applies musical heuristics to adjust BPM values into the expected range (typically 80-180 BPM for most music).
 
@@ -132,9 +133,9 @@ The BPM detection algorithm follows these steps:
 **What Happens**: The resulting BPM value is written back into the audio file's metadata using the **Mutagen** library.
 
 **Storage Format**:
-- BPM is stored in the standard "BPM" ID3 tag (MP3), Vorbis comment (OGG/FLAC), or iTunes metadata (M4A)
-- Values are always stored as integers (rounded to nearest whole number)
-- **Raw values are stored** — normalization is only applied for display, not storage
+* BPM is stored in the standard "BPM" ID3 tag (MP3), Vorbis comment (OGG/FLAC), or iTunes metadata (M4A)
+* Values are always stored as integers (rounded to nearest whole number)
+* **Raw values are stored** — normalization is only applied for display, not storage
 
 **Caching**: Once analyzed, the BPM is embedded in the file and doesn't need to be recomputed. It will be instantly available on next load.
 
@@ -178,10 +179,10 @@ For large libraries:
 
 BPM is displayed in multiple locations:
 
-- **Status Bar** - Shows BPM of currently playing track
-- **Playlist View** - Optional BPM column (enable in preferences)
-- **Track Information** - Full metadata window (Ctrl+I)
-- **File Metadata** - Readable by tag editors and other music software
+* **Status Bar** - Shows BPM of currently playing track
+* **Playlist View** - Optional BPM column (enable in preferences)
+* **Track Information** - Full metadata window (Ctrl+I)
+* **File Metadata** - Readable by tag editors and other music software
 
 ## BPM Normalization
 
@@ -190,9 +191,9 @@ BPM is displayed in multiple locations:
 Tempo detection algorithms face an ambiguity: given a repeating rhythm, is the "beat" the fastest pulse, or a slower pulse that groups multiple fast events?
 
 **Example**: A drum & bass track at 174 BPM has:
-- **High-hat** hits every 87 BPM (half-time)
-- **Snare** hits every 87 BPM (on the backbeat)
-- **Kick drum** patterns at 174 BPM
+* **High-hat** hits every 87 BPM (half-time)
+* **Snare** hits every 87 BPM (on the backbeat)
+* **Kick drum** patterns at 174 BPM
 
 An algorithm might detect 87 BPM (following the snare) even though DJs and dancers perceive 174 BPM (following the kick).
 
@@ -207,14 +208,14 @@ When enabled, normalization applies these rules:
 ### Normalization Settings
 
 **Enable in Preferences**:
-- **Enabled (Default)** - BPM values are automatically adjusted to match human-perceived tempo. Results will match professional DJ software (Traktor, Rekordbox, Serato).
-- **Disabled** - Shows raw, unprocessed BPM values from librosa. Useful for academic analysis or debugging.
+* **Enabled (Default)** - BPM values are automatically adjusted to match human-perceived tempo. Results will match professional DJ software (Traktor, Rekordbox, Serato).
+* **Disabled** - Shows raw, unprocessed BPM values from librosa. Useful for academic analysis or debugging.
 
 ### Important Notes
 
-- **Display Only** - Normalization only affects what you see. The raw value is always saved to the file.
-- **Manual Override** - You can manually edit BPM values if the algorithm gets it wrong
-- **Genre Specific** - Some genres (jazz, classical, experimental) may benefit from disabled normalization
+* **Display Only** - Normalization only affects what you see. The raw value is always saved to the file.
+* **Manual Override** - You can manually edit BPM values if the algorithm gets it wrong
+* **Genre Specific** - Some genres (jazz, classical, experimental) may benefit from disabled normalization
 
 ## Technical Details
 
@@ -242,11 +243,11 @@ Mutagen → Save to File Metadata
 
 Tango Studio uses librosa with these parameters:
 
-- **Sample Rate**: 22,050 Hz (sufficient for tempo detection)
-- **Hop Length**: 512 samples (~23 ms frames at 22.05 kHz)
-- **Win Length**: 2048 samples (analysis window size)
-- **Tempo Range**: 30-300 BPM search space
-- **Onset Method**: Spectral flux with adaptive thresholding
+* **Sample Rate**: 22,050 Hz (sufficient for tempo detection)
+* **Hop Length**: 512 samples (~23 ms frames at 22.05 kHz)
+* **Win Length**: 2048 samples (analysis window size)
+* **Tempo Range**: 30-300 BPM search space
+* **Onset Method**: Spectral flux with adaptive thresholding
 
 ### Accuracy and Confidence
 
@@ -264,9 +265,9 @@ Librosa provides a confidence score alongside the BPM estimate:
 
 ### When BPM Analysis Works Well
 
-- **Electronic Dance Music** - House, techno, trance, drum & bass: typically 95%+ accurate
-- **Pop and Rock** - Steady 4/4 time signatures with clear drums: typically 90%+ accurate
-- **Hip-Hop** - Clear beat patterns: typically 85%+ accurate
+* **Electronic Dance Music** - House, techno, trance, drum & bass: typically 95%+ accurate
+* **Pop and Rock** - Steady 4/4 time signatures with clear drums: typically 90%+ accurate
+* **Hip-Hop** - Clear beat patterns: typically 85%+ accurate
 
 ### When BPM Analysis May Struggle
 
@@ -282,9 +283,9 @@ Librosa provides a confidence score alongside the BPM estimate:
 
 Based on librosa benchmarks and real-world testing:
 
-- **Exact BPM**: 70-85% of tracks (within 1 BPM of human reference)
-- **Close BPM**: 90-95% of tracks (within 2-3 BPM or off by factor of 2)
-- **Usable for DJ mixing**: 95%+ after normalization and spot-checking
+* **Exact BPM**: 70-85% of tracks (within 1 BPM of human reference)
+* **Close BPM**: 90-95% of tracks (within 2-3 BPM or off by factor of 2)
+* **Usable for DJ mixing**: 95%+ after normalization and spot-checking
 
 ### Manual Correction
 
@@ -300,82 +301,75 @@ If the detected BPM is incorrect:
 ### Analysis Fails or Returns No Result
 
 **Causes**:
-- File corruption or unreadable format
-- Insufficient CPU resources
-- Extremely long track (>30 minutes)
+* File corruption or unreadable format
+* Insufficient CPU resources
+* Extremely long track (>30 minutes)
 
 **Solutions**:
-- Verify file plays correctly in the player
-- Close other CPU-intensive applications
-- Try analyzing a short test track first
-- Check file format is supported (MP3, FLAC, WAV, OGG, M4A)
+* Verify file plays correctly in the player
+* Close other CPU-intensive applications
+* Try analyzing a short test track first
+* Check file format is supported (MP3, FLAC, WAV, OGG, M4A)
 
 ### BPM Result is Clearly Wrong
 
 **Causes**:
-- Half-time or double-time detection (common with drum & bass, dubstep, some hip-hop)
-- Tempo changes during the track
-- Complex polyrhythmic patterns
+* Half-time or double-time detection (common with drum & bass, dubstep, some hip-hop)
+* Tempo changes during the track
+* Complex polyrhythmic patterns
 
 **Solutions**:
-- Toggle BPM normalization in Preferences
-- Multiply or divide result by 2 manually
-- Compare with online BPM databases (MusicBrainz, Discogs)
-- Use a manual tap tempo tool for verification
+* Toggle BPM normalization in Preferences
+* Multiply or divide result by 2 manually
+* Compare with online BPM databases (MusicBrainz, Discogs)
+* Use a manual tap tempo tool for verification
 
 ### Cannot Save BPM to File
 
 **Causes**:
-- File is read-only (check permissions)
-- File format doesn't support metadata (rare with modern formats)
-- File is on a read-only filesystem (CD, locked network drive)
+* File is read-only (check permissions)
+* File format doesn't support metadata (rare with modern formats)
+* File is on a read-only filesystem (CD, locked network drive)
 
 **Solutions**:
-- Right-click file → Properties → Uncheck "Read-only"
-- Copy file to a writable location (local hard drive)
-- Ensure you have write permissions to the file's directory
-- For WAV files, consider converting to FLAC (WAV has limited metadata support)
+* Right-click file → Properties → Uncheck "Read-only"
+* Copy file to a writable location (local hard drive)
+* Ensure you have write permissions to the file's directory
+* For WAV files, consider converting to FLAC (WAV has limited metadata support)
 
 ### Analysis is Very Slow
 
 **Causes**:
-- High CPU usage from other applications
-- Very long audio file (>10 minutes)
-- Slow or fragmented hard drive
+* High CPU usage from other applications
+* Very long audio file (>10 minutes)
+* Slow or fragmented hard drive
 
 **Solutions**:
-- Close background applications
-- Analyze shorter tracks first
-- Consider analyzing during idle time (overnight for large libraries)
-- Upgrade to an SSD if using mechanical hard drive
+* Close background applications
+* Analyze shorter tracks first
+* Consider analyzing during idle time (overnight for large libraries)
+* Upgrade to an SSD if using mechanical hard drive
 
 ### BPM Doesn't Match Professional DJ Software
 
 **Causes**:
-- Different normalization strategies
-- Different analysis algorithms
-- Tango Studio stores raw values, other software may display normalized values
+* Different normalization strategies
+* Different analysis algorithms
+* Tango Studio stores raw values, other software may display normalized values
 
 **Solutions**:
-- Enable BPM normalization in Tango Studio preferences
-- Check if other software has normalization settings
-- Use the same BPM field (some software uses "TBPM" vs "BPM" tags)
-- Manually verify with tap tempo if needed
+* Enable BPM normalization in Tango Studio preferences
+* Check if other software has normalization settings
+* Use the same BPM field (some software uses "TBPM" vs "BPM" tags)
+* Manually verify with tap tempo if needed
 
 ---
 
 ## Further Reading
 
-### Academic Background
-
 BPM detection is an active area of research in Music Information Retrieval (MIR). For deeper understanding:
 
-- **librosa Documentation**: https://librosa.org/doc/latest/generated/librosa.beat.beat_track.html
-- **MIREX Tempo Evaluation**: Music Information Retrieval Evaluation eXchange annual competition
-- **Ellis, D. P. W. (2007)**: "Beat Tracking by Dynamic Programming" - foundational algorithm
-
-### Related Features
-
-- **Beatmatching**: Future updates may include automatic crossfade alignment based on BPM
-- **Tempo Visualization**: Future updates may display BPM-synchronized waveform grid lines
-- **Key Detection**: Harmonic mixing (key detection) is a planned feature for future releases
+* **librosa Documentation**: https://librosa.org/doc/latest/generated/librosa.beat.beat_track.html
+* **MIREX Tempo Evaluation**: Music Information Retrieval Evaluation eXchange annual competition,
+                              https://music-ir.org/mirex/wiki/MIREX_HOME
+* **Ellis, D. P. W. (2007)**: "Beat Tracking by Dynamic Programming" - foundational algorithm
