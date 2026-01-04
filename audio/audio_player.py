@@ -52,7 +52,9 @@ class AudioBuffer:
     Decouples file I/O from the audio callback to prevent underruns.
     """
     def __init__(self, file_path, capacity_frames=176400): # ~4 seconds at 44.1k
-        self.file = sf.SoundFile(file_path)
+        # Suppress libmpg123 warnings during file opening
+        with suppress_c_stderr():
+            self.file = sf.SoundFile(file_path)
         self.samplerate = self.file.samplerate
         self.channels = self.file.channels
         self.capacity = capacity_frames

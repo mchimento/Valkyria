@@ -7,15 +7,40 @@ Provides a visual representation of audio waveform with interactive seeking capa
 import logging
 import threading
 import warnings
-import subprocess
+import os
 import sys
 import customtkinter as ctk
 import soundfile as sf
-from pydub import AudioSegment
-import pydub.utils
+import librosa
 import numpy as np
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def suppress_c_stderr():
+    """
+    Context manager to suppress C-level stderr output.
+    Useful for silencing libmpg123 warnings.
+    """
+    try:
+        # Open a null file
+        with open(os.devnull, 'w') as fnull:
+            # Save the original stderr file descriptor
+            original_stderr_fd = sys.stderr.fileno()
+            saved_stderr_fd = os.dup(original_stderr_fd)
+
+            try:
+                # Redirect stderr to null
+                os.dup2(fnull.fileno(), original_stderr_fd)
+                yield
+            finally:
+                # Restore stderr
+                os.dup2(saved_stderr_fd, original_stderr_fd)
+                os.close(saved_stderr_fd)
+    except Exception:
+        # If anything goes wrong (e.g. no fileno), just execute code
+        yield
 
 
 class WaveformSeekbar(ctk.CTkCanvas):
@@ -141,7 +166,9 @@ class WaveformSeekbar(ctk.CTkCanvas):
                 warnings.simplefilter("ignore")
                 # Try soundfile first (handles WAV, FLAC, OGG, etc.)
                 try:
-                    y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
+                    # Suppress C-level warnings from libmpg123
+                    with suppress_c_stderr():
+                        y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
 
                     # Convert to mono if stereo
                     if y.ndim > 1:
@@ -149,54 +176,9 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
                 except (sf.LibsndfileError, RuntimeError):
                     # Fallback for MP3 and other formats soundfile can't handle
-                    # Use pydub which handles MP3 well
-
-                    # Monkey patch subprocess.Popen to suppress console window on Windows
-                    if sys.platform == 'win32':
-                        _original_subprocess_Popen = subprocess.Popen
-                        _original_pydub_Popen = getattr(pydub.utils, 'Popen', None)
-
-                        def _patched_Popen(*args, **kwargs):
-                            if 'startupinfo' not in kwargs:
-                                startupinfo = subprocess.STARTUPINFO()
-                                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                                kwargs['startupinfo'] = startupinfo
-                            if 'creationflags' not in kwargs:
-                                kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
-                            return _original_subprocess_Popen(*args, **kwargs)
-
-                        subprocess.Popen = _patched_Popen
-                        if _original_pydub_Popen:
-                            pydub.utils.Popen = _patched_Popen
-
-                        try:
-                            audio = AudioSegment.from_file(audio_file)
-                        finally:
-                            subprocess.Popen = _original_subprocess_Popen
-                            if _original_pydub_Popen:
-                                pydub.utils.Popen = _original_pydub_Popen
-                    else:
-                        audio = AudioSegment.from_file(audio_file)
-
-                    # Convert to mono
-                    if audio.channels > 1:
-                        audio = audio.set_channels(1)
-
-                    # Get sample rate
-                    sr = audio.frame_rate
-
-                    # Convert to numpy array
-                    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-
-                    # Normalize to -1.0 to 1.0 range
-                    if audio.sample_width == 1:  # 8-bit
-                        y = (samples - 128) / 128.0
-                    elif audio.sample_width == 2:  # 16-bit
-                        y = samples / 32768.0
-                    elif audio.sample_width == 4:  # 32-bit
-                        y = samples / 2147483648.0
-                    else:
-                        y = samples / (2 ** (audio.sample_width * 8 - 1))
+                    # Use librosa which handles MP3 and other formats well
+                    with suppress_c_stderr():
+                        y, sr = librosa.load(audio_file, sr=None, mono=True)
 
             # Calculate the max peak for every pixel on the canvas
             num_pixels = self.width
