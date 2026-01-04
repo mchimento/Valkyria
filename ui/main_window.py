@@ -230,32 +230,6 @@ class MainWindow:
         # Link browser view to playlist view for drag and drop
         self.browser_view.set_playlist_view(self.playlist_view)
 
-        # Middle: Buttons column
-        self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
-        self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
-
-        # Create a container to center buttons vertically
-        button_container = ttk.Frame(self.mid_frame, style="TFrame")
-        button_container.pack(expand=True, fill=tk.BOTH)
-
-        # Create another frame to center buttons horizontally within the container
-        center_frame = ttk.Frame(button_container, style="TFrame")
-        center_frame.pack(expand=True)
-
-        # Get button colors from theme palette (already available in self.palette)
-        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
-        btn_fg = self.palette.get("button_fg_color", "#ffffff")
-        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
-
-        ctk.CTkButton(center_frame, text="📂 Folder", command=self.browser_view.browse_folder, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(center_frame, text="🎵 File", command=self.browser_view.browse_files, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
-        ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
-
         # Status bar with CustomTkinter
         self.status_view = StatusFrameView(self.root, self.state, self.theme, self.settings)
         self.status_view.pack(
@@ -302,11 +276,13 @@ class MainWindow:
             self._set_temporary_status(f"Added {count} file(s) to Songs list")
         elif event_type == "added_to_playlist":
             if count > 0:
+                self.refresh_all()
                 self._set_temporary_status(f"Added {count} file(s) to the bottom of the playlist")
             else:
                 self._set_temporary_status("No new files added to playlist (duplicates skipped)")
         elif event_type == "added_to_playlist_below":
             if count > 0:
+                self.refresh_all()
                 self._set_temporary_status(f"Added {count} file(s) below current track in playlist")
             else:
                 self._set_temporary_status("No new songs were added to playlist (duplicates skipped)")
@@ -527,23 +503,6 @@ class MainWindow:
             style.configure("TFrame", background=root_bg)
         except:
             pass
-
-        # Update sidebar buttons specifically
-        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
-        btn_fg = self.palette.get("button_fg_color", "#ffffff")
-        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
-
-        def update_buttons_in_frame(frame):
-            for widget in frame.winfo_children():
-                if isinstance(widget, ctk.CTkButton):
-                    # Ensure button background matches surrounding frame
-                    frame_bg = self.palette.get("bg", "#1E1E1E" if self.settings.theme == "Dark" else "#FAFAFA")
-                    widget.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
-                elif isinstance(widget, ttk.Frame):
-                    # Recursively search in nested frames
-                    update_buttons_in_frame(widget)
-
-        update_buttons_in_frame(self.mid_frame)
 
         # Update status view
         if hasattr(self, 'status_view'):
@@ -931,17 +890,15 @@ class MainWindow:
                 pass
 
     def toggle_browser_visibility(self):
-        """Toggle browser visibility and mid_frame buttons."""
+        """Toggle browser visibility."""
         if self.show_browser_var.get():
-            # Show browser frame and middle buttons
+            # Show browser frame
             self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
             self.browser_view.pack(fill=tk.BOTH, expand=True)
-            self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
         else:
-            # Hide browser frame and middle buttons
+            # Hide browser frame
             self.browser_view.pack_forget()
             self.right_frame.pack_forget()
-            self.mid_frame.pack_forget()
         # Persist setting
         if hasattr(self, "settings"):
             try:
@@ -953,15 +910,6 @@ class MainWindow:
     def toggle_always_on_top(self):
         """Toggle always on top window attribute."""
         self.root.attributes('-topmost', self.always_on_top_var.get())
-
-    # ---------- Middle Buttons: Browse Song, Add, Add below ----------
-    def add_selected_to_playlist(self):
-        self.browser_view.add_selected_to_playlist()
-        self.refresh_all()
-
-    def add_selected_below_playlist(self):
-        self.browser_view.add_selected_below_playlist()
-        self.refresh_all()
 
     # ---------- Handlers for custom events from subcomponents ----------
     def _on_global_click(self, event):
