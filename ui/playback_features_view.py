@@ -12,7 +12,7 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.palette = theme_manager.palette
 
         self.title("Playback Features")
-        self.geometry("300x150")
+        self.geometry("350x300")
         self.resizable(False, False)
         self.transient(master)
 
@@ -53,6 +53,65 @@ class PlaybackFeaturesView(tk.Toplevel):
         )
         self.switch_status_label.pack(side='left', padx=(10, 0))
 
+        # Separator
+        ttk.Separator(main_frame, orient='horizontal').pack(fill='x', pady=15)
+
+        # Crossfade section
+        crossfade_frame = ttk.Frame(main_frame)
+        crossfade_frame.pack(anchor='w', pady=10, fill='x')
+
+        ttk.Label(crossfade_frame, text="Crossfade",
+                font=(self.palette.get("ui_font", "Segoe UI"), 10, "bold")).pack(anchor='w', pady=(0, 10))
+
+        self.crossfade_enabled_var = tk.BooleanVar(value=getattr(self.settings, "crossfade_enabled", False))
+
+        cf_switch_frame = ttk.Frame(crossfade_frame)
+        cf_switch_frame.pack(anchor='w', pady=(0, 10), fill='x')
+
+        self.crossfade_switch = ctk.CTkSwitch(
+            cf_switch_frame,
+            text="Enable Crossfade:",
+            variable=self.crossfade_enabled_var,
+            command=self._toggle_crossfade_slider,
+            progress_color=self.palette.get("accent", "#0078d4"),
+            text_color=self.palette.get("fg", "#000000"),
+            bg_color=self.palette.get("bg", "#ffffff"),
+            button_color=self.palette.get("accent", "#ffffff"),
+            button_hover_color=self.palette.get("button_hover", "#106ebe"),
+            width=90
+        )
+        self.crossfade_switch.pack(side='left')
+
+        self.crossfade_status_label = ctk.CTkLabel(
+            cf_switch_frame,
+            text="Enabled" if self.crossfade_enabled_var.get() else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if self.crossfade_enabled_var.get() else self.palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=self.palette.get("bg", "#ffffff")
+        )
+        self.crossfade_status_label.pack(side='left', padx=(10, 0))
+
+        self.crossfade_duration_var = tk.DoubleVar(value=float(getattr(self.settings, "crossfade_duration", 5)))
+
+        self.cf_slider_frame = ttk.Frame(crossfade_frame)
+        self.cf_slider_frame.pack(fill='x', pady=(0, 10))
+
+        ttk.Label(self.cf_slider_frame, text="Duration:",
+                foreground=self.palette.get("fg", "#FFFFFF")).pack(anchor='w')
+
+        slider_container = ttk.Frame(self.cf_slider_frame)
+        slider_container.pack(fill='x', pady=(5, 0))
+
+        self.lbl_duration = ttk.Label(slider_container, text=f"{int(self.crossfade_duration_var.get())}s", width=4,
+                                foreground=self.palette.get("fg", "#FFFFFF"))
+        self.lbl_duration.pack(side='right')
+
+        self.slider_duration = ttk.Scale(slider_container, from_=1, to=12, variable=self.crossfade_duration_var,
+                                        orient='horizontal', command=self._update_duration_label)
+        self.slider_duration.pack(side='left', fill='x', expand=True, padx=(0, 10))
+
+        self._toggle_crossfade_slider()
+
         # Close button
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(side='bottom', fill='x', pady=(20, 0))
@@ -92,6 +151,59 @@ class PlaybackFeaturesView(tk.Toplevel):
             text_color=self.palette.get("accent", "#0078d4") if new_value else self.palette.get("fg", "#808080")
         )
 
+    def _toggle_crossfade_slider(self):
+        """Toggle crossfade slider enabled state."""
+        enabled = self.crossfade_enabled_var.get()
+        state = 'normal' if enabled else 'disabled'
+
+        # Update settings
+        if self.settings:
+            self.settings.crossfade_enabled = enabled
+            try:
+                self.settings.save()
+            except Exception:
+                pass
+
+        # Update status label
+        self.crossfade_status_label.configure(
+            text="Enabled" if enabled else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+        )
+
+        if state == 'normal':
+            label_color = self.palette.get("fg", "#FFFFFF")
+        else:
+            label_color = self.palette.get("disabled_fg", "#999999")
+
+        for child in self.cf_slider_frame.winfo_children():
+            try:
+                child.configure(state=state)
+                if isinstance(child, ttk.Label):
+                    child.configure(foreground=label_color)
+            except:
+                pass
+
+            for subchild in child.winfo_children():
+                try:
+                    subchild.configure(state=state)
+                    if isinstance(subchild, ttk.Label):
+                        subchild.configure(foreground=label_color)
+                except:
+                    pass
+
+    def _update_duration_label(self, val):
+        """Update crossfade duration label."""
+        duration = int(float(val))
+        self.lbl_duration.configure(text=f"{duration}s")
+
+        # Update settings
+        if self.settings:
+            self.settings.crossfade_duration = duration
+            try:
+                self.settings.save()
+            except Exception:
+                pass
+
     def _apply_theme(self):
         """Apply theme to widgets."""
         bg = self.palette.get("bg", "#ffffff")
@@ -116,6 +228,24 @@ class PlaybackFeaturesView(tk.Toplevel):
         if hasattr(self, 'switch_status_label'):
             is_enabled = self.play_on_double_var.get()
             self.switch_status_label.configure(
+                text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        # Update crossfade switch colors
+        if hasattr(self, 'crossfade_switch'):
+            self.crossfade_switch.configure(
+                progress_color=self.palette.get("accent", "#0078d4"),
+                text_color=fg,
+                bg_color=bg,
+                button_color=self.palette.get("accent", "#ffffff"),
+                button_hover_color=self.palette.get("button_hover", "#106ebe")
+            )
+
+        # Update crossfade status label colors
+        if hasattr(self, 'crossfade_status_label'):
+            is_enabled = self.crossfade_enabled_var.get()
+            self.crossfade_status_label.configure(
                 text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
                 bg_color=bg
             )
