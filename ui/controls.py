@@ -52,7 +52,7 @@ class ExtrasBar(ttk.Frame):
 
         if self.tooltip_manager:
             self.tooltip_manager.attach(self.btn_repeat, lambda: f"Repeat Mode: {self.repeat_var.get().title() if self.repeat_var else 'None'}")
-            self.tooltip_manager.attach(self.btn_effects, lambda: "Audio Effects")
+            self.tooltip_manager.attach(self.btn_effects, lambda: "Audio Effects (F7)")
 
     def _update_repeat_icon(self, *args):
         if not self.repeat_var:

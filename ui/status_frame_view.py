@@ -3,7 +3,6 @@ import os
 import platform
 import threading
 import tkinter as tk
-from typing import Optional
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFont
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class StatusFrameView(ctk.CTkFrame):
-    """Encapsulates the status bar UI (status/meta/artwork) and BPM controls."""
+    """Encapsulates the status bar UI"""
 
     def __init__(self, master, state, theme_manager, settings):
         self.state = state
@@ -38,9 +37,9 @@ class StatusFrameView(ctk.CTkFrame):
 
         self._status_restore_job = None
 
-        self.current_temp_bpm: Optional[float] = None
+        self.current_temp_bpm = None
         self.temporary_bpm_files = set()
-        self.bpm_button_state = "analyze"  # analyze | analyzing | save | saving
+        self.bpm_button_state = "analyze"
 
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
 
@@ -50,7 +49,7 @@ class StatusFrameView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
-    def _build_widgets(self, is_dark: bool, frame_bg: str) -> None:
+    def _build_widgets(self, is_dark, frame_bg):
         status_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         status_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
         status_fg = self.palette.get("status_fg", "#202020" if not is_dark else "#FFFFFF")
@@ -141,17 +140,17 @@ class StatusFrameView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Public API used by MainWindow
     # ------------------------------------------------------------------
-    def set_temporary_status(self, message: str, duration: int = 3000) -> None:
+    def set_temporary_status(self, message, duration=3000):
         """Show a temporary message, then restore now-playing display."""
         self.status_var.set(message)
         self._cancel_restore_job()
         self._status_restore_job = self.after(duration, self.restore_status)
 
-    def schedule_restore(self, delay: int = 3000) -> None:
+    def schedule_restore(self, delay=3000):
         self._cancel_restore_job()
         self._status_restore_job = self.after(delay, self.restore_status)
 
-    def handle_stop(self) -> None:
+    def handle_stop(self):
         self._cancel_restore_job()
         self._clear_status()
         self.current_temp_bpm = None
@@ -160,7 +159,7 @@ class StatusFrameView(ctk.CTkFrame):
         except Exception:
             pass
 
-    def restore_status(self) -> None:
+    def restore_status(self):
         """Restore playing status and populate metadata line."""
         self._cancel_restore_job()
 
@@ -375,7 +374,7 @@ class StatusFrameView(ctk.CTkFrame):
         # Use self as the root for after calls
         analyze_bpm_worker(filepath, self, self._on_bpm_analysis_complete)
 
-    def _on_bpm_analysis_complete(self, filepath: str, bpm_value: Optional[float]) -> None:
+    def _on_bpm_analysis_complete(self, filepath, bpm_value):
         try:
             if bpm_value is not None:
                 self.current_temp_bpm = bpm_value
