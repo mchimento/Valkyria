@@ -237,7 +237,7 @@ class AudioEffectsWindow(tk.Toplevel):
             values=[""] + list(self.presets.keys()),
             command=self._on_preset_change,
             variable=self.preset_var,
-            width=116,
+            width=160,
             height=26,
             fg_color=bg,
             button_color=bg,
