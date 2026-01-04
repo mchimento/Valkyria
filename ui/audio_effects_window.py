@@ -1430,9 +1430,22 @@ class AudioEffectsWindow(tk.Toplevel):
                 bg_color=bg
             )
 
-        # Preset dropdown styling
+        # Preset dropdown styling - recreate to fix hover colors
         if hasattr(self, 'preset_menu'):
-            self.preset_menu.configure(
+            # Save current selection
+            current_selection = self.preset_var.get() if hasattr(self, 'preset_var') else ""
+
+            # Destroy old menu
+            self.preset_menu.destroy()
+
+            # Recreate with new theme colors
+            self.preset_menu = ctk.CTkOptionMenu(
+                self.preset_menu_frame,
+                values=[""] + list(self.presets.keys()),
+                command=self._on_preset_change,
+                variable=self.preset_var,
+                width=160,
+                height=26,
                 fg_color=bg,
                 button_color=bg,
                 button_hover_color=palette.get("dropdown_hover", "#000000"),
@@ -1441,6 +1454,11 @@ class AudioEffectsWindow(tk.Toplevel):
                 dropdown_hover_color=palette.get("dropdown_hover", "#000000"),
                 dropdown_text_color=palette.get("dropdown_text", "#000000")
             )
+            self.preset_menu.pack(padx=2, pady=2)
+
+            # Restore selection
+            if current_selection:
+                self.preset_menu.set(current_selection)
 
         if hasattr(self, 'preset_menu_frame'):
             self.preset_menu_frame.configure(
