@@ -367,6 +367,13 @@ class MetadataExtractor:
                         if not frame.data or len(frame.data) == 0:
                             continue
 
+                        # Verify the image is valid
+                        try:
+                            img = Image.open(io.BytesIO(frame.data))
+                            img.verify()
+                        except Exception:
+                            continue
+
                         # Convert enum to int if needed
                         pic_type_int = int(pic_type) if hasattr(pic_type, 'value') else pic_type
 
@@ -411,6 +418,13 @@ class MetadataExtractor:
                         if not picture.data or len(picture.data) == 0:
                             continue
 
+                        # Verify the image is valid
+                        try:
+                            img = Image.open(io.BytesIO(picture.data))
+                            img.verify()
+                        except Exception:
+                            continue
+
                         pic_type = picture.type
                         description = picture.desc or "Image"
 
@@ -440,6 +454,13 @@ class MetadataExtractor:
                                 if not image_data or len(image_data) == 0:
                                     continue
 
+                                # Verify the image is valid
+                                try:
+                                    img = Image.open(io.BytesIO(image_data))
+                                    img.verify()
+                                except Exception:
+                                    continue
+
                                 # Include all covers
                                 booklet_images.append((image_data, f"Cover Art {i+1}", "MP4 Cover"))
                             except Exception:
@@ -466,7 +487,14 @@ class MetadataExtractor:
                             with open(img_path, 'rb') as f:
                                 img_data = f.read()
                             if img_data and len(img_data) > 0:
-                                booklet_images.append((img_data, img_name, "Folder Image"))
+                                # Verify the image is valid
+                                try:
+                                    img = Image.open(io.BytesIO(img_data))
+                                    img.verify()
+                                    booklet_images.append((img_data, img_name, "Folder Image"))
+                                except Exception:
+                                    # Skip corrupted images
+                                    pass
                         except Exception:
                             pass
 
@@ -475,12 +503,19 @@ class MetadataExtractor:
                     for img_file in glob.glob(os.path.join(folder, ext)):
                         img_name = os.path.basename(img_file)
                         # Skip if already added
-                        if img_name.lower() not in [n.lower() for n in image_names]:
+                        if not any(b[1] == img_name for b in booklet_images):
                             try:
                                 with open(img_file, 'rb') as f:
                                     img_data = f.read()
                                 if img_data and len(img_data) > 0:
-                                    booklet_images.append((img_data, img_name, "Folder Image"))
+                                    # Verify the image is valid
+                                    try:
+                                        img = Image.open(io.BytesIO(img_data))
+                                        img.verify()
+                                        booklet_images.append((img_data, img_name, "Folder Image"))
+                                    except Exception:
+                                        # Skip corrupted images
+                                        pass
                             except Exception:
                                 continue
 
