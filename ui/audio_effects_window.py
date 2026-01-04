@@ -408,8 +408,6 @@ class AudioEffectsWindow(tk.Toplevel):
         channel_frame = ttk.LabelFrame(effects_container, text="Channel Mode", padding=15)
         channel_frame.pack(fill=tk.X, pady=(0, 15))
 
-        # Description
-        ttk.Label(channel_frame, text="Select channel to analyze mix structure:", font=("Segoe UI", 9, "italic")).pack(anchor="w", pady=(0, 10))
 
         # Radio Buttons Container
         radio_container = ttk.Frame(channel_frame)

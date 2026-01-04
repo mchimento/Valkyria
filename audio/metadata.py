@@ -40,11 +40,41 @@ class MetadataExtractor:
         metadata = {}
         try:
             audio = MutagenFile(filepath, easy=True)
+            # If easy mode returns an empty dict (no tags extracted due to non-standard ID3), try non-easy mode
+            # EasyMP3 objects are dict subclasses, so check if it's empty but has audio info
+            if audio is None or (hasattr(audio, 'keys') and len(audio.keys()) == 0):
+                audio = MutagenFile(filepath)
+
             if audio:
                 # Extract basic metadata
-                metadata["title"] = str(audio.get("title", [os.path.basename(filepath)])[0])
-                metadata["artist"] = str(audio.get("artist", ["Unknown Artist"])[0])
-                metadata["album"] = str(audio.get("album", ["Unknown Album"])[0])
+                # Try easy mode tags first (returns lists)
+                try:
+                    # Check if this looks like easy mode (dict-like with .get() that returns lists)
+                    title_test = audio.get("title", [os.path.basename(filepath)])
+                    if isinstance(title_test, list):
+                        # Easy mode with valid tags
+                        metadata["title"] = str(title_test[0])
+                        metadata["artist"] = str(audio.get("artist", ["Unknown Artist"])[0])
+                        metadata["album"] = str(audio.get("album", ["Unknown Album"])[0])
+                    else:
+                        # Force exception to try raw tags
+                        raise AttributeError("Not easy mode format")
+                except (AttributeError, TypeError, KeyError, IndexError):
+                    # Not easy mode or tags missing - extract from raw ID3 tags
+                    metadata["title"] = os.path.basename(filepath)
+                    metadata["artist"] = "Unknown Artist"
+                    metadata["album"] = "Unknown Album"
+
+                    if hasattr(audio, 'tags') and audio.tags:
+                        try:
+                            if 'TIT2' in audio.tags:
+                                metadata["title"] = str(audio.tags['TIT2'])
+                            if 'TPE1' in audio.tags:
+                                metadata["artist"] = str(audio.tags['TPE1'])
+                            if 'TALB' in audio.tags:
+                                metadata["album"] = str(audio.tags['TALB'])
+                        except Exception:
+                            pass
 
                 # Format duration
                 duration = audio.info.length if hasattr(audio.info, 'length') else 0
@@ -130,7 +160,8 @@ class MetadataExtractor:
                     bpm = None
 
                 metadata['bpm'] = bpm
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to extract metadata from {filepath}: {e}", exc_info=True)
             # Fallback to filename if metadata extraction fails
             metadata = {
                 "title": os.path.basename(filepath),
