@@ -12,9 +12,12 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.palette = theme_manager.palette
 
         self.title("Playback Features")
-        self.geometry("350x300")
+        self.geometry("350x350")
         self.resizable(False, False)
         self.transient(master)
+
+        # Hide window initially to prevent flickering during positioning
+        self.withdraw()
 
         center_window(self, master)
 
@@ -53,15 +56,9 @@ class PlaybackFeaturesView(tk.Toplevel):
         )
         self.switch_status_label.pack(side='left', padx=(10, 0))
 
-        # Separator
-        ttk.Separator(main_frame, orient='horizontal').pack(fill='x', pady=15)
-
         # Crossfade section
         crossfade_frame = ttk.Frame(main_frame)
         crossfade_frame.pack(anchor='w', pady=10, fill='x')
-
-        ttk.Label(crossfade_frame, text="Crossfade",
-                font=(self.palette.get("ui_font", "Segoe UI"), 10, "bold")).pack(anchor='w', pady=(0, 10))
 
         self.crossfade_enabled_var = tk.BooleanVar(value=getattr(self.settings, "crossfade_enabled", False))
 
@@ -70,7 +67,7 @@ class PlaybackFeaturesView(tk.Toplevel):
 
         self.crossfade_switch = ctk.CTkSwitch(
             cf_switch_frame,
-            text="Enable Crossfade:",
+            text="Crossfade:",
             variable=self.crossfade_enabled_var,
             command=self._toggle_crossfade_slider,
             progress_color=self.palette.get("accent", "#0078d4"),
@@ -106,8 +103,25 @@ class PlaybackFeaturesView(tk.Toplevel):
                                 foreground=self.palette.get("fg", "#FFFFFF"))
         self.lbl_duration.pack(side='right')
 
-        self.slider_duration = ttk.Scale(slider_container, from_=1, to=12, variable=self.crossfade_duration_var,
-                                        orient='horizontal', command=self._update_duration_label)
+        slider_bg = self.palette.get("slider_bg", "#4a4a4a")
+        slider_fg = self.palette.get("slider_progress", self.palette.get("accent", "#0078d4"))
+        slider_button = self.palette.get("slider_button", "#ffffff")
+        accent_hover = self.palette.get("button_hover", "#106ebe")
+        bg = self.palette.get("bg", "#ffffff")
+
+        self.slider_duration = ctk.CTkSlider(
+            slider_container,
+            from_=1, to=12,
+            number_of_steps=11,
+            variable=self.crossfade_duration_var,
+            command=self._update_duration_label,
+            fg_color=slider_bg,
+            progress_color=slider_fg,
+            button_color=slider_button,
+            button_hover_color=accent_hover,
+            bg_color=bg,
+            border_color="transparent"
+        )
         self.slider_duration.pack(side='left', fill='x', expand=True, padx=(0, 10))
 
         self._toggle_crossfade_slider()
@@ -128,7 +142,8 @@ class PlaybackFeaturesView(tk.Toplevel):
         )
         self.close_btn.pack(side='right')
 
-        self._apply_theme()
+        # Show window after all setup is complete
+        self.deiconify()
 
     def _on_play_on_double_change(self):
         """Handle play on double-click setting change."""
@@ -175,19 +190,23 @@ class PlaybackFeaturesView(tk.Toplevel):
         else:
             label_color = self.palette.get("disabled_fg", "#999999")
 
+        # Update CTkSlider state
+        if hasattr(self, 'slider_duration'):
+            self.slider_duration.configure(state=state)
+
         for child in self.cf_slider_frame.winfo_children():
-            try:
-                child.configure(state=state)
-                if isinstance(child, ttk.Label):
+            if isinstance(child, ttk.Label):
+                try:
                     child.configure(foreground=label_color)
-            except:
-                pass
+                except:
+                    pass
 
             for subchild in child.winfo_children():
                 try:
-                    subchild.configure(state=state)
                     if isinstance(subchild, ttk.Label):
                         subchild.configure(foreground=label_color)
+                    elif not isinstance(subchild, ctk.CTkSlider):
+                        subchild.configure(state=state)
                 except:
                     pass
 
@@ -247,6 +266,20 @@ class PlaybackFeaturesView(tk.Toplevel):
             is_enabled = self.crossfade_enabled_var.get()
             self.crossfade_status_label.configure(
                 text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        # Update crossfade slider colors
+        if hasattr(self, 'slider_duration'):
+            slider_bg = self.palette.get("slider_bg", "#4a4a4a")
+            slider_fg = self.palette.get("slider_progress", self.palette.get("accent", "#0078d4"))
+            slider_button = self.palette.get("slider_button", "#ffffff")
+            accent_hover = self.palette.get("button_hover", "#106ebe")
+            self.slider_duration.configure(
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_button,
+                button_hover_color=accent_hover,
                 bg_color=bg
             )
 
