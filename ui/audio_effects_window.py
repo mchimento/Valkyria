@@ -43,6 +43,9 @@ class AudioEffectsWindow(tk.Toplevel):
         self.eq_config = AUDIO_CONFIG['equalizer']
         self.eq_defaults = AUDIO_DEFAULTS['equalizer']
 
+        # Load saved preset
+        self.saved_preset = self.eq_config.get('selected_preset', '')
+
         # EQ Bands (Standard ISO frequencies) - from defaults
         self.bands = self.eq_defaults['bands']
         self.band_labels = self.eq_defaults['band_labels']
@@ -217,7 +220,7 @@ class AudioEffectsWindow(tk.Toplevel):
         )
         self.enable_status_label.pack(side=tk.LEFT)
 
-        self.preset_var = tk.StringVar(value="")
+        self.preset_var = tk.StringVar(value=self.saved_preset)
 
          # Frame wrapper for border effect
         self.preset_menu_frame = ctk.CTkFrame(
@@ -1116,7 +1119,8 @@ class AudioEffectsWindow(tk.Toplevel):
                 "equalizer": {
                     "enabled": self.enabled_var.get(),
                     "gains": [v.get() for v in self.slider_vars],
-                    "preamp": self.preamp_var.get()
+                    "preamp": self.preamp_var.get(),
+                    "selected_preset": self.preset_var.get()
                 },
                 "compressor": {
                     "enabled": self.compressor_enabled_var.get(),
@@ -1507,6 +1511,13 @@ class AudioEffectsWindow(tk.Toplevel):
 
     def _on_preset_change(self, choice):
         """Apply selected EQ preset."""
+        if choice == "":
+            choice = "Flat"
+            self.preset_var.set("")
+            AUDIO_CONFIG['equalizer']['selected_preset'] = ""
+        else:
+            self.preset_var.set(choice)
+            AUDIO_CONFIG['equalizer']['selected_preset'] = choice
         if choice in self.presets:
             preamp, values = self.presets[choice]
 
