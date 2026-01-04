@@ -171,8 +171,8 @@ class MainWindow:
 
         tools_items = [
             audio_device_item,
-            {"label": "Audio Effects and Filters", "command": self.open_audio_effects},
-            {"label": "Playback features", "command": self.open_playback_features},
+            {"label": "Audio Effects and Filters", "command": self.open_audio_effects, "accelerator": "F7"},
+            {"label": "Playback features", "command": self.open_playback_features, "accelerator": "F8"},
             {"separator": True},
             {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
@@ -1220,6 +1220,8 @@ class MainWindow:
 
         # Tools menu accelerators
         self.root.bind("<Control-p>", lambda e: self.open_preferences())
+        self.root.bind("<F7>", lambda e: self.open_audio_effects())
+        self.root.bind("<F8>", lambda e: self.open_playback_features())
 
         # Help menu accelerators
         self.root.bind("<F1>", lambda e: self.open_about())
