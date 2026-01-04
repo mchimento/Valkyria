@@ -1645,9 +1645,12 @@ class MainWindow:
             else:
                 # end of playlist: stop player
                 try:
-                    self.player.stop()
-                    # Ensure status is updated to clear artwork when playlist ends
-                    self._controls_status_event("stop")
+                    if hasattr(self, 'controls') and self.controls:
+                        self.controls.stop()
+                    else:
+                        self.player.stop()
+                        # Ensure status is updated to clear artwork when playlist ends
+                        self._controls_status_event("stop")
                 except Exception:
                     pass
 

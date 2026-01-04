@@ -100,8 +100,6 @@ class WaveformSeekbar(ctk.CTkCanvas):
         # Draw initial placeholder line
         self._draw_placeholder_line()
 
-        logger.info("WaveformSeekbar initialized")
-
     def load_waveform(self, audio_file: str):
         """
         Load and generate waveform for the given audio file.
@@ -130,8 +128,6 @@ class WaveformSeekbar(ctk.CTkCanvas):
             daemon=True
         )
         self.waveform_thread.start()
-
-        logger.info(f"Started waveform generation for {audio_file}")
 
     def _generate_waveform_worker(self, audio_file: str):
         """

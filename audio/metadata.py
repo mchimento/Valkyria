@@ -8,11 +8,14 @@ from mutagen.id3 import APIC, GEOB, ID3, TXXX, TBPM, ID3NoHeaderError
 from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4, MP4Cover
 
+import logging
 import shutil, tempfile, subprocess, math, os, glob, io
 from PIL import Image
 import librosa
 import numpy as np
 from math import log
+
+logger = logging.getLogger(__name__)
 
 class MetadataExtractor:
     """Handles extraction and manipulation of audio file metadata."""
@@ -627,18 +630,18 @@ def analyze_bpm(filepath, sr=22050, duration=60):
         return dj_bpm_estimate(y, sr_used)
 
     except Exception as e:
-        print("BPM error:", e)
+        logger.debug("BPM error while analyzing %s: %s", filepath, e)
         return None
 
 def normalize_bpm(bpm):
     try:
         bpm = float(bpm)
-    except Exception:
-        print("Failed normalization")
+    except Exception as exc:
+        logger.debug("Failed BPM normalization for value %s: %s", bpm, exc)
         return None
 
     if not math.isfinite(bpm) or bpm <= 0:
-        print("Invalid BPM value")
+        logger.debug("Invalid BPM value encountered: %s", bpm)
         return None
 
     # Behavior depends on BPM_PREFERENCE: 'perceived' folds into 50-100,
@@ -657,13 +660,13 @@ def normalize_bpm(bpm):
 def dj_bpm_estimate(y, sr):
     # Guard against empty audio
     if y is None or len(y) == 0:
-        print("BPM error: empty audio buffer")
+        logger.debug("BPM error: empty audio buffer")
         return None
 
     try:
         onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     except Exception as e:
-        print("BPM error computing onset envelope:", e)
+        logger.debug("BPM error computing onset envelope: %s", e)
         onset_env = None
 
     # Try tempogram-based global tempo estimate first
@@ -699,11 +702,11 @@ def dj_bpm_estimate(y, sr):
         try:
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
             if tempo is None or not math.isfinite(tempo) or tempo <= 0:
-                print("BPM fallback beat_track failed:", tempo)
+                logger.debug("BPM fallback beat_track failed: %s", tempo)
                 return None
             return float(tempo)
         except Exception as e2:
-            print("BPM fallback failed:", e2)
+            logger.debug("BPM fallback failed: %s", e2)
             return None
 
 def write_bpm(filepath, bpm):

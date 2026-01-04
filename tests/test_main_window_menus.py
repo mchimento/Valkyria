@@ -191,6 +191,36 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
+    @patch('ui.main_window.ControlsBar')
+    @patch('ui.main_window.BrowserView')
+    @patch('ui.main_window.PlaylistView')
+    @patch('ui.main_window.TooltipManager')
+    def test_playlist_end_triggers_controls_stop(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
+        """Ensure playlist end clears waveform by invoking ControlsBar.stop."""
+        from ui.main_window import MainWindow
+
+        mock_controls_instance = MagicMock()
+        mock_controls.return_value = mock_controls_instance
+
+        self.mock_state.playlist = ["/path/to/song1.mp3"]
+        self.mock_state.current_index = 0
+        self.mock_state.repeat_mode = 'none'
+
+        try:
+            root = tk.Tk()
+            self.root = root
+            main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
+
+            main_window.handle_track_end()
+
+            mock_controls_instance.stop.assert_called_once()
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
 
 if __name__ == '__main__':
     unittest.main()
