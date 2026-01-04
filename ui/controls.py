@@ -8,7 +8,6 @@ from tkinter import ttk
 import customtkinter as ctk
 from typing import Optional, Callable
 import threading
-from audio.metadata import get_metadata, analyze_bpm, metadata_extractor
 from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)
@@ -483,29 +482,3 @@ class ControlsBar(ttk.Frame):
     def _send_status(self, event_type):
         if callable(self.status_callback):
             self.status_callback(event_type)
-
-    def _check_and_analyze_bpm(self, filepath):
-        """Check if BPM is missing and analyze it in a background thread."""
-        try:
-            # Get current metadata to check if BPM exists
-            metadata = get_metadata(filepath)
-            if metadata.get('bpm') is None:
-                thread = threading.Thread(target=self._analyze_bpm_worker, args=(filepath,), daemon=True)
-                thread.start()
-        except Exception as e:
-            logger.error(f"Error checking BPM for {filepath}: {e}")
-
-    def _analyze_bpm_worker(self, filepath):
-        """Worker function to analyze BPM and update UI temporarily."""
-        try:
-            analyzed_bpm = analyze_bpm(filepath)
-
-            if analyzed_bpm is not None:
-                # Store temporary BPM in metadata extractor cache without writing to file
-                metadata_extractor._cache[filepath]['bpm'] = analyzed_bpm
-                # Notify listeners to update UI with temporary BPM
-                metadata_extractor._notify_bpm_listeners(filepath)
-            else:
-                logger.warning(f"BPM analysis returned None for {filepath}")
-        except Exception as e:
-            logger.error(f"Error in BPM analysis worker for {filepath}: {e}")
