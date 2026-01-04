@@ -45,14 +45,21 @@ class BrowserView(ttk.Frame):
         btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
 
-        ctk.CTkButton(center_frame, text="📂 Folder", command=self.browse_folder, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(center_frame, text="🎵 File", command=self.browse_files, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
-        ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
+        self.btn_folder = ctk.CTkButton(center_frame, text="📂 Folder", command=self.browse_folder, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_folder.pack(pady=6)
+
+        self.btn_file = ctk.CTkButton(center_frame, text="🎵 File", command=self.browse_files, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_file.pack(pady=6)
+
+        self.btn_add = ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_add.pack(pady=8)
+
+        self.btn_add_below = ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_add_below.pack(pady=8)
 
         # Tree frame (Right side)
         tree_frame = ttk.Frame(content_frame)
@@ -166,6 +173,18 @@ class BrowserView(ttk.Frame):
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212")
         )
+
+        # Update buttons
+        btn_bg = self.theme.palette.get("button_bg_color", self.theme.palette.get("accent", "#0078d4"))
+        btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
+        frame_bg = self.theme.palette.get("bg", "#121212")
+
+        for btn in [self.btn_folder, self.btn_file, self.btn_add, self.btn_add_below]:
+            try:
+                btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+            except Exception:
+                pass
 
         # Update hover tag color last to ensure it takes precedence
         hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")

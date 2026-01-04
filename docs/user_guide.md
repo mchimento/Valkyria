@@ -426,7 +426,6 @@ Tango Studio includes carefully crafted dark and light themes for comfortable vi
 |---------|-----------|-------------|
 | **Background** | Deep charcoal (#1E1E1E) | Soft white (#FAFAFA) |
 | **Text** | Light gray (#FFFFFF) | Dark gray (#000000) |
-| **Accents** | Blue (#0078D4) | Blue (#0078D4) |
 | **Best For** | Low-light environments, extended listening sessions, reduced eye strain | Well-lit rooms, daytime use, maximum contrast |
 
 Both themes are fully integrated across the entire application:

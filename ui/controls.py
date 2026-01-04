@@ -6,16 +6,93 @@ import logging
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
-from typing import Optional, Callable
 import threading
 from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)
 
 
+class ExtrasBar(ttk.Frame):
+    def __init__(self, master, theme, repeat_var, on_toggle_repeat, on_open_effects, tooltip_manager=None):
+        super().__init__(master)
+        self.theme = theme
+        self.repeat_var = repeat_var
+        self.on_toggle_repeat = on_toggle_repeat
+        self.on_open_effects = on_open_effects
+        self.tooltip_manager = tooltip_manager
+
+        self._create_widgets()
+
+        # Trace repeat variable to update icon
+        if self.repeat_var:
+            self.repeat_var.trace_add("write", self._update_repeat_icon)
+            self._update_repeat_icon()
+
+    def _create_widgets(self):
+        # Get button colors from theme palette
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+
+        btn_width = 45
+        btn_height = 40
+
+        # Repeat Button
+        self.btn_repeat = ctk.CTkButton(self, text="🔁", command=self.on_toggle_repeat,
+                                      font=("Segoe UI Symbol", 20), width=btn_width, height=btn_height,
+                                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_repeat.pack(side=tk.LEFT, padx=4)
+
+        # Effects Button
+        self.btn_effects = ctk.CTkButton(self, text="🎚🎚", command=self.on_open_effects,
+                                       font=("Segoe UI Symbol", 23), width=btn_width, height=btn_height,
+                                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_effects.pack(side=tk.LEFT, padx=4)
+
+        if self.tooltip_manager:
+            self.tooltip_manager.attach(self.btn_repeat, lambda: f"Repeat Mode: {self.repeat_var.get().title() if self.repeat_var else 'None'}")
+            self.tooltip_manager.attach(self.btn_effects, lambda: "Audio Effects")
+
+    def _update_repeat_icon(self, *args):
+        if not self.repeat_var:
+            return
+
+        mode = self.repeat_var.get()
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+
+        # Default colors
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_pressed = palette.get("button_pressed", palette.get("accent", "#0078d4"))
+
+        if mode == "none":
+            self.btn_repeat.configure(text="🔁", fg_color=btn_bg, text_color=btn_fg) # Normal
+        elif mode == "one":
+            self.btn_repeat.configure(text="🔂", fg_color=btn_pressed, text_color=btn_fg) # Active/Pressed
+        elif mode == "all":
+            self.btn_repeat.configure(text="🔁", fg_color=btn_pressed, text_color=btn_fg) # Active/Pressed
+
+    def update_theme(self):
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+        frame_bg = palette.get("bg", "#1E1E1E")
+
+        # Update Effects button
+        self.btn_effects.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+
+        # Update Repeat button (icon update handles specific colors based on state)
+        self._update_repeat_icon()
+        # But we need to update hover color and bg_color
+        self.btn_repeat.configure(hover_color=btn_hover, bg_color=frame_bg)
+
+
 class ControlsBar(ttk.Frame):
     def __init__(self, master, player, state, theme, playlist=None,
-                 tooltip_manager=None, status_callback: Optional[Callable] = None, settings=None) -> None:
+                 tooltip_manager=None, status_callback=None, settings=None,
+                 repeat_var=None, on_toggle_repeat=None, on_open_effects=None):
         super().__init__(master)
 
         self.player = player
@@ -30,6 +107,10 @@ class ControlsBar(ttk.Frame):
         self.is_playing = False
         self.is_muted = False
         self.crossfade_triggered = False
+
+        self.repeat_var = repeat_var
+        self.on_toggle_repeat = on_toggle_repeat
+        self.on_open_effects = on_open_effects
 
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
@@ -96,6 +177,11 @@ class ControlsBar(ttk.Frame):
         self.total_time_var = tk.StringVar(value="--:--")
         self.total_time_label = ttk.Label(middle, textvariable=self.total_time_var, width=8, anchor="center")
         self.total_time_label.pack(side=tk.LEFT)
+
+        # ---------------- EXTRAS BAR ----------------
+        if self.repeat_var and self.on_toggle_repeat and self.on_open_effects:
+            self.extras = ExtrasBar(self, self.theme, self.repeat_var, self.on_toggle_repeat, self.on_open_effects, self.tooltip_manager)
+            self.extras.pack(side=tk.LEFT, padx=6)
 
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
@@ -335,11 +421,11 @@ class ControlsBar(ttk.Frame):
         self.volume.set(new_volume)
         self._on_volume_change(new_volume)
 
-    def _get_mute_label(self, is_muted: bool) -> str:
+    def _get_mute_label(self, is_muted):
         """Get the mute button symbol based on mute state."""
         return "🔇" if is_muted else "🔊"
 
-    def _get_mute_tooltip(self, is_muted: bool) -> str:
+    def _get_mute_tooltip(self, is_muted):
         """Get the mute button tooltip based on mute state."""
         return "Muted (M)" if is_muted else "Mute (M)"
 
@@ -464,6 +550,13 @@ class ControlsBar(ttk.Frame):
         try:
             if hasattr(self, 'waveform_seekbar'):
                 self.waveform_seekbar.update_theme()
+        except Exception:
+            pass
+
+        # Update extras bar theme
+        try:
+            if hasattr(self, 'extras'):
+                self.extras.update_theme()
         except Exception:
             pass
 

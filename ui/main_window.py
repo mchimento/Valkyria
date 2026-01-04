@@ -248,7 +248,10 @@ class MainWindow:
             self.playlist_view,
             tooltip_manager=self.tooltip_manager,
             status_callback=self._controls_status_event,
-            settings=self.settings
+            settings=self.settings,
+            repeat_var=self.repeat_mode_var,
+            on_toggle_repeat=self.toggle_repeat_mode,
+            on_open_effects=self.open_audio_effects
         )
         self.controls.configure(padding=(0, 0, 0, 15))
         self.controls.pack(side=tk.BOTTOM, fill=tk.X)
@@ -780,6 +783,18 @@ class MainWindow:
             self._set_temporary_status("Playlist cleared")
 
     # ---------- Repeat Mode ----------
+    def toggle_repeat_mode(self):
+        """Cycle through repeat modes: none -> all -> one -> none."""
+        modes = ["none", "one", "all"]
+        current = self.repeat_mode_var.get()
+        try:
+            idx = modes.index(current)
+        except ValueError:
+            idx = 0
+        new_mode = modes[(idx + 1) % len(modes)]
+        self.repeat_mode_var.set(new_mode)
+        self._set_repeat_mode(new_mode)
+
     def _set_repeat_mode(self, mode):
         """Set the repeat mode (none, one, all)."""
         self.state.repeat_mode = mode
