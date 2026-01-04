@@ -29,7 +29,8 @@ class StatusFrameView(ctk.CTkFrame):
 
         super().__init__(master, fg_color=initial_bg, bg_color=initial_bg, corner_radius=0)
 
-        self.status_var = tk.StringVar(value="")
+        self.title_var = tk.StringVar(value="")
+        self.artist_var = tk.StringVar(value="")
         self.meta_var = tk.StringVar(value="")
 
         self.current_artwork_image = None
@@ -86,19 +87,30 @@ class StatusFrameView(ctk.CTkFrame):
         self.text_frame = ctk.CTkFrame(self.status_content, fg_color="transparent")
         self.text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(0, 0))
 
-        self.status_label = ctk.CTkLabel(
+        self.title_label = ctk.CTkLabel(
             self.text_frame,
-            textvariable=self.status_var,
-            anchor="w",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            textvariable=self.title_var,
+            anchor="sw",
+            font=ctk.CTkFont(size=20, weight="bold"),
             text_color=status_fg,
             bg_color=status_bg,
             justify="left",
         )
-        self.status_label.pack(side=tk.TOP, fill=tk.X, pady=(15, 40))
+        self.title_label.pack(side=tk.TOP, fill=tk.X, pady=(15, 5))
+
+        self.artist_label = ctk.CTkLabel(
+            self.text_frame,
+            textvariable=self.artist_var,
+            anchor="nw",
+            font=ctk.CTkFont(size=15),
+            text_color=status_fg,
+            bg_color=status_bg,
+            justify="left",
+        )
+        self.artist_label.pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
 
         self.meta_frame = ctk.CTkFrame(self.text_frame, fg_color="transparent")
-        self.meta_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 2))
+        self.meta_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 0))
 
         self.meta_label = ctk.CTkLabel(
             self.meta_frame,
@@ -142,7 +154,7 @@ class StatusFrameView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def set_temporary_status(self, message, duration=3000):
         """Show a temporary message, then restore now-playing display."""
-        self.status_var.set(message)
+        self.title_var.set(message)
         self._cancel_restore_job()
         self._status_restore_job = self.after(duration, self.restore_status)
 
@@ -187,10 +199,8 @@ class StatusFrameView(ctk.CTkFrame):
 
         self._update_artwork(path)
 
-        if artist:
-            self.status_var.set(f"{title} — {artist}")
-        else:
-            self.status_var.set(f"{title}")
+        self.title_var.set(title)
+        self.artist_var.set(artist or "")
 
         parts = []
         if duration_s:
@@ -230,7 +240,8 @@ class StatusFrameView(ctk.CTkFrame):
 
         self.configure(fg_color=frame_bg, bg_color=frame_bg)
         self.status_bg.configure(fg_color=status_bg, bg_color=frame_bg, border_color=status_border)
-        self.status_label.configure(text_color=status_fg, bg_color=status_bg)
+        self.title_label.configure(text_color=status_fg, bg_color=status_bg)
+        self.artist_label.configure(text_color=status_fg, bg_color=status_bg)
         self.meta_label.configure(text_color=meta_fg, bg_color=status_bg)
         self.artwork_label.configure(text_color=meta_fg)
 
@@ -252,7 +263,8 @@ class StatusFrameView(ctk.CTkFrame):
     # Internal helpers
     # ------------------------------------------------------------------
     def _clear_status(self) -> None:
-        self.status_var.set("")
+        self.title_var.set("")
+        self.artist_var.set("")
         self.meta_var.set("")
         self.artwork_label.configure(image=None)
         self.artwork_label.image = None

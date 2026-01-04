@@ -75,8 +75,9 @@ class TestMuteSettings(unittest.TestCase):
 
     def test_mute_property_default(self):
         """Test mute property defaults to False."""
-        settings = Settings()
-        self.assertFalse(settings.mute)
+        with patch.object(Settings, 'load'):
+            settings = Settings()
+            self.assertFalse(settings.mute)
 
     def test_mute_property_set(self):
         """Test mute property can be set."""
