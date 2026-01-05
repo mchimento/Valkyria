@@ -592,7 +592,7 @@ class MediaInfoWindow:
             for key, entry in self.entries.items():
                 val = entry.get().strip()
                 if key == 'bpm' and hasattr(entry, 'raw_value'):
-                    if val:
+                    if entry.raw_value is not None:
                         metadata_to_save[key] = entry.raw_value
                     else:
                         metadata_to_save[key] = val
