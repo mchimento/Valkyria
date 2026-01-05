@@ -1,6 +1,7 @@
 import tkinter as tk
 import customtkinter as ctk
 from audio.metadata import get_metadata, get_display_bpm, analyze_bpm
+from audio.bpm import analyze_bpm_worker, save_bpm_worker
 
 import logging
 import threading
@@ -34,6 +35,10 @@ class DJFrameView(ctk.CTkFrame):
         self.limiter_activity = 0.0  # Limiter activity (0.0 to 1.0)
         self.energy_level = 0.0  # Energy level (0.0 to 1.0)
 
+        # BPM analysis state
+        self.current_temp_bpm = None
+        self.temporary_bpm_files = set()
+
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
 
         # Get root window for thread-safe UI updates
@@ -62,7 +67,7 @@ class DJFrameView(ctk.CTkFrame):
         )
         self.dj_bg.pack(fill=tk.X, pady=(3, 0), padx=0)
 
-        self.dj_content = ctk.CTkFrame(self.dj_bg, fg_color="transparent", height=120)
+        self.dj_content = ctk.CTkFrame(self.dj_bg, fg_color="transparent", height=160)
         self.dj_content.pack(fill=tk.X, padx=12, pady=10)
         self.dj_content.pack_propagate(False)
 
@@ -247,6 +252,28 @@ class DJFrameView(ctk.CTkFrame):
         self.energy_canvas.pack(side=tk.LEFT, padx=(10, 0), pady=(0, 0))
         self._draw_energy_meter(dj_border, dj_bg)
 
+        # Metadata button
+        bpm_button_row = ctk.CTkFrame(self.right_column, fg_color="transparent", height=30)
+        bpm_button_row.pack(side=tk.TOP, fill=tk.X, pady=(2, 3))
+
+        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
+        btn_fg = self.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
+
+        self.btn_bpm = ctk.CTkButton(
+            bpm_button_row,
+            text="Save BPM",
+            command=self._on_bpm_button_click,
+            width=120,
+            height=25,
+            font=ctk.CTkFont(size=11),
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            text_color_disabled=btn_fg,
+            hover_color=btn_hover,
+        )
+        # Button starts hidden - only shown after BPM estimation
+
     def _draw_limiter_meter(self, border_color, bg_color):
         """Draw the horizontal limiter activity meter"""
         self.limiter_canvas.delete("all")
@@ -367,8 +394,12 @@ class DJFrameView(ctk.CTkFrame):
         display_bpm = get_display_bpm(bpm)
         if display_bpm:
             self.bpm_var.set(display_bpm)
+            # Hide save button when BPM comes from metadata
+            self.btn_bpm.pack_forget()
         else:
             self.bpm_var.set("Estimating...")
+            # Hide save button during estimation
+            self.btn_bpm.pack_forget()
 
             def estimate_bpm():
                 try:
@@ -388,16 +419,24 @@ class DJFrameView(ctk.CTkFrame):
                         # If priority setting fails, continue anyway
                         pass
 
-                    # Analyze with reduced duration and sample rate for faster processing
-                    bpm = analyze_bpm(filepath, sr=16000, duration=30)
+                    # Analyze BPM
+                    bpm = analyze_bpm(filepath)
                     display_bpm = get_display_bpm(bpm)
                     if display_bpm:
                         self.bpm_var.set(display_bpm)
+                        # Set the temporary BPM value for saving
+                        self.current_temp_bpm = bpm
+                        # Show save button after successful estimation
+                        self.btn_bpm.pack(side=tk.LEFT, padx=(0, 0))
                     else:
                         self.bpm_var.set("--")
+                        # Keep button hidden if estimation failed
+                        self.btn_bpm.pack_forget()
                 except Exception as e:
-                    logger.error(f"BPM estimation error: {e}")
+                    logger.error(f"BPM estimation error for {filepath}: {e}")
                     self.bpm_var.set("--")
+                    # Keep button hidden on error
+                    self.btn_bpm.pack_forget()
 
             threading.Thread(target=estimate_bpm, daemon=True).start()
 
@@ -453,12 +492,79 @@ class DJFrameView(ctk.CTkFrame):
         self.limiter_activity = 0.0
         self.energy_level = 0.0
         self.lufs_label.configure(text="-60.0")
+        # Hide save button when clearing info
+        self.btn_bpm.pack_forget()
         is_dark = self.settings.theme.lower() == "dark"
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
         self._draw_peak_meter(dj_border, dj_bg)
         self._draw_limiter_meter(dj_border, dj_bg)
         self._draw_energy_meter(dj_border, dj_bg)
+
+    # ------------------------------------------------------------------
+    # BPM logic
+    # ------------------------------------------------------------------
+    def _on_bpm_button_click(self):
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+
+            filepath = self.state.playlist[idx]
+
+            # Button is only shown for saving estimated BPM
+            if self.current_temp_bpm is not None:
+                self.btn_bpm.configure(state="disabled", text="Saving...")
+                thread = threading.Thread(
+                    target=self._save_bpm_worker,
+                    args=(filepath, self.current_temp_bpm),
+                    daemon=True,
+                )
+                thread.start()
+        except Exception as exc:
+            logger.error("Error in BPM button click: %s", exc)
+            self._reset_bpm_button()
+
+    def _analyze_bpm_worker(self, filepath):
+        # Use self as the root for after calls
+        analyze_bpm_worker(filepath, self, self._on_bpm_analysis_complete)
+
+    def _on_bpm_analysis_complete(self, filepath, bpm_value):
+        try:
+            if bpm_value is not None:
+                self.current_temp_bpm = bpm_value
+                self.temporary_bpm_files.add(filepath)
+                # Update the BPM display
+                self.bpm_var.set(get_display_bpm(bpm_value))
+                # Button is already shown in update_info after estimation
+            else:
+                # Keep button hidden if analysis failed
+                self.btn_bpm.pack_forget()
+        except Exception as exc:
+            logger.error("Error handling BPM analysis completion: %s", exc)
+            self.btn_bpm.pack_forget()
+
+    def _reset_bpm_button(self):
+        self.btn_bpm.configure(state="normal", text="Save BPM")
+        self.current_temp_bpm = None
+
+    def _save_bpm_worker(self, filepath, bpm_value):
+        # Use self as the root for after calls
+        save_bpm_worker(filepath, bpm_value, self, self._on_bpm_save_complete)
+
+    def _on_bpm_save_complete(self, filepath, success):
+        try:
+            if success:
+                self.current_temp_bpm = None
+                self.temporary_bpm_files.discard(filepath)
+                # Hide button after successful save
+                self.btn_bpm.pack_forget()
+            else:
+                # Reset button on failure
+                self._reset_bpm_button()
+        except Exception as exc:
+            logger.error("Error handling BPM save completion: %s", exc)
+            self._reset_bpm_button()
 
     def update_theme(self):
         """Update colors based on current theme"""
