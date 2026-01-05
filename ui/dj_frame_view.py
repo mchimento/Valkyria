@@ -1,8 +1,9 @@
 import tkinter as tk
 import customtkinter as ctk
-from audio.metadata import get_metadata
+from audio.metadata import get_metadata, get_display_bpm, analyze_bpm
 
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -271,10 +272,42 @@ class DJFrameView(ctk.CTkFrame):
 
         # Update BPM
         bpm = meta.get("bpm")
-        if bpm:
-            self.bpm_var.set(f"{int(bpm)}")
+        display_bpm = get_display_bpm(bpm)
+        if display_bpm:
+            self.bpm_var.set(display_bpm)
         else:
-            self.bpm_var.set("--")
+            self.bpm_var.set("Estimating...")
+
+            def estimate_bpm():
+                try:
+                    import os
+                    import sys
+                    # Lower thread priority to avoid interfering with audio playback
+                    try:
+                        if sys.platform == 'win32':
+                            import ctypes
+                            # Windows: Set thread priority to below normal
+                            handle = ctypes.windll.kernel32.GetCurrentThread()
+                            ctypes.windll.kernel32.SetThreadPriority(handle, -1)
+                        else:
+                            # Unix/Linux/Mac: Increase nice value (lower priority)
+                            os.nice(10)
+                    except Exception:
+                        # If priority setting fails, continue anyway
+                        pass
+
+                    # Analyze with reduced duration and sample rate for faster processing
+                    bpm = analyze_bpm(filepath, sr=16000, duration=30)
+                    display_bpm = get_display_bpm(bpm)
+                    if display_bpm:
+                        self.bpm_var.set(display_bpm)
+                    else:
+                        self.bpm_var.set("--")
+                except Exception as e:
+                    logger.error(f"BPM estimation error: {e}")
+                    self.bpm_var.set("--")
+
+            threading.Thread(target=estimate_bpm, daemon=True).start()
 
         # Update Key (placeholder - requires key detection implementation)
         # For now, show placeholder
