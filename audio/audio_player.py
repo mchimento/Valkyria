@@ -466,6 +466,7 @@ class AudioPlayer:
                 # Reset audio metrics tracking for new track
                 self._audio_metrics_accumulator = []
                 self._metrics_last_update = 0
+                self._rate_remainder = 0.0
 
                 # Calculate overall LUFS for the entire track (do this before creating buffer)
                 self._overall_lufs = self._calculate_overall_lufs(path)
@@ -493,6 +494,9 @@ class AudioPlayer:
 
                 # Prepare effects for this file
                 self.effects.prepare(self._buffer.samplerate, self._buffer.channels)
+
+                # Reset effects state to prevent ghost sounds from previous tracks
+                self.effects.reset_state()
 
                 self._stream.start()
             except Exception:
@@ -543,6 +547,10 @@ class AudioPlayer:
                 buffer_to_close = self._buffer
                 self._buffer = None
             self._paused = False
+
+            # Reset effects state on stop to ensure no residual audio in buffers
+            if hasattr(self, 'effects'):
+                self.effects.reset_state()
 
         # Perform cleanup outside lock to avoid deadlock with callback
         if stream_to_close:
