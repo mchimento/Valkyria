@@ -329,7 +329,7 @@ class AudioPlayer:
                     logger.error("Error in track end callback", exc_info=True)
 
     def set_lufs_callback(self, callback):
-        """Set callback for LUFS updates. Callback receives lufs_value (float)."""
+        """Set callback for LUFS and energy updates. Callback receives (lufs_value, overall_lufs, energy_level)."""
         with self._lock:
             self._lufs_callback = callback
             logger.info("LUFS callback registered")
@@ -362,9 +362,15 @@ class AudioPlayer:
                     # Clamp to reasonable range
                     lufs = max(-60.0, min(0.0, lufs))
 
-                    # Call the callback with current and pre-computed overall LUFS
+                    # Calculate energy level (normalized 0.0 to 1.0)
+                    # Map RMS to energy: 0.0 = silence, 1.0 = maximum
+                    # Use exponential scaling for better visual representation
+                    energy = min(1.0, avg_rms * 3.0)  # Scale factor to make typical music reach good levels
+                    energy = max(0.0, energy)
+
+                    # Call the callback with current LUFS, overall LUFS, and energy
                     if self._lufs_callback:
-                        self._lufs_callback(lufs, self._overall_lufs)
+                        self._lufs_callback(lufs, self._overall_lufs, energy)
 
                     # Reset short-term accumulator
                     self._lufs_accumulator = []

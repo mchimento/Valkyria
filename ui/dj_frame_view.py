@@ -289,21 +289,29 @@ class DJFrameView(ctk.CTkFrame):
 
             self.energy_canvas.create_rectangle(3, 3, 3 + width, 9, fill=color, outline="")
 
-    def _on_lufs_update(self, lufs_value, overall_lufs_value):
+    def _on_lufs_update(self, lufs_value, overall_lufs_value, energy_level):
         """Called from audio thread; schedule main-thread UI update."""
         try:
             if self._tk_root:
-                self._tk_root.after(0, self._update_lufs_display, lufs_value, overall_lufs_value)
+                self._tk_root.after(0, self._update_lufs_display, lufs_value, overall_lufs_value, energy_level)
         except Exception as e:
             logger.error(f"Error scheduling LUFS update: {e}")
 
-    def _update_lufs_display(self, lufs_value, overall_lufs_value):
-        """Update LUFS labels on main thread."""
+    def _update_lufs_display(self, lufs_value, overall_lufs_value, energy_level):
+        """Update LUFS labels and energy meter on main thread."""
         try:
             self.lufs_value = lufs_value
             self.overall_lufs_value = overall_lufs_value
+            self.energy_level = energy_level
+
             self.lufs_label.configure(text=f"{lufs_value:.1f}")
             self.overall_lufs_label.configure(text=f"{overall_lufs_value:.1f}")
+
+            # Update energy meter
+            is_dark = self.settings.theme.lower() == "dark"
+            dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
+            dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
+            self._draw_energy_meter(dj_border, dj_bg)
         except Exception as e:
             logger.error(f"Error updating LUFS display: {e}")
 

@@ -188,9 +188,9 @@ Displays the maximum instantaneous sample level in the audio stream.
 
 **Note**: Peak is measured after effects are applied but before volume adjustment, ensuring accurate representation of the processed audio signal.
 
-#### LIMIT (Limiter Activity)
+#### Limiter Activity (LIMIT)
 
-Visual bar graph showing compression/limiting activity or signal intensity.
+LIMIT is a visual bar graph showing compression/limiting activity or signal intensity.
 
 * **Display**: Horizontal bar that fills from left to right
 * **Color Coding**:
@@ -200,6 +200,59 @@ Visual bar graph showing compression/limiting activity or signal intensity.
 * **Purpose**: Visual feedback for dynamics monitoring
 
 This meter can be used to monitor how "aggressive" or dynamic the audio content is, helping you understand the compression characteristics of the source material.
+
+#### Energy Analyser (ENERGY)
+
+The Energy Analyser is a real-time intensity meter that visualizes the dynamic energy of the currently playing audio. Unlike LUFS which measures perceived loudness, the energy meter shows the instantaneous power or "intensity" of the audio signal, helping you understand the track's dynamics and energy flow.
+
+* **Display**: Horizontal bar graph that fills from left to right
+* **Range**: 0.0 (silence) to 1.0 (maximum energy)
+* **Update Rate**: ~50ms refresh interval
+* **Color Coding**:
+  * **Blue** (0-40%): Low energy - Quiet passages, ambient sections, intros, soft verses
+  * **Green** (40-70%): Medium energy - Normal verses, moderate dynamics, typical music content
+  * **Red** (70-100%): High energy - Loud choruses, drops, climaxes, heavy instrumentation
+* **Independence**: Unaffected by application volume or system volume settings
+
+**How Energy Differs from LUFS:**
+
+| Metric | LUFS | Energy |
+|--------|------|--------|
+| **Measurement** | Perceived loudness (averaged) | Instantaneous signal power |
+| **Response** | Smoothed over time | Instant response to dynamics |
+| **Scale** | Logarithmic (dB) | Linear (0-1) |
+| **Purpose** | Track loudness monitoring | Dynamic intensity visualization |
+
+**Practical Applications:**
+
+* **DJ Mixing**: Identify energy peaks and valleys for seamless transitions and mix points
+* **Song Structure Analysis**: Visually identify verses (low/medium), choruses (high), bridges, and breakdowns
+* **Energy Matching**: Select tracks with similar energy profiles for playlist continuity
+* **Practice and Performance**: Monitor energy flow for timing cues during live performances or rehearsals
+* **Track Selection**: Quickly assess if a track's energy matches the desired mood or context
+
+**Reading the Energy Meter:**
+
+The energy meter provides instant visual feedback that helps you understand track dynamics at a glance:
+
+* **Consistently Low** (Blue): Ambient, acoustic, ballads, or quiet background music
+* **Moderate with Peaks** (Green/Blue with Red spikes): Dynamic tracks with loud/soft contrast
+* **Consistently High** (Red): Compressed, "loud" modern productions, EDM, heavy rock
+* **Gradual Build** (Blue→Green→Red): Tracks with build-ups leading to drops or climaxes
+
+**Technical Details:**
+
+* **Calculation Method**: Derived from RMS (Root Mean Square) of the audio signal
+* **Scale Factor**: RMS values are normalized and scaled to 0-1 range for intuitive visualization
+* **Measurement Point**: Calculated from source audio after effects but before volume adjustment
+* **Performance**: Minimal CPU impact; calculated alongside LUFS measurements
+
+**Usage Tips:**
+
+* Use the energy meter in combination with LUFS for complete dynamic analysis
+* High energy doesn't necessarily mean high LUFS - a dynamic track can have high peak energy but moderate average LUFS
+* The color-coded display makes it easy to spot energy transitions without watching numbers
+* Perfect for visual cueing when beatmatching or preparing DJ transitions
 
 ### Track Information (Right Column)
 
