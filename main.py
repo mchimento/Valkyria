@@ -4,21 +4,24 @@ Entry point for Tango Studio
 """
 import signal
 import sys
+import logging
 from app.application import TangoStudioApp
 from app.logging_config import setup_logging
 
 # Global reference to app for signal handling
 app_instance = None
 
+logger = logging.getLogger(__name__)
+
 def signal_handler(signum, frame):
     """Handle system signals for clean shutdown."""
-    print(f"\nReceived signal {signum}, shutting down gracefully...")
+    logger.info(f"Received signal {signum}, shutting down gracefully...")
     if app_instance and hasattr(app_instance, 'player'):
         try:
             app_instance.player._cleanup()
-            print("Audio cleanup completed")
+            logger.info("Audio cleanup completed")
         except Exception as e:
-            print(f"Error during audio cleanup: {e}")
+            logger.error(f"Error during audio cleanup: {e}")
     sys.exit(0)
 
 def main():
