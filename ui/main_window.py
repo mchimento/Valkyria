@@ -64,6 +64,7 @@ class MainWindow:
         # Apply initial visibility from settings for playlist and browser
         self.toggle_playlist_visibility()
         self.toggle_browser_visibility()
+        self.toggle_dj_visibility()
 
         # Bind custom events from subcomponents
         self.root.bind("<<BrowserAddSelected>>", self._on_browser_add_selected)
@@ -92,6 +93,8 @@ class MainWindow:
         show_browser_initial = bool(getattr(self.settings, "show_browser", True))
         self.show_playlist_var = tk.BooleanVar(value=show_playlist_initial)
         self.show_browser_var = tk.BooleanVar(value=show_browser_initial)
+        show_dj_initial = bool(getattr(self.settings, "show_dj", True))
+        self.show_dj_var = tk.BooleanVar(value=show_dj_initial)
         self.always_on_top_var = tk.BooleanVar(value=False)
         self.play_on_double_var = tk.BooleanVar(value=bool(getattr(self.settings, "play_on_double", False)))
         self.repeat_mode_var = tk.StringVar(value="none")
@@ -159,6 +162,8 @@ class MainWindow:
              "command": self.toggle_playlist_visibility, "accelerator": "F9"},
             {"label": "Show Browser", "checkbutton": True, "variable": self.show_browser_var,
              "command": self.toggle_browser_visibility, "accelerator": "F10"},
+            {"label": "Show Live Audio Analysis", "checkbutton": True, "variable": self.show_dj_var,
+             "command": self.toggle_dj_visibility, "accelerator": "F11"},
             {"separator": True},
             {"label": "Always on Top", "checkbutton": True, "variable": self.always_on_top_var,
              "command": self.toggle_always_on_top}
@@ -931,6 +936,31 @@ class MainWindow:
             except Exception:
                 pass
 
+    def toggle_dj_visibility(self):
+        """Toggle DJ (Live Audio Analysis) visibility."""
+        if self.show_dj_var.get():
+            try:
+                self.dj_view.pack(side=tk.RIGHT, anchor="n")
+                # Ensure the geometry manager processes the change immediately
+                try:
+                    self.dj_view.update_idletasks()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        else:
+            try:
+                self.dj_view.pack_forget()
+            except Exception:
+                pass
+        # Persist setting
+        if hasattr(self, "settings"):
+            try:
+                self.settings.show_dj = self.show_dj_var.get()
+                self.settings.save()
+            except Exception:
+                pass
+
     def toggle_always_on_top(self):
         """Toggle always on top window attribute."""
         self.root.attributes('-topmost', self.always_on_top_var.get())
@@ -1228,6 +1258,7 @@ class MainWindow:
         # View menu accelerators
         self.root.bind_all("<F9>", lambda e: self._toggle_playlist_visibility())
         self.root.bind_all("<F10>", lambda e: self._toggle_browser_visibility())
+        self.root.bind_all("<F11>", lambda e: self._toggle_dj_visibility())
 
         # Tools menu accelerators
         self.root.bind("<Control-p>", lambda e: self.open_preferences())
@@ -1256,6 +1287,11 @@ class MainWindow:
         """Toggle browser visibility for keyboard accelerator."""
         self.show_browser_var.set(not self.show_browser_var.get())
         self.toggle_browser_visibility()
+
+    def _toggle_dj_visibility(self):
+        """Toggle DJ visibility for keyboard accelerator."""
+        self.show_dj_var.set(not self.show_dj_var.get())
+        self.toggle_dj_visibility()
 
     # ---------- Start UI mainloop ----------
     def start(self):

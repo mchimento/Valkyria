@@ -27,12 +27,16 @@ class TestSettings(unittest.TestCase):
 
             self.assertEqual(settings.theme, "light")
             self.assertIsNone(settings.window_geometry)
+            self.assertTrue(settings.show_playlist)
+            self.assertTrue(settings.show_browser)
+            self.assertTrue(settings.show_dj)
 
     def test_load_with_existing_config(self):
         """Test that Settings.load() correctly loads from existing config file."""
         config_data = {
             "theme": "dark",
-            "window_geometry": "1200x600"
+            "window_geometry": "1200x600",
+            "show_dj": False
         }
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -46,6 +50,7 @@ class TestSettings(unittest.TestCase):
 
                 self.assertEqual(settings.theme, "dark")
                 self.assertEqual(settings.window_geometry, "1200x600")
+                self.assertFalse(settings.show_dj)
         finally:
             Path(temp_path).unlink()
 
@@ -104,6 +109,7 @@ class TestSettings(unittest.TestCase):
                 settings = Settings()
                 settings.theme = "dark"
                 settings.window_geometry = "1024x768"
+                settings.show_dj = False
                 settings.save()
 
                 # Verify file was created
@@ -115,6 +121,7 @@ class TestSettings(unittest.TestCase):
 
                 self.assertEqual(data['theme'], "dark")
                 self.assertEqual(data['window_geometry'], "1024x768")
+                self.assertFalse(data['show_dj'])
 
     def test_save_handles_write_errors(self):
         """Test that Settings.save() handles write errors gracefully."""
@@ -140,6 +147,7 @@ class TestSettings(unittest.TestCase):
                 settings1 = Settings()
                 settings1.theme = "dark"
                 settings1.window_geometry = "800x600"
+                settings1.show_dj = False
                 settings1.save()
 
                 # Load settings in new instance
@@ -147,6 +155,7 @@ class TestSettings(unittest.TestCase):
 
                 self.assertEqual(settings2.theme, "dark")
                 self.assertEqual(settings2.window_geometry, "800x600")
+                self.assertFalse(settings2.show_dj)
 
 
 if __name__ == '__main__':

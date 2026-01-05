@@ -56,7 +56,7 @@ class StatusFrameView(ctk.CTkFrame):
         )
         self.status_bg.pack(fill=tk.X, pady=(3, 0), padx=0)
 
-        self.status_content = ctk.CTkFrame(self.status_bg, fg_color="transparent", height=120)
+        self.status_content = ctk.CTkFrame(self.status_bg, fg_color="transparent", height=127)
         self.status_content.pack(fill=tk.X, padx=12, pady=10)
         self.status_content.pack_propagate(False)
 

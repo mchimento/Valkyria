@@ -222,5 +222,39 @@ class TestMainWindowMenus(unittest.TestCase):
                 pass
 
 
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
+    @patch('ui.main_window.ControlsBar')
+    @patch('ui.main_window.BrowserView')
+    @patch('ui.main_window.PlaylistView')
+    @patch('ui.main_window.TooltipManager')
+    def test_show_live_audio_analysis_toggle(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
+        """Verify the 'Show Live Audio Analysis' menu toggle shows/hides the DJ view."""
+        from ui.main_window import MainWindow
+
+        try:
+            root = tk.Tk()
+            self.root = root
+            main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
+
+            # Ensure variable exists and reflects the setting (defaults to True)
+            self.assertTrue(hasattr(main_window, 'show_dj_var'))
+            self.assertIsInstance(main_window.show_dj_var, tk.BooleanVar)
+
+            # Toggle off and verify DJ view hidden (no geometry manager)
+            main_window.show_dj_var.set(False)
+            main_window.toggle_dj_visibility()
+            self.assertEqual(main_window.dj_view.winfo_manager(), '')
+
+            # Toggle on and verify DJ view is managed by pack
+            main_window.show_dj_var.set(True)
+            main_window.toggle_dj_visibility()
+            self.assertEqual(main_window.dj_view.winfo_manager(), 'pack')
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+
 if __name__ == '__main__':
     unittest.main()

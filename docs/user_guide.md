@@ -715,6 +715,7 @@ Master these shortcuts for efficient navigation and control:
 
 * **F9**: Toggle Playlist Visibility
 * **F10**: Toggle Browser Visibility
+* **F11**: Toggle Live Audio Analysis Panel (Show/Hide)
 
 ### Other
 

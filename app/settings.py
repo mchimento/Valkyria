@@ -18,6 +18,7 @@ class Settings:
         self.mute: bool = False
         self.show_playlist: bool = True
         self.show_browser: bool = True
+        self.show_dj: bool = True
         # BPM preference: 'perceived' maps tempo into 50-100, 'raw' returns detected tempo
         self.bpm_mode: str = 'raw'
         self.load()
@@ -39,6 +40,7 @@ class Settings:
                 self.mute = data.get("mute", self.mute)
                 self.show_playlist = data.get("show_playlist", self.show_playlist)
                 self.show_browser = data.get("show_browser", self.show_browser)
+                self.show_dj = data.get("show_dj", self.show_dj)
                 self.bpm_mode = data.get("bpm_mode", self.bpm_mode)
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
@@ -53,6 +55,7 @@ class Settings:
                 "mute": self.mute,
                 "show_playlist": self.show_playlist,
                 "show_browser": self.show_browser,
+                "show_dj": self.show_dj,
                 "bpm_mode": self.bpm_mode
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
