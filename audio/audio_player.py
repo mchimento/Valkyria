@@ -206,12 +206,12 @@ class AudioPlayer:
         self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
 
-        # LUFS calculation
-        self._lufs_callback = None
-        self._lufs_accumulator = []
+        # Audio metrics calculation (LUFS, Peak dBFS, Energy)
+        self._audio_metrics_callback = None
+        self._audio_metrics_accumulator = []
         self._overall_lufs = -60.0  # Pre-computed overall track LUFS
-        self._lufs_last_update = 0
-        self._lufs_update_interval = 0.05  # Update every 50ms
+        self._metrics_last_update = 0
+        self._metrics_update_interval = 0.05  # Update every 50ms
 
         # Initialize Audio Effects Processor
         self.effects = AudioEffects(AUDIO_CONFIG, AUDIO_DEFAULTS)
@@ -315,8 +315,8 @@ class AudioPlayer:
             vol = self._volume / 100.0
             outdata[:] *= vol
 
-        # Calculate LUFS if callback is registered
-        self._update_lufs(outdata)
+        # Calculate audio metrics if callback is registered
+        self._update_audio_metrics(outdata)
 
     def _on_stream_finished(self):
         """Called when stream finishes (stops or ends)."""
@@ -328,30 +328,42 @@ class AudioPlayer:
                 except Exception:
                     logger.error("Error in track end callback", exc_info=True)
 
-    def set_lufs_callback(self, callback):
-        """Set callback for LUFS and energy updates. Callback receives (lufs_value, overall_lufs, energy_level)."""
+    def set_audio_metrics_callback(self, callback):
+        """Set callback for audio metrics updates. Callback receives (lufs_value, overall_lufs, peak_dbfs, energy_level)."""
         with self._lock:
-            self._lufs_callback = callback
-            logger.info("LUFS callback registered")
+            self._audio_metrics_callback = callback
+            logger.info("Audio metrics callback registered")
 
-    def _update_lufs(self, audio_data):
-        """Calculate and update LUFS from audio data without affecting playback."""
+    def _update_audio_metrics(self, audio_data):
+        """Calculate and update LUFS, Peak dBFS, and energy from audio data without affecting playback."""
         try:
-            if self._lufs_callback is None:
+            if self._audio_metrics_callback is None:
                 return
 
             # Calculate RMS of the audio block
             rms = np.sqrt(np.mean(audio_data ** 2))
 
-            # Accumulate samples for averaging (current LUFS)
-            self._lufs_accumulator.append(rms)
+            # Calculate peak level (maximum absolute sample value)
+            peak = np.max(np.abs(audio_data))
+            if peak > 0:
+                peak_dbfs = 20 * np.log10(peak)
+            else:
+                peak_dbfs = -60.0
+            peak_dbfs = max(-60.0, min(0.0, peak_dbfs))
 
-            # Calculate LUFS periodically
+            # Accumulate samples for averaging (current LUFS)
+            self._audio_metrics_accumulator.append(rms)
+            # Store peak values for periodic update
+            if not hasattr(self, '_peak_accumulator'):
+                self._peak_accumulator = []
+            self._peak_accumulator.append(peak_dbfs)
+
+            # Calculate metrics periodically
             current_time = time.time()
-            if current_time - self._lufs_last_update >= self._lufs_update_interval:
-                if self._lufs_accumulator:
+            if current_time - self._metrics_last_update >= self._metrics_update_interval:
+                if self._audio_metrics_accumulator:
                     # Average RMS over accumulated samples (current LUFS)
-                    avg_rms = np.mean(self._lufs_accumulator)
+                    avg_rms = np.mean(self._audio_metrics_accumulator)
 
                     # Convert to dBFS (approximate LUFS)
                     if avg_rms > 0:
@@ -362,6 +374,12 @@ class AudioPlayer:
                     # Clamp to reasonable range
                     lufs = max(-60.0, min(0.0, lufs))
 
+                    # Get maximum peak from accumulated values
+                    if self._peak_accumulator:
+                        max_peak_dbfs = max(self._peak_accumulator)
+                    else:
+                        max_peak_dbfs = -60.0
+
                     # Calculate energy level (normalized 0.0 to 1.0)
                     # Map RMS to energy: 0.0 = silence, 1.0 = maximum
                     # Use exponential scaling for better visual representation
@@ -370,18 +388,19 @@ class AudioPlayer:
 
                     # Call the callback asynchronously to avoid blocking audio thread
                     # Use threading to prevent UI blocking from affecting audio
-                    if self._lufs_callback:
-                        callback = self._lufs_callback
+                    if self._audio_metrics_callback:
+                        callback = self._audio_metrics_callback
                         threading.Thread(
-                            target=lambda: callback(lufs, self._overall_lufs, energy),
+                            target=lambda: callback(lufs, self._overall_lufs, max_peak_dbfs, energy),
                             daemon=True
                         ).start()
 
-                    # Reset short-term accumulator
-                    self._lufs_accumulator = []
-                    self._lufs_last_update = current_time
+                    # Reset accumulators
+                    self._audio_metrics_accumulator = []
+                    self._peak_accumulator = []
+                    self._metrics_last_update = current_time
         except Exception as e:
-            logger.error(f"Error calculating LUFS: {e}")
+            logger.error(f"Error calculating audio metrics: {e}")
 
     def _calculate_overall_lufs(self, path):
         """Pre-calculate overall LUFS for entire track."""
@@ -434,9 +453,9 @@ class AudioPlayer:
 
         with self._lock:
             try:
-                # Reset LUFS tracking for new track
-                self._lufs_accumulator = []
-                self._lufs_last_update = 0
+                # Reset audio metrics tracking for new track
+                self._audio_metrics_accumulator = []
+                self._metrics_last_update = 0
 
                 # Calculate overall LUFS for the entire track (do this before creating buffer)
                 self._overall_lufs = self._calculate_overall_lufs(path)

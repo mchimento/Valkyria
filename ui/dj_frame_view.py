@@ -39,9 +39,9 @@ class DJFrameView(ctk.CTkFrame):
         # Get root window for thread-safe UI updates
         self._tk_root = master.winfo_toplevel()
 
-        # Register LUFS callback if player provided
+        # Register audio metrics callback if player provided
         if self.player:
-            self.player.set_lufs_callback(self._on_lufs_update)
+            self.player.set_audio_metrics_callback(self._on_lufs_update)
 
     # ------------------------------------------------------------------
     # Construction
@@ -289,23 +289,25 @@ class DJFrameView(ctk.CTkFrame):
 
             self.energy_canvas.create_rectangle(3, 3, 3 + width, 9, fill=color, outline="")
 
-    def _on_lufs_update(self, lufs_value, overall_lufs_value, energy_level):
+    def _on_lufs_update(self, lufs_value, overall_lufs_value, peak_dbfs, energy_level):
         """Called from audio thread; schedule main-thread UI update."""
         try:
             if self._tk_root:
-                self._tk_root.after(0, self._update_lufs_display, lufs_value, overall_lufs_value, energy_level)
+                self._tk_root.after(0, self._update_lufs_display, lufs_value, overall_lufs_value, peak_dbfs, energy_level)
         except Exception as e:
             logger.error(f"Error scheduling LUFS update: {e}")
 
-    def _update_lufs_display(self, lufs_value, overall_lufs_value, energy_level):
-        """Update LUFS labels and energy meter on main thread."""
+    def _update_lufs_display(self, lufs_value, overall_lufs_value, peak_dbfs, energy_level):
+        """Update LUFS, Peak, and energy labels on main thread."""
         try:
             self.lufs_value = lufs_value
             self.overall_lufs_value = overall_lufs_value
+            self.peak_dbfs = peak_dbfs
             self.energy_level = energy_level
 
             self.lufs_label.configure(text=f"{lufs_value:.1f}")
             self.overall_lufs_label.configure(text=f"{overall_lufs_value:.1f}")
+            self.peak_label.configure(text=f"{peak_dbfs:.1f} dBFS")
 
             # Update energy meter
             is_dark = self.settings.theme.lower() == "dark"

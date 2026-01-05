@@ -16,6 +16,11 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
   * [Organizing Your Playlist](#organizing-your-playlist)
   * [Saving Playlists](#saving-playlists)
 * [Live Audio Analysis Panel](#live-audio-analysis-panel)
+  * [LUFS (Loudness Units relative to Full Scale)](#lufs-loudness-units-relative-to-full-scale)
+  * [LUFS Overall](#lufs-overall)
+  * [PEAK dBFS](#peak-dbfs)
+  * [LIMIT (Limiter Activity)](#limit-limiter-activity)
+  * [ENERGY (Energy Analyser)](#energy-energy-analyser)
 * [Audio Effects](#audio-effects)
   * [Equalizer](#equalizer)
   * [Compressor](#compressor)
@@ -168,7 +173,7 @@ Displays the integrated loudness measurement for the entire track from start to 
 * **LUFS**: Fluctuates moment-to-moment (quiet verses vs. loud choruses)
 * **Overall**: Stable average that converges as more of the track plays
 
-#### PEAK (Peak dBFS)
+#### PEAK dBFS
 
 Displays the maximum instantaneous sample level in the audio stream.
 
@@ -188,7 +193,7 @@ Displays the maximum instantaneous sample level in the audio stream.
 
 **Note**: Peak is measured after effects are applied but before volume adjustment, ensuring accurate representation of the processed audio signal.
 
-#### Limiter Activity (LIMIT)
+#### LIMIT (Limiter Activity)
 
 LIMIT is a visual bar graph showing compression/limiting activity or signal intensity.
 
@@ -201,7 +206,7 @@ LIMIT is a visual bar graph showing compression/limiting activity or signal inte
 
 This meter can be used to monitor how "aggressive" or dynamic the audio content is, helping you understand the compression characteristics of the source material.
 
-#### Energy Analyser (ENERGY)
+#### ENERGY (Energy Analyser)
 
 The Energy Analyser is a real-time intensity meter that visualizes the dynamic energy of the currently playing audio. Unlike LUFS which measures perceived loudness, the energy meter shows the instantaneous power or "intensity" of the audio signal, helping you understand the track's dynamics and energy flow.
 
