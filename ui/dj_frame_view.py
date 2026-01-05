@@ -41,7 +41,7 @@ class DJFrameView(ctk.CTkFrame):
 
         # Register audio metrics callback if player provided
         if self.player:
-            self.player.set_audio_metrics_callback(self._on_lufs_update)
+            self.player.set_audio_metrics_callback(self._on_audio_metrics_update)
 
     # ------------------------------------------------------------------
     # Construction
@@ -318,33 +318,35 @@ class DJFrameView(ctk.CTkFrame):
 
             self.energy_canvas.create_rectangle(3, 3, 3 + width, 9, fill=color, outline="")
 
-    def _on_lufs_update(self, lufs_value, overall_lufs_value, peak_dbfs, energy_level):
+    def _on_audio_metrics_update(self, lufs_value, overall_lufs_value, peak_dbfs, limiter_activity, energy_level):
         """Called from audio thread; schedule main-thread UI update."""
         try:
             if self._tk_root:
-                self._tk_root.after(0, self._update_lufs_display, lufs_value, overall_lufs_value, peak_dbfs, energy_level)
+                self._tk_root.after(0, self._update_audio_metrics_display, lufs_value, overall_lufs_value, peak_dbfs, limiter_activity, energy_level)
         except Exception as e:
-            logger.error(f"Error scheduling LUFS update: {e}")
+            logger.error(f"Error scheduling audio metrics update: {e}")
 
-    def _update_lufs_display(self, lufs_value, overall_lufs_value, peak_dbfs, energy_level):
-        """Update LUFS, Peak, and energy labels on main thread."""
+    def _update_audio_metrics_display(self, lufs_value, overall_lufs_value, peak_dbfs, limiter_activity, energy_level):
+        """Update all audio metrics (LUFS, Peak, Limiter, Energy) on main thread."""
         try:
             self.lufs_value = lufs_value
             self.overall_lufs_value = overall_lufs_value
             self.peak_dbfs = peak_dbfs
+            self.limiter_activity = limiter_activity
             self.energy_level = energy_level
 
             self.lufs_label.configure(text=f"{lufs_value:.1f}")
             self.overall_lufs_label.configure(text=f"{overall_lufs_value:.1f}")
 
-            # Update peak and energy meters
+            # Update peak, limiter, and energy meters
             is_dark = self.settings.theme.lower() == "dark"
             dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
             dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
             self._draw_peak_meter(dj_border, dj_bg)
+            self._draw_limiter_meter(dj_border, dj_bg)
             self._draw_energy_meter(dj_border, dj_bg)
         except Exception as e:
-            logger.error(f"Error updating LUFS display: {e}")
+            logger.error(f"Error updating audio metrics display: {e}")
 
     # ------------------------------------------------------------------
     # Public API

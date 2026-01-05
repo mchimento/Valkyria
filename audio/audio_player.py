@@ -329,13 +329,13 @@ class AudioPlayer:
                     logger.error("Error in track end callback", exc_info=True)
 
     def set_audio_metrics_callback(self, callback):
-        """Set callback for audio metrics updates. Callback receives (lufs_value, overall_lufs, peak_dbfs, energy_level)."""
+        """Set callback for audio metrics updates. Callback receives (lufs_value, overall_lufs, peak_dbfs, limiter_activity, energy_level)."""
         with self._lock:
             self._audio_metrics_callback = callback
             logger.info("Audio metrics callback registered")
 
     def _update_audio_metrics(self, audio_data):
-        """Calculate and update LUFS, Peak dBFS, and energy from audio data without affecting playback."""
+        """Calculate and update LUFS, Peak dBFS, limiter activity, and energy from audio data without affecting playback."""
         try:
             if self._audio_metrics_callback is None:
                 return
@@ -380,6 +380,16 @@ class AudioPlayer:
                     else:
                         max_peak_dbfs = -60.0
 
+                    # Calculate limiter activity based on how close the peak is to clipping
+                    # -12 dBFS = 0.0 activity (safe)
+                    # 0 dBFS = 1.0 activity (clipping risk)
+                    # This represents how "hot" the signal is
+                    limiter_activity = 0.0
+                    if max_peak_dbfs > -12.0:
+                        # Normalize from -12..0 to 0..1
+                        limiter_activity = (max_peak_dbfs + 12.0) / 12.0
+                        limiter_activity = max(0.0, min(1.0, limiter_activity))
+
                     # Calculate energy level (normalized 0.0 to 1.0)
                     # Map RMS to energy: 0.0 = silence, 1.0 = maximum
                     # Use exponential scaling for better visual representation
@@ -391,7 +401,7 @@ class AudioPlayer:
                     if self._audio_metrics_callback:
                         callback = self._audio_metrics_callback
                         threading.Thread(
-                            target=lambda: callback(lufs, self._overall_lufs, max_peak_dbfs, energy),
+                            target=lambda: callback(lufs, self._overall_lufs, max_peak_dbfs, limiter_activity, energy),
                             daemon=True
                         ).start()
 
