@@ -4,7 +4,7 @@ from audio.metadata import get_metadata, get_display_bpm, analyze_bpm
 from audio.bpm import analyze_bpm_worker, save_bpm_worker
 
 import logging
-import threading
+import threading, os, sys
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +272,7 @@ class DJFrameView(ctk.CTkFrame):
             text_color_disabled=btn_fg,
             hover_color=btn_hover,
         )
+        self.save_btn.pack_forget()
         # Button starts hidden - only shown after BPM estimation
 
     def _draw_limiter_meter(self, border_color, bg_color):
@@ -394,17 +395,13 @@ class DJFrameView(ctk.CTkFrame):
         display_bpm = get_display_bpm(bpm)
         if display_bpm:
             self.bpm_var.set(display_bpm)
-            # Hide save button when BPM comes from metadata
-            self.save_btn.pack_forget()
         else:
+            if self.bpm_var.get() and self.bpm_var.get() != "--":
+                return
             self.bpm_var.set("Estimating...")
-            # Hide save button during estimation
-            self.save_btn.pack_forget()
 
             def estimate_bpm():
                 try:
-                    import os
-                    import sys
                     # Lower thread priority to avoid interfering with audio playback
                     try:
                         if sys.platform == 'win32':
