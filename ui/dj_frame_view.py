@@ -486,11 +486,12 @@ class DJFrameView(ctk.CTkFrame):
         self.key_label.configure(text_color=dj_fg)
         self.lufs_label.configure(text_color=dj_fg)
         self.overall_lufs_label.configure(text_color=dj_fg)
-        self.peak_label.configure(text_color=dj_fg)
 
         # Update canvas backgrounds
         self.limiter_canvas.configure(bg=dj_bg)
+        self.peak_canvas.configure(bg=dj_bg)
         self.energy_canvas.configure(bg=dj_bg)
 
+        self._draw_peak_meter(dj_border, dj_bg)
         self._draw_limiter_meter(dj_border, dj_bg)
         self._draw_energy_meter(dj_border, dj_bg)
