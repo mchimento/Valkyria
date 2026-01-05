@@ -206,6 +206,13 @@ class AudioPlayer:
         self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
 
+        # LUFS calculation
+        self._lufs_callback = None
+        self._lufs_accumulator = []
+        self._overall_lufs = -60.0  # Pre-computed overall track LUFS
+        self._lufs_last_update = 0
+        self._lufs_update_interval = 0.05  # Update every 50ms
+
         # Initialize Audio Effects Processor
         self.effects = AudioEffects(AUDIO_CONFIG, AUDIO_DEFAULTS)
 
@@ -308,6 +315,9 @@ class AudioPlayer:
             vol = self._volume / 100.0
             outdata[:] *= vol
 
+        # Calculate LUFS if callback is registered
+        self._update_lufs(outdata)
+
     def _on_stream_finished(self):
         """Called when stream finishes (stops or ends)."""
         # Only trigger track end if it wasn't stopped manually or paused
@@ -317,6 +327,90 @@ class AudioPlayer:
                     self.on_track_end()
                 except Exception:
                     logger.error("Error in track end callback", exc_info=True)
+
+    def set_lufs_callback(self, callback):
+        """Set callback for LUFS updates. Callback receives lufs_value (float)."""
+        with self._lock:
+            self._lufs_callback = callback
+            logger.info("LUFS callback registered")
+
+    def _update_lufs(self, audio_data):
+        """Calculate and update LUFS from audio data without affecting playback."""
+        try:
+            if self._lufs_callback is None:
+                return
+
+            # Calculate RMS of the audio block
+            rms = np.sqrt(np.mean(audio_data ** 2))
+
+            # Accumulate samples for averaging (current LUFS)
+            self._lufs_accumulator.append(rms)
+
+            # Calculate LUFS periodically
+            current_time = time.time()
+            if current_time - self._lufs_last_update >= self._lufs_update_interval:
+                if self._lufs_accumulator:
+                    # Average RMS over accumulated samples (current LUFS)
+                    avg_rms = np.mean(self._lufs_accumulator)
+
+                    # Convert to dBFS (approximate LUFS)
+                    if avg_rms > 0:
+                        lufs = 20 * np.log10(avg_rms)
+                    else:
+                        lufs = -60.0
+
+                    # Clamp to reasonable range
+                    lufs = max(-60.0, min(0.0, lufs))
+
+                    # Call the callback with current and pre-computed overall LUFS
+                    if self._lufs_callback:
+                        self._lufs_callback(lufs, self._overall_lufs)
+
+                    # Reset short-term accumulator
+                    self._lufs_accumulator = []
+                    self._lufs_last_update = current_time
+        except Exception as e:
+            logger.error(f"Error calculating LUFS: {e}")
+
+    def _calculate_overall_lufs(self, path):
+        """Pre-calculate overall LUFS for entire track."""
+        try:
+            # Open file separately for analysis
+            with suppress_c_stderr():
+                with sf.SoundFile(path) as audio_file:
+                    samplerate = audio_file.samplerate
+                    channels = audio_file.channels
+
+                    # Read and analyze in chunks to avoid memory issues
+                    chunk_size = 44100  # 1 second at 44.1kHz
+                    rms_values = []
+
+                    while True:
+                        data = audio_file.read(chunk_size, dtype='float32')
+                        if len(data) == 0:
+                            break
+
+                        # Ensure 2D
+                        if data.ndim == 1:
+                            data = data[:, np.newaxis]
+
+                        # Calculate RMS for this chunk
+                        rms = np.sqrt(np.mean(data ** 2))
+                        rms_values.append(rms)
+
+                    # Calculate overall LUFS from all chunks
+                    if rms_values:
+                        overall_rms = np.mean(rms_values)
+                        if overall_rms > 0:
+                            overall_lufs = 20 * np.log10(overall_rms)
+                        else:
+                            overall_lufs = -60.0
+                        return max(-60.0, min(0.0, overall_lufs))
+
+            return -60.0
+        except Exception as e:
+            logger.error(f"Error calculating overall LUFS: {e}")
+            return -60.0
 
     def play(self, path):
         """
@@ -329,6 +423,14 @@ class AudioPlayer:
 
         with self._lock:
             try:
+                # Reset LUFS tracking for new track
+                self._lufs_accumulator = []
+                self._lufs_last_update = 0
+
+                # Calculate overall LUFS for the entire track (do this before creating buffer)
+                self._overall_lufs = self._calculate_overall_lufs(path)
+                logger.info(f"Overall LUFS for track: {self._overall_lufs:.1f}")
+
                 self._buffer = AudioBuffer(path)
                 self._paused = False
                 self._stopped_manually = False

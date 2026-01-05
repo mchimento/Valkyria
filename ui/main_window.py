@@ -236,7 +236,7 @@ class MainWindow:
         self.bottom_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=(12, 12), pady=(0, 20))
 
         # DJ Frame (right-aligned)
-        self.dj_view = DJFrameView(self.bottom_info_frame, self.state, self.theme, self.settings)
+        self.dj_view = DJFrameView(self.bottom_info_frame, self.state, self.theme, self.settings, self.player)
         self.dj_view.pack(side=tk.RIGHT, anchor="n")
 
         # Status bar with CustomTkinter (expands to fill remaining space)
@@ -763,16 +763,16 @@ class MainWindow:
             self.settings.save()
         except Exception:
             logger.error("Failed to save window geometry on exit", exc_info=True)
-        # Stop player
-        try:
-            self.player.stop()
-        except Exception:
-            logger.error("Failed to stop player on exit", exc_info=True)
-        # Destroy window
+        # Destroy window immediately (player cleanup will happen in background)
         try:
             self.root.destroy()
         except Exception:
             logger.error("Failed to destroy window on exit", exc_info=True)
+        # Stop player after window is destroyed (non-blocking for user)
+        try:
+            self.player.stop()
+        except Exception:
+            logger.error("Failed to stop player on exit", exc_info=True)
         logger.info("Tango Studio shut down complete")
 
     # ---------- Playlist operations (menu) ----------

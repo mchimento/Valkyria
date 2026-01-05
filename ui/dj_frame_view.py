@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 class DJFrameView(ctk.CTkFrame):
     """Encapsulates the DJ info display with meter, BPM, Key, and Energy analysis"""
 
-    def __init__(self, master, state, theme_manager, settings):
+    def __init__(self, master, state, theme_manager, settings, player=None):
         self.state = state
         self.theme = theme_manager
         self.settings = settings
+        self.player = player
         self.palette = theme_manager.palette
 
         is_dark = settings.theme.lower() == "dark"
@@ -28,11 +29,19 @@ class DJFrameView(ctk.CTkFrame):
 
         # Audio metering values
         self.lufs_value = -60.0  # LUFS value (-60 to 0)
+        self.overall_lufs_value = -60.0  # Overall track LUFS
         self.peak_dbfs = -60.0   # Peak dBFS (-60 to 0)
         self.limiter_activity = 0.0  # Limiter activity (0.0 to 1.0)
         self.energy_level = 0.0  # Energy level (0.0 to 1.0)
 
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
+
+        # Get root window for thread-safe UI updates
+        self._tk_root = master.winfo_toplevel()
+
+        # Register LUFS callback if player provided
+        if self.player:
+            self.player.set_lufs_callback(self._on_lufs_update)
 
     # ------------------------------------------------------------------
     # Construction
@@ -86,6 +95,30 @@ class DJFrameView(ctk.CTkFrame):
             width=80
         )
         self.lufs_label.pack(side=tk.LEFT)
+
+        # Overall LUFS row
+        overall_lufs_row = ctk.CTkFrame(self.left_column, fg_color="transparent", height=25)
+        overall_lufs_row.pack(side=tk.TOP, fill=tk.X, pady=(0, 3))
+
+        overall_lufs_title = ctk.CTkLabel(
+            overall_lufs_row,
+            text="Overall",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=meta_fg,
+            anchor="w",
+            width=50
+        )
+        overall_lufs_title.pack(side=tk.LEFT)
+
+        self.overall_lufs_label = ctk.CTkLabel(
+            overall_lufs_row,
+            text="-60.0",
+            font=ctk.CTkFont(size=13),
+            text_color=dj_fg,
+            anchor="e",
+            width=80
+        )
+        self.overall_lufs_label.pack(side=tk.LEFT)
 
         # PEAK row
         peak_row = ctk.CTkFrame(self.left_column, fg_color="transparent", height=30)
@@ -255,6 +288,24 @@ class DJFrameView(ctk.CTkFrame):
                 color = "#FF4040"  # Red - high energy
 
             self.energy_canvas.create_rectangle(3, 3, 3 + width, 9, fill=color, outline="")
+
+    def _on_lufs_update(self, lufs_value, overall_lufs_value):
+        """Called from audio thread; schedule main-thread UI update."""
+        try:
+            if self._tk_root:
+                self._tk_root.after(0, self._update_lufs_display, lufs_value, overall_lufs_value)
+        except Exception as e:
+            logger.error(f"Error scheduling LUFS update: {e}")
+
+    def _update_lufs_display(self, lufs_value, overall_lufs_value):
+        """Update LUFS labels on main thread."""
+        try:
+            self.lufs_value = lufs_value
+            self.overall_lufs_value = overall_lufs_value
+            self.lufs_label.configure(text=f"{lufs_value:.1f}")
+            self.overall_lufs_label.configure(text=f"{overall_lufs_value:.1f}")
+        except Exception as e:
+            logger.error(f"Error updating LUFS display: {e}")
 
     # ------------------------------------------------------------------
     # Public API
