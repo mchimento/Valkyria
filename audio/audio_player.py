@@ -368,9 +368,14 @@ class AudioPlayer:
                     energy = min(1.0, avg_rms * 3.0)  # Scale factor to make typical music reach good levels
                     energy = max(0.0, energy)
 
-                    # Call the callback with current LUFS, overall LUFS, and energy
+                    # Call the callback asynchronously to avoid blocking audio thread
+                    # Use threading to prevent UI blocking from affecting audio
                     if self._lufs_callback:
-                        self._lufs_callback(lufs, self._overall_lufs, energy)
+                        callback = self._lufs_callback
+                        threading.Thread(
+                            target=lambda: callback(lufs, self._overall_lufs, energy),
+                            daemon=True
+                        ).start()
 
                     # Reset short-term accumulator
                     self._lufs_accumulator = []
