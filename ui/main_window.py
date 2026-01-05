@@ -15,6 +15,7 @@ from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
 from ui.status_frame_view import StatusFrameView
+from ui.dj_frame_view import DJFrameView
 from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
@@ -230,14 +231,17 @@ class MainWindow:
         # Link browser view to playlist view for drag and drop
         self.browser_view.set_playlist_view(self.playlist_view)
 
-        # Status bar with CustomTkinter
-        self.status_view = StatusFrameView(self.root, self.state, self.theme, self.settings)
-        self.status_view.pack(
-            side=tk.BOTTOM,
-            fill=tk.X,
-            padx=(12, 12),
-            pady=(0, 20)
-        )
+        # Bottom info frames container
+        self.bottom_info_frame = ttk.Frame(self.root, style="TFrame")
+        self.bottom_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=(12, 12), pady=(0, 20))
+
+        # DJ Frame (right-aligned)
+        self.dj_view = DJFrameView(self.bottom_info_frame, self.state, self.theme, self.settings)
+        self.dj_view.pack(side=tk.RIGHT, anchor="n")
+
+        # Status bar with CustomTkinter (expands to fill remaining space)
+        self.status_view = StatusFrameView(self.bottom_info_frame, self.state, self.theme, self.settings)
+        self.status_view.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12), anchor="n")
 
         # Bottom: Controls bar
         self.controls = ControlsBar(
@@ -268,6 +272,7 @@ class MainWindow:
             self._set_track_info_enabled(True)
         elif event_type == "stop":
             self.status_view.handle_stop()
+            self.dj_view._clear_info()
             self.state.current_index = None
             self.refresh_all()
             self._update_menu_state()
@@ -510,6 +515,10 @@ class MainWindow:
         # Update status view
         if hasattr(self, 'status_view'):
             self.status_view.update_theme()
+
+        # Update DJ view
+        if hasattr(self, 'dj_view'):
+            self.dj_view.update_theme()
 
         # Update controls
         self.controls.update_theme()
@@ -1181,6 +1190,8 @@ class MainWindow:
         """Restore playing status and populate metadata line."""
         if hasattr(self, 'status_view'):
             self.status_view.restore_status()
+        if hasattr(self, 'dj_view'):
+            self.dj_view.update_info()
 
     # ---------- Keyboard Accelerators ----------
     def _bind_keyboard_accelerators(self):

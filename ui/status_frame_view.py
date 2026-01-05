@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 class StatusFrameView(ctk.CTkFrame):
     """Encapsulates the status bar UI"""
-
     def __init__(self, master, state, theme_manager, settings):
         self.state = state
         self.theme = theme_manager
@@ -27,7 +26,7 @@ class StatusFrameView(ctk.CTkFrame):
         is_dark = settings.theme.lower() == "dark"
         initial_bg = self.palette.get("bg", "#1E1E1E" if is_dark else "#FAFAFA")
 
-        super().__init__(master, fg_color=initial_bg, bg_color=initial_bg, corner_radius=0)
+        super().__init__(master, fg_color=initial_bg, bg_color=initial_bg, corner_radius=0, height=150)
 
         self.title_var = tk.StringVar(value="")
         self.artist_var = tk.StringVar(value="")
@@ -64,7 +63,7 @@ class StatusFrameView(ctk.CTkFrame):
             border_color=status_border,
             border_width=1,
         )
-        self.status_bg.pack(fill=tk.X, pady=(3, 0), padx=0, expand=True)
+        self.status_bg.pack(fill=tk.X, pady=(3, 0), padx=0)
 
         self.status_content = ctk.CTkFrame(self.status_bg, fg_color="transparent", height=120)
         self.status_content.pack(fill=tk.X, padx=12, pady=10)
