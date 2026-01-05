@@ -211,10 +211,52 @@ class AudioPlayer:
 
         logger.info("AudioPlayer initialized (sounddevice)")
 
+    def __del__(self):
+        """Ensure cleanup when AudioPlayer is destroyed."""
+        try:
+            self._cleanup()
+        except Exception:
+            # Ignore errors during destruction
+            pass
+
+    def _cleanup(self):
+        """Comprehensive cleanup of audio resources."""
+        try:
+            # Stop any active playback
+            if hasattr(self, '_stream') and self._stream:
+                try:
+                    self._stream.stop()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+
+            # Close buffer
+            if hasattr(self, '_buffer') and self._buffer:
+                try:
+                    self._buffer.close()
+                except Exception:
+                    pass
+                self._buffer = None
+
+            # Stop all sounddevice operations
+            import sounddevice as sd
+            try:
+                sd.stop()
+            except Exception:
+                pass
+
+        except Exception:
+            # Ensure cleanup doesn't raise exceptions
+            pass
+
     def _stream_callback(self, outdata, frames, time, status):
         """Callback for sounddevice OutputStream."""
         if status:
             logger.warning(f"Audio callback status: {status}")
+
+        # Clear output buffer first to prevent residual audio
+        outdata.fill(0)
 
         data = []
         frames_to_read = frames
@@ -255,6 +297,7 @@ class AudioPlayer:
                 outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
 
         # Apply Audio Effects
+        outdata[:] = data
         outdata[:] = self.effects.process(outdata)
 
         # Apply Volume
