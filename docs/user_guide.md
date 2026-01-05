@@ -20,6 +20,8 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
   * [LUFS Overall](#lufs-overall)
   * [PEAK dBFS](#peak-dbfs)
   * [LIMIT (Limiter Activity)](#limit-limiter-activity)
+  * [BPM Analysis](#bpm-analysis)
+  * [KEY (Musical Key)](#key-musical-key)
   * [ENERGY (Energy Analyser)](#energy-energy-analyser)
 * [Audio Effects](#audio-effects)
   * [Equalizer](#equalizer)
@@ -29,8 +31,6 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
 * [Playback Features](#playback-features)
   * [Crossfade](#crossfade)
   * [Play on Double-Click](#play-on-double-click)
-* [Track Information](#track-information)
-* [BPM Analysis](#bpm-analysis)
 * [Themes](#themes)
 * [Keyboard Shortcuts](#keyboard-shortcuts)
 * [Audio Devices](#audio-devices)
@@ -243,6 +243,54 @@ LIMIT is a visual bar graph showing compression/limiting activity or signal inte
 
 This meter can be used to monitor how "aggressive" or dynamic the audio content is, helping you understand the compression characteristics of the source material.
 
+#### BPM Analysis
+
+BPM (Beats Per Minute) analysis displays the tempo of the currently playing track. For detailed technical information about how BPM analysis works, see the dedicated **BPM Analysis** documentation in the Help menu.
+
+* **Source**: Read from file metadata or calculated via BPM analysis
+* **Display**: Shows "--" when BPM is unavailable or not yet analyzed
+* **Normalization**: Optional automatic adjustment to perceptually accurate tempo range (configurable in Preferences)
+* **Usage**: Essential for DJ mixing, tempo-based playlists, workout music
+
+**How to Populate BPM:**
+
+1. Ensure track is loaded in the playlist and playing
+2. Wait for BPM estimation to complete (typically 3-25 seconds)
+3. Click "Save BPM" to permanently store the value in file metadata
+
+**BPM Normalization**
+
+BPM analysis sometimes produces "half-time" (too slow) or "double-time" (too fast) results. Tango Studio includes optional automatic normalization to bring BPM values into the musically perceived range (80-180 BPM for most music).
+
+**Normalization can be enabled/disabled in Preferences:**
+
+* **Enabled**: BPM values are automatically adjusted to match human-perceived tempo (matches professional DJ software)
+* **Disabled**: Raw, unprocessed BPM values from the analysis algorithm
+
+**Note**: Stored BPM values are always in their raw form. Normalization only affects display.
+
+**Usage Tips**
+
+* **Batch Analysis**: Analyze your entire library during idle time, then use BPM values for sorting or DJ mixing
+* **CPU Intensive**: BPM analysis is computationally demanding. Don't analyze many tracks while recording or in other CPU-intensive tasks
+* **File Format Note**: BPM can be saved to MP3, FLAC, M4A, and OGG files. WAV files do not natively support metadata tags
+
+#### KEY (Musical Key)
+
+Displays the musical key/tonality of the track.
+
+* **Source**: Read from file metadata (not automatically detected)
+* **Display**: Shows "--" when key information is unavailable
+* **Format**: Standard musical notation (e.g., "A", "Cm", "F#", "Bbm")
+* **Usage**: Harmonic mixing for DJs, music theory analysis, key-compatible playlist creation
+
+**Common Key Notations:**
+
+* Major keys: C, D, E, F, G, A, B (with sharps # or flats b)
+* Minor keys: Cm, Dm, Em, Fm, Gm, Am, Bm (with sharps # or flats b)
+
+Key information must be present in the audio file's metadata tags. Tango Studio does not automatically detect musical key.
+
 #### ENERGY (Energy Analyser)
 
 The Energy Analyser is a real-time intensity meter that visualizes the dynamic energy of the currently playing audio. Unlike LUFS which measures perceived loudness, the energy meter shows the instantaneous power or "intensity" of the audio signal, helping you understand the track's dynamics and energy flow.
@@ -284,10 +332,10 @@ The energy meter provides instant visual feedback that helps you understand trac
 
 **Technical Details:**
 
-* **Calculation Method**: Derived from RMS (Root Mean Square) of the audio signal
-* **Scale Factor**: RMS values are normalized and scaled to 0-1 range for intuitive visualization
-* **Measurement Point**: Calculated from source audio after effects but before volume adjustment
-* **Performance**: Minimal CPU impact; calculated alongside LUFS measurements
+* **Measurement Independence**: LUFS and Peak measurements are calculated from the source audio after effects but before volume/muting is applied, ensuring accurate readings regardless of playback volume
+* **Thread Safety**: All meter updates are performed in a thread-safe manner, preventing UI blocking or audio dropouts
+* **Precision**: LUFS calculations use industry-standard RMS-to-dBFS conversion algorithms for broadcast-quality loudness metering
+* **Performance**: Real-time audio analysis has negligible CPU impact and does not affect audio quality or latency
 
 **Usage Tips:**
 
@@ -295,78 +343,6 @@ The energy meter provides instant visual feedback that helps you understand trac
 * High energy doesn't necessarily mean high LUFS - a dynamic track can have high peak energy but moderate average LUFS
 * The color-coded display makes it easy to spot energy transitions without watching numbers
 * Perfect for visual cueing when beatmatching or preparing DJ transitions
-
-### Track Information (Right Column)
-
-#### BPM (Beats Per Minute)
-
-Displays the tempo of the currently playing track.
-
-* **Source**: Read from file metadata or calculated via BPM analysis
-* **Display**: Shows "--" when BPM is unavailable or not yet analyzed
-* **Normalization**: Optional automatic adjustment to perceptually accurate tempo range (configurable in Preferences)
-* **Usage**: Essential for DJ mixing, tempo-based playlists, workout music
-
-**How to Populate BPM:**
-1. Ensure track is loaded in the playlist
-2. Click "Analyze BPM" button in the status bar
-3. Wait for analysis to complete (typically 5-30 seconds)
-4. Click "Save BPM" to permanently store the value in file metadata
-
-See the [BPM Analysis](#bpm-analysis) section for comprehensive details on tempo detection.
-
-#### KEY (Musical Key)
-
-Displays the musical key/tonality of the track.
-
-* **Source**: Read from file metadata (not automatically detected)
-* **Display**: Shows "--" when key information is unavailable
-* **Format**: Standard musical notation (e.g., "A", "Cm", "F#", "Bbm")
-* **Usage**: Harmonic mixing for DJs, music theory analysis, key-compatible playlist creation
-
-**Common Key Notations:**
-* Major keys: C, D, E, F, G, A, B (with sharps # or flats b)
-* Minor keys: Cm, Dm, Em, Fm, Gm, Am, Bm (with sharps # or flats b)
-
-Key information must be present in the audio file's metadata tags. Tango Studio does not automatically detect musical key.
-
-#### ENERGY (Energy Level)
-
-Visual bar graph representing the overall energy or intensity of the current audio moment.
-
-* **Display**: Horizontal bar that fills from left to right based on signal intensity
-* **Color Coding**:
-  * Blue (0-40%): Low energy (ambient, quiet passages, intros)
-  * Green (40-70%): Medium energy (verses, moderate dynamics)
-  * Red (70-100%): High energy (choruses, drops, climaxes)
-* **Update Rate**: Real-time response to audio dynamics
-* **Purpose**: Quick visual reference for track energy and dynamics
-
-The energy meter helps you identify the intensity of different sections of a song at a glance, useful for:
-* Finding build-ups and drops for DJ mixing
-* Understanding song structure visually
-* Selecting tracks for specific moods or contexts
-
-### Panel Visibility
-
-The Live Audio Analysis Panel is always visible during playback and updates continuously. All values reset to default when playback is stopped:
-
-* LUFS: -60.0
-* Overall: -60.0
-* Peak: -60.0 dBFS
-* BPM: "--" (preserved from metadata)
-* Key: "--" (preserved from metadata)
-* Energy: 0% (empty bar)
-* Limit: 0% (empty bar)
-
-### Technical Notes
-
-* **Measurement Independence**: LUFS and Peak measurements are calculated from the source audio after effects but before volume/muting is applied, ensuring accurate readings regardless of playback volume
-* **Thread Safety**: All meter updates are performed in a thread-safe manner, preventing UI blocking or audio dropouts
-* **Precision**: LUFS calculations use industry-standard RMS-to-dBFS conversion algorithms for broadcast-quality loudness metering
-* **Performance**: Real-time audio analysis has negligible CPU impact and does not affect audio quality or latency
-
-
 
 ## Audio Effects
 
@@ -611,42 +587,6 @@ The Track Information window displays comprehensive metadata and technical detai
 
 If embedded in the file metadata, the album artwork is displayed at full resolution. You can also access artwork via **Playback → Operations → Show Album Booklet** (Ctrl+B).
 
-## BPM Analysis
-
-Tango Studio includes sophisticated automatic BPM (Beats Per Minute) detection. For detailed technical information about how BPM analysis works, see the dedicated **BPM Analysis** documentation in the Help menu.
-
-### Quick Start Guide
-
-1. **Play or select a track**: The track must be in the playlist
-2. **Click "Analyze BPM"**: Button appears in the status bar when a track is loaded
-3. **Wait for analysis**: Progress indicated by "Analyzing..." status. Typically takes 5-30 seconds depending on file length and CPU speed
-4. **Review the result**: BPM value is displayed in the status bar and track info
-5. **Save to file**: Click "Save BPM" to write the value permanently to the file's metadata
-
-### BPM Display
-
-BPM values are shown in multiple locations:
-
-* **Status Bar**: Displays BPM of currently playing track
-* **Playlist**: Optional BPM column (can be enabled in preferences)
-* **Track Information**: Detailed metadata window
-
-### BPM Normalization
-
-BPM analysis sometimes produces "half-time" (too slow) or "double-time" (too fast) results. Tango Studio includes optional automatic normalization to bring BPM values into the musically perceived range (80-180 BPM for most music).
-
-**Normalization can be enabled/disabled in Preferences:**
-
-* **Enabled**: BPM values are automatically adjusted to match human-perceived tempo (matches professional DJ software)
-* **Disabled**: Raw, unprocessed BPM values from the analysis algorithm
-
-**Note**: Stored BPM values are always in their raw form. Normalization only affects display.
-
-### Usage Tips
-
-* **Batch Analysis**: Analyze your entire library during idle time, then use BPM values for sorting or DJ mixing
-* **CPU Intensive**: BPM analysis is computationally demanding. Don't analyze many tracks while recording or in other CPU-intensive tasks
-* **File Format Note**: BPM can be saved to MP3, FLAC, M4A, and OGG files. WAV files do not natively support metadata tags
 
 ## Themes
 
