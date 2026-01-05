@@ -78,10 +78,10 @@ class DJFrameView(ctk.CTkFrame):
         lufs_title = ctk.CTkLabel(
             lufs_row,
             text="LUFS",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=13, weight="bold"),
             text_color=meta_fg,
             anchor="w",
-            width=50
+            width=100
         )
         lufs_title.pack(side=tk.LEFT)
         self.lufs_title = lufs_title
@@ -89,7 +89,7 @@ class DJFrameView(ctk.CTkFrame):
         self.lufs_label = ctk.CTkLabel(
             lufs_row,
             text="-60.0",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(size=13),
             text_color=dj_fg,
             anchor="e",
             width=80
@@ -102,11 +102,11 @@ class DJFrameView(ctk.CTkFrame):
 
         overall_lufs_title = ctk.CTkLabel(
             overall_lufs_row,
-            text="Overall",
+            text="LUFS (Overall)",
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color=meta_fg,
             anchor="w",
-            width=50
+            width=100
         )
         overall_lufs_title.pack(side=tk.LEFT)
 

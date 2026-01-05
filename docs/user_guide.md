@@ -15,6 +15,7 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
   * [Adding Songs](#adding-songs)
   * [Organizing Your Playlist](#organizing-your-playlist)
   * [Saving Playlists](#saving-playlists)
+* [Live Audio Analysis Panel](#live-audio-analysis-panel)
 * [Audio Effects](#audio-effects)
   * [Equalizer](#equalizer)
   * [Compressor](#compressor)
@@ -129,6 +130,148 @@ Playlists can be saved and loaded for later use:
 * **M3U8 Format**: Playlists are saved in the widely-compatible M3U8 format (UTF-8 encoded M3U), which can be opened in most media players and DJ software.
 
 Playlist files store file paths (absolute by default) and can be edited in any text editor. Relative paths are supported for portable playlists that can be moved between different computers.
+
+## Live Audio Analysis Panel
+
+The Live Audio Analysis Panel is located at the bottom-right corner of Tango Studio and provides real-time audio metrics and track information during playback. This professional-grade metering suite helps you monitor loudness levels, understand track characteristics, and make informed decisions about audio processing.
+
+### Audio Metering (Left Column)
+
+#### LUFS (Loudness Units relative to Full Scale)
+
+Displays the momentary loudness of the currently playing audio in real-time. This measurement updates approximately 20 times per second and represents the perceived loudness of the audio content.
+
+* **Range**: -60.0 to 0.0 LUFS
+* **Update Rate**: ~50ms refresh interval
+* **Independence**: Unaffected by application volume, system volume, or audio effects
+* **Purpose**: Measures the true loudness of the source audio file
+
+**Typical LUFS Values:**
+
+| Range | Description |
+|-------|-------------|
+| **-6 to 0 LUFS** | Very loud (modern pop, EDM, heavily compressed tracks) |
+| **-12 to -6 LUFS** | Loud (rock, commercial radio, most streaming-ready tracks) |
+| **-18 to -12 LUFS** | Moderate (well-mastered albums, classical with dynamics) |
+| **-30 to -18 LUFS** | Quiet (speech, ambient, acoustic recordings) |
+| **Below -30 LUFS** | Very quiet (silence, room noise, intros/outros) |
+
+#### LUFS (Overall)
+
+Displays the integrated loudness measurement for the entire track from start to finish. This value represents the average perceived loudness across the complete duration of the song.
+
+* **Calculation**: Continuously accumulated from track start
+* **Purpose**: Shows overall track loudness for comparison and mastering reference
+* **Usage**: Helps identify tracks that need volume normalization or remastering
+
+**Comparing LUFS and Overall:**
+* **LUFS**: Fluctuates moment-to-moment (quiet verses vs. loud choruses)
+* **Overall**: Stable average that converges as more of the track plays
+
+#### PEAK (Peak dBFS)
+
+Displays the maximum instantaneous sample level in the audio stream.
+
+* **Range**: -60.0 to 0.0 dBFS
+* **Unit**: dBFS (decibels relative to Full Scale)
+* **Warning**: Values near 0 dBFS indicate risk of clipping/distortion
+* **Purpose**: Monitors headroom and prevents digital clipping
+
+**Peak Level Guide:**
+
+| Range | Status | Action |
+|-------|--------|--------|
+| **-12 to 0 dBFS** | Hot signal | Normal for mastered tracks. Watch for 0 dBFS |
+| **-24 to -12 dBFS** | Good level | Healthy signal with adequate headroom |
+| **-40 to -24 dBFS** | Low level | Consider increasing gain or checking source |
+| **Below -40 dBFS** | Very low | Likely a problem with the recording or file |
+
+**Note**: Peak is measured after effects are applied but before volume adjustment, ensuring accurate representation of the processed audio signal.
+
+#### LIMIT (Limiter Activity)
+
+Visual bar graph showing compression/limiting activity or signal intensity.
+
+* **Display**: Horizontal bar that fills from left to right
+* **Color Coding**:
+  * Blue (0-40%): Low activity
+  * Green (40-70%): Moderate activity
+  * Red (70-100%): High activity
+* **Purpose**: Visual feedback for dynamics monitoring
+
+This meter can be used to monitor how "aggressive" or dynamic the audio content is, helping you understand the compression characteristics of the source material.
+
+### Track Information (Right Column)
+
+#### BPM (Beats Per Minute)
+
+Displays the tempo of the currently playing track.
+
+* **Source**: Read from file metadata or calculated via BPM analysis
+* **Display**: Shows "--" when BPM is unavailable or not yet analyzed
+* **Normalization**: Optional automatic adjustment to perceptually accurate tempo range (configurable in Preferences)
+* **Usage**: Essential for DJ mixing, tempo-based playlists, workout music
+
+**How to Populate BPM:**
+1. Ensure track is loaded in the playlist
+2. Click "Analyze BPM" button in the status bar
+3. Wait for analysis to complete (typically 5-30 seconds)
+4. Click "Save BPM" to permanently store the value in file metadata
+
+See the [BPM Analysis](#bpm-analysis) section for comprehensive details on tempo detection.
+
+#### KEY (Musical Key)
+
+Displays the musical key/tonality of the track.
+
+* **Source**: Read from file metadata (not automatically detected)
+* **Display**: Shows "--" when key information is unavailable
+* **Format**: Standard musical notation (e.g., "A", "Cm", "F#", "Bbm")
+* **Usage**: Harmonic mixing for DJs, music theory analysis, key-compatible playlist creation
+
+**Common Key Notations:**
+* Major keys: C, D, E, F, G, A, B (with sharps # or flats b)
+* Minor keys: Cm, Dm, Em, Fm, Gm, Am, Bm (with sharps # or flats b)
+
+Key information must be present in the audio file's metadata tags. Tango Studio does not automatically detect musical key.
+
+#### ENERGY (Energy Level)
+
+Visual bar graph representing the overall energy or intensity of the current audio moment.
+
+* **Display**: Horizontal bar that fills from left to right based on signal intensity
+* **Color Coding**:
+  * Blue (0-40%): Low energy (ambient, quiet passages, intros)
+  * Green (40-70%): Medium energy (verses, moderate dynamics)
+  * Red (70-100%): High energy (choruses, drops, climaxes)
+* **Update Rate**: Real-time response to audio dynamics
+* **Purpose**: Quick visual reference for track energy and dynamics
+
+The energy meter helps you identify the intensity of different sections of a song at a glance, useful for:
+* Finding build-ups and drops for DJ mixing
+* Understanding song structure visually
+* Selecting tracks for specific moods or contexts
+
+### Panel Visibility
+
+The Live Audio Analysis Panel is always visible during playback and updates continuously. All values reset to default when playback is stopped:
+
+* LUFS: -60.0
+* Overall: -60.0
+* Peak: -60.0 dBFS
+* BPM: "--" (preserved from metadata)
+* Key: "--" (preserved from metadata)
+* Energy: 0% (empty bar)
+* Limit: 0% (empty bar)
+
+### Technical Notes
+
+* **Measurement Independence**: LUFS and Peak measurements are calculated from the source audio after effects but before volume/muting is applied, ensuring accurate readings regardless of playback volume
+* **Thread Safety**: All meter updates are performed in a thread-safe manner, preventing UI blocking or audio dropouts
+* **Precision**: LUFS calculations use industry-standard RMS-to-dBFS conversion algorithms for broadcast-quality loudness metering
+* **Performance**: Real-time audio analysis has negligible CPU impact and does not affect audio quality or latency
+
+
 
 ## Audio Effects
 
