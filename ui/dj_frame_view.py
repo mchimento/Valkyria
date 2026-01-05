@@ -38,6 +38,7 @@ class DJFrameView(ctk.CTkFrame):
         # BPM analysis state
         self.current_temp_bpm = None
         self.temporary_bpm_files = set()
+        self._estimating_file = None
 
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
 
@@ -395,10 +396,16 @@ class DJFrameView(ctk.CTkFrame):
         display_bpm = get_display_bpm(bpm)
         if display_bpm:
             self.bpm_var.set(display_bpm)
+            self._estimating_file = None
+            self.current_temp_bpm = None
+            self.save_btn.pack_forget()
         else:
-            if self.bpm_var.get() and self.bpm_var.get() != "--":
+            if self._estimating_file == filepath:
                 return
             self.bpm_var.set("Estimating...")
+            self._estimating_file = filepath
+            self.current_temp_bpm = None
+            self.save_btn.pack_forget()
 
             def estimate_bpm():
                 try:
@@ -418,29 +425,30 @@ class DJFrameView(ctk.CTkFrame):
 
                     # Analyze BPM
                     bpm = analyze_bpm(filepath)
-                    display_bpm = get_display_bpm(bpm)
-                    if display_bpm:
-                        self.bpm_var.set(display_bpm)
-                        # Set the temporary BPM value for saving
-                        self.current_temp_bpm = bpm
-                        # Show save button after successful estimation
-                        self.save_btn.configure(text="Save BPM", state="normal")
-                        self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
-                    else:
-                        self.bpm_var.set("--")
-                        # Keep button hidden if estimation failed
-                        self.save_btn.pack_forget()
+                    self.after(0, lambda: self._finish_estimation(filepath, bpm))
                 except Exception as e:
                     logger.error(f"BPM estimation error for {filepath}: {e}")
-                    self.bpm_var.set("--")
-                    # Keep button hidden on error
-                    self.save_btn.pack_forget()
+                    self.after(0, lambda: self._finish_estimation(filepath, None))
 
             threading.Thread(target=estimate_bpm, daemon=True).start()
 
         # Update Key (placeholder - requires key detection implementation)
         # For now, show placeholder
         self.key_var.set("--")
+
+    def _finish_estimation(self, filepath, bpm):
+        if self._estimating_file != filepath:
+            return
+
+        display_bpm = get_display_bpm(bpm)
+        if display_bpm:
+            self.bpm_var.set(display_bpm)
+            self.current_temp_bpm = bpm
+            self.save_btn.configure(text="Save BPM", state="normal")
+            self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
+        else:
+            self.bpm_var.set("--")
+            self.save_btn.pack_forget()
 
     def update_meter_values(self, lufs=-60.0, peak_dbfs=-60.0, limiter_activity=0.0):
         """Update the meter values
@@ -492,6 +500,8 @@ class DJFrameView(ctk.CTkFrame):
         self.lufs_label.configure(text="-60.0")
         # Hide save button when clearing info
         self.save_btn.pack_forget()
+        self._estimating_file = None
+        self.current_temp_bpm = None
         is_dark = self.settings.theme.lower() == "dark"
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
