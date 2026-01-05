@@ -49,8 +49,8 @@ class DJFrameView(ctk.CTkFrame):
     def _build_widgets(self, is_dark, frame_bg):
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
-        dj_fg = self.palette.get("status_fg", "#202020" if not is_dark else "#FFFFFF")
-        meta_fg = self.palette.get("status_meta_fg", "#505050" if not is_dark else "#E0E0E0")
+        dj_fg = self.palette.get("status_meta_fg", "#202020" if not is_dark else "#FFFFFF")
+        meta_fg = self.palette.get("status_fg", "#505050" if not is_dark else "#E0E0E0")
 
         self.dj_bg = ctk.CTkFrame(
             self,
@@ -89,7 +89,7 @@ class DJFrameView(ctk.CTkFrame):
         self.lufs_label = ctk.CTkLabel(
             lufs_row,
             text="-60.0",
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(size=13, weight="bold"),
             text_color=dj_fg,
             anchor="e",
             width=80
@@ -100,7 +100,7 @@ class DJFrameView(ctk.CTkFrame):
         overall_lufs_row = ctk.CTkFrame(self.left_column, fg_color="transparent", height=25)
         overall_lufs_row.pack(side=tk.TOP, fill=tk.X, pady=(0, 3))
 
-        overall_lufs_title = ctk.CTkLabel(
+        self.overall_lufs_title = ctk.CTkLabel(
             overall_lufs_row,
             text="LUFS (Overall)",
             font=ctk.CTkFont(size=13, weight="bold"),
@@ -108,12 +108,12 @@ class DJFrameView(ctk.CTkFrame):
             anchor="w",
             width=100
         )
-        overall_lufs_title.pack(side=tk.LEFT)
+        self.overall_lufs_title.pack(side=tk.LEFT)
 
         self.overall_lufs_label = ctk.CTkLabel(
             overall_lufs_row,
             text="-60.0",
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(size=13, weight="bold"),
             text_color=dj_fg,
             anchor="e",
             width=80
@@ -435,14 +435,15 @@ class DJFrameView(ctk.CTkFrame):
 
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
-        dj_fg = self.palette.get("status_fg", "#202020" if not is_dark else "#FFFFFF")
-        meta_fg = self.palette.get("status_meta_fg", "#505050" if not is_dark else "#E0E0E0")
+        dj_fg = self.palette.get("status_meta_fg", "#202020" if not is_dark else "#FFFFFF")
+        meta_fg = self.palette.get("status_fg", "#505050" if not is_dark else "#E0E0E0")
 
         self.configure(fg_color=frame_bg, bg_color=frame_bg)
         self.dj_bg.configure(fg_color=dj_bg, bg_color=frame_bg, border_color=dj_border)
 
         # Update title labels
         self.lufs_title.configure(text_color=meta_fg)
+        self.overall_lufs_title.configure(text_color=meta_fg)
         self.peak_title.configure(text_color=meta_fg)
         self.limit_title.configure(text_color=meta_fg)
         self.bpm_title.configure(text_color=meta_fg)
@@ -453,6 +454,7 @@ class DJFrameView(ctk.CTkFrame):
         self.bpm_label.configure(text_color=dj_fg)
         self.key_label.configure(text_color=dj_fg)
         self.lufs_label.configure(text_color=dj_fg)
+        self.overall_lufs_label.configure(text_color=dj_fg)
         self.peak_label.configure(text_color=dj_fg)
 
         # Update canvas backgrounds
