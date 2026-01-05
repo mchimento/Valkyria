@@ -135,15 +135,15 @@ class DJFrameView(ctk.CTkFrame):
         peak_title.pack(side=tk.LEFT)
         self.peak_title = peak_title
 
-        self.peak_label = ctk.CTkLabel(
+        self.peak_canvas = ctk.CTkCanvas(
             peak_row,
-            text="-60.0 dBFS",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=dj_fg,
-            anchor="e",
-            width=80
+            width=80,
+            height=14,
+            bg=dj_bg,
+            highlightthickness=0
         )
-        self.peak_label.pack(side=tk.LEFT)
+        self.peak_canvas.pack(side=tk.LEFT, pady=(0, 0))
+        self._draw_peak_meter(dj_border, dj_bg)
 
         # LIMIT row
         limit_row = ctk.CTkFrame(self.left_column, fg_color="transparent", height=30)
@@ -268,6 +268,35 @@ class DJFrameView(ctk.CTkFrame):
 
             self.limiter_canvas.create_rectangle(3, 3, 3 + width, 9, fill=color, outline="")
 
+    def _draw_peak_meter(self, border_color, bg_color):
+        """Draw the horizontal peak level meter"""
+        self.peak_canvas.delete("all")
+
+        # Draw meter border
+        self.peak_canvas.create_rectangle(1, 1, 79, 11, outline=border_color, width=1)
+
+        # Convert dBFS to 0-1 scale for bar display
+        # -60 dBFS = 0.0 (empty)
+        # 0 dBFS = 1.0 (full/clipping)
+        if self.peak_dbfs > -60.0:
+            normalized_peak = (self.peak_dbfs + 60.0) / 60.0  # Convert -60..0 to 0..1
+            normalized_peak = max(0.0, min(1.0, normalized_peak))
+        else:
+            normalized_peak = 0.0
+
+        if normalized_peak > 0:
+            width = int(75 * normalized_peak)
+
+            # Color gradient based on peak level
+            if normalized_peak < 0.4:
+                color = "#4080FF"  # Blue - low level
+            elif normalized_peak < 0.7:
+                color = "#00FF00"  # Green - good level
+            else:
+                color = "#FF4040"  # Red - hot signal (clipping risk)
+
+            self.peak_canvas.create_rectangle(3, 3, 3 + width, 9, fill=color, outline="")
+
     def _draw_energy_meter(self, border_color, bg_color):
         """Draw the horizontal energy level meter"""
         self.energy_canvas.delete("all")
@@ -307,12 +336,12 @@ class DJFrameView(ctk.CTkFrame):
 
             self.lufs_label.configure(text=f"{lufs_value:.1f}")
             self.overall_lufs_label.configure(text=f"{overall_lufs_value:.1f}")
-            self.peak_label.configure(text=f"{peak_dbfs:.1f} dBFS")
 
-            # Update energy meter
+            # Update peak and energy meters
             is_dark = self.settings.theme.lower() == "dark"
             dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
             dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
+            self._draw_peak_meter(dj_border, dj_bg)
             self._draw_energy_meter(dj_border, dj_bg)
         except Exception as e:
             logger.error(f"Error updating LUFS display: {e}")
@@ -388,12 +417,12 @@ class DJFrameView(ctk.CTkFrame):
 
         # Update labels
         self.lufs_label.configure(text=f"{self.lufs_value:.1f}")
-        self.peak_label.configure(text=f"{self.peak_dbfs:.1f} dBFS")
 
         # Redraw meters
         is_dark = self.settings.theme.lower() == "dark"
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
+        self._draw_peak_meter(dj_border, dj_bg)
         self._draw_limiter_meter(dj_border, dj_bg)
 
     def update_energy_level(self, energy=0.0):
@@ -422,10 +451,10 @@ class DJFrameView(ctk.CTkFrame):
         self.limiter_activity = 0.0
         self.energy_level = 0.0
         self.lufs_label.configure(text="-60.0")
-        self.peak_label.configure(text="-60.0 dBFS")
         is_dark = self.settings.theme.lower() == "dark"
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
+        self._draw_peak_meter(dj_border, dj_bg)
         self._draw_limiter_meter(dj_border, dj_bg)
         self._draw_energy_meter(dj_border, dj_bg)
 

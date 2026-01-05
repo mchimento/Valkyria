@@ -175,23 +175,60 @@ Displays the integrated loudness measurement for the entire track from start to 
 
 #### PEAK dBFS
 
-Displays the maximum instantaneous sample level in the audio stream.
+Displays the maximum instantaneous sample level in the audio stream as a real-time visual bar meter. Unlike numerical displays, the visual bar provides instant feedback on headroom and clipping risk.
 
+* **Display**: Horizontal bar that fills from left to right
 * **Range**: -60.0 to 0.0 dBFS
-* **Unit**: dBFS (decibels relative to Full Scale)
-* **Warning**: Values near 0 dBFS indicate risk of clipping/distortion
+* **Update Rate**: ~50ms refresh interval
+* **Independence**: Unaffected by application volume or system volume settings
 * **Purpose**: Monitors headroom and prevents digital clipping
+* **Warning**: Bar approaching full (red) indicates risk of clipping/distortion
+
+**Peak Level Color Coding:**
+
+* **Blue** (0-40%): Low level (-60 to -24 dBFS) - Quiet signal, no immediate concern but may indicate recording issues
+* **Green** (40-70%): Good level (-24 to -12 dBFS) - Healthy signal with adequate headroom, optimal for mastered tracks
+* **Red** (70-100%): Hot signal (-12 to 0 dBFS) - Normal for heavily compressed material but watch for clipping
 
 **Peak Level Guide:**
 
-| Range | Status | Action |
-|-------|--------|--------|
-| **-12 to 0 dBFS** | Hot signal | Normal for mastered tracks. Watch for 0 dBFS |
-| **-24 to -12 dBFS** | Good level | Healthy signal with adequate headroom |
-| **-40 to -24 dBFS** | Low level | Consider increasing gain or checking source |
-| **Below -40 dBFS** | Very low | Likely a problem with the recording or file |
+| Range | Color | Status | Action |
+|-------|-------|--------|--------|
+| **-12 to 0 dBFS** | Red | Hot signal | Normal for mastered tracks. Watch for 0 dBFS |
+| **-24 to -12 dBFS** | Green | Good level | Healthy signal with adequate headroom |
+| **-40 to -24 dBFS** | Blue | Low level | Consider increasing gain or checking source |
+| **Below -40 dBFS** | Blue | Very low | Likely a problem with the recording or file |
 
-**Note**: Peak is measured after effects are applied but before volume adjustment, ensuring accurate representation of the processed audio signal.
+**How Peak Differs from LUFS:**
+
+| Metric | Peak dBFS | LUFS |
+|--------|-----------|------|
+| **Measurement** | Maximum instantaneous sample | Perceived loudness (averaged) |
+| **Response** | Immediate peak detection | Smoothed over time |
+| **Purpose** | Headroom monitoring, clipping detection | Loudness perception analysis |
+
+**Reading the Peak Meter:**
+
+The peak meter provides instant visual feedback that helps you monitor signal headroom at a glance:
+
+* **Consistently Blue**: Low-level recording, may need gain adjustment or signal boost
+* **Mostly Green with Occasional Red Spikes**: Normal dynamic tracks with good average level and occasional peaks
+* **Consistently Red**: Compressed/limited material with little dynamic range, watch for clipping
+* **Filling Completely**: Risk of digital clipping and distortion
+
+**Technical Details:**
+
+* **Calculation Method**: Maximum absolute sample value per audio block
+* **Scale Factor**: dBFS values (-60..0) are normalized to 0-1 range for bar visualization
+* **Measurement Point**: Calculated from source audio after effects but before volume adjustment
+* **Performance**: Minimal CPU impact; calculated alongside LUFS and Energy measurements
+
+**Usage Tips:**
+
+* Use the peak meter in combination with LUFS for complete loudness analysis
+* Monitor peak during playback to ensure no unexpected clipping occurs
+* Color-coded display eliminates need to watch numerical values
+* Perfect for identifying mix issues (excessive peaks vs. low average level)
 
 #### LIMIT (Limiter Activity)
 
