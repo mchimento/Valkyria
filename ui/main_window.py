@@ -989,6 +989,12 @@ class MainWindow:
                     self.dj_view.update_idletasks()
                 except Exception:
                     pass
+                # Trigger update to start analysis for current track if playing
+                try:
+                    if self.state.current_index is not None:
+                        self.dj_view.update_info()
+                except Exception:
+                    pass
             except Exception:
                 pass
         else:

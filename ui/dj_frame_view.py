@@ -54,6 +54,13 @@ class DJFrameView(ctk.CTkFrame):
         if self.player:
             self.player.set_audio_metrics_callback(self._on_audio_metrics_update)
 
+    def is_visible(self):
+        """Check if the DJ frame is currently visible (packed)."""
+        try:
+            return self.winfo_ismapped()
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
@@ -368,6 +375,10 @@ class DJFrameView(ctk.CTkFrame):
 
     def _on_audio_metrics_update(self, lufs_value, overall_lufs_value, peak_dbfs, limiter_activity, energy_level):
         """Called from audio thread; schedule main-thread UI update."""
+        # Skip if not visible to save CPU
+        if not self.is_visible():
+            return
+
         try:
             if self._tk_root:
                 self._tk_root.after(0, self._update_audio_metrics_display, lufs_value, overall_lufs_value, peak_dbfs, limiter_activity, energy_level)
@@ -419,26 +430,31 @@ class DJFrameView(ctk.CTkFrame):
             self.current_temp_bpm = None
             self.save_btn.pack_forget()
         else:
-            if self._estimating_file == filepath:
+            # Only estimate BPM if visible to save CPU
+            if not self.is_visible():
+                self.bpm_var.set("--")
+                self._estimating_file = None
+                self.current_temp_bpm = None
+                self.save_btn.pack_forget()
+            elif self._estimating_file == filepath:
                 return
-            self.bpm_var.set("Estimating...")
-            self._estimating_file = filepath
-            self.current_temp_bpm = None
-            self.save_btn.pack_forget()
+            else:
+                self.bpm_var.set("Estimating...")
+                self._estimating_file = filepath
+                self.current_temp_bpm = None
+                self.save_btn.pack_forget()
 
-            def estimate_bpm():
-                try:
-                    # Submit to background manager
-                    analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
+                def estimate_bpm():
+                    try:
+                        # Submit to background manager
+                        analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
 
-                except Exception as e:
-                    logger.error(f"BPM estimation error for {filepath}: {e}")
-                    self.after(0, lambda: self._finish_estimation(filepath, None))
+                    except Exception as e:
+                        logger.error(f"BPM estimation error for {filepath}: {e}")
+                        self.after(0, lambda: self._finish_estimation(filepath, None))
 
-            estimate_bpm()
+                estimate_bpm()
 
-        # Update Key (placeholder - requires key detection implementation)
-        # For now, show placeholder
         # Update Key
         key = meta.get("key")
         if key:
@@ -447,22 +463,29 @@ class DJFrameView(ctk.CTkFrame):
             self.current_temp_key = None
             self.save_key_btn.pack_forget()
         else:
-            if self._estimating_key_file == filepath:
+            # Only estimate Key if visible to save CPU
+            if not self.is_visible():
+                self.key_var.set("--")
+                self._estimating_key_file = None
+                self.current_temp_key = None
+                self.save_key_btn.pack_forget()
+            elif self._estimating_key_file == filepath:
                 return
-            self.key_var.set("Estimating...")
-            self._estimating_key_file = filepath
-            self.current_temp_key = None
-            self.save_key_btn.pack_forget()
+            else:
+                self.key_var.set("Estimating...")
+                self._estimating_key_file = filepath
+                self.current_temp_key = None
+                self.save_key_btn.pack_forget()
 
-            def estimate_key():
-                try:
-                    # Key estimation
-                    analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
-                except Exception as e:
-                    logger.error(f"Key estimation error for {filepath}: {e}")
-                    self.after(0, lambda: self._finish_key_estimation(filepath, None))
+                def estimate_key():
+                    try:
+                        # Key estimation
+                        analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
+                    except Exception as e:
+                        logger.error(f"Key estimation error for {filepath}: {e}")
+                        self.after(0, lambda: self._finish_key_estimation(filepath, None))
 
-            estimate_key()
+                estimate_key()
 
     def _finish_estimation(self, filepath, bpm):
         if self._estimating_file != filepath:
