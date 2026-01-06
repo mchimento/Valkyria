@@ -117,7 +117,7 @@ class TestMetadataDisplay(unittest.TestCase):
 
     @patch('audio.metadata.MutagenFile')
     def test_get_metadata_with_key(self, mock_mutagen):
-        """Test that Key metadata is correctly extracted."""
+        """Test that Key metadata is correctly extracted and Camelot mapping is provided."""
         # Mock easy mode with Key tag
         mock_audio = MagicMock()
         mock_audio.keys.return_value = ['title', 'key']
@@ -145,6 +145,51 @@ class TestMetadataDisplay(unittest.TestCase):
         # Verify Key was extracted
         self.assertEqual(result['title'], 'Song with Key')
         self.assertEqual(result['key'], 'Am')
+
+    @patch('audio.metadata.MutagenFile')
+    def test_save_metadata_stores_raw_key_and_not_camelot(self, mock_mutagen):
+        """Ensure saving metadata writes raw key string and not Camelot code."""
+        mock_audio = MagicMock()
+        mock_mutagen.return_value = mock_audio
+
+        from audio.metadata import save_metadata, key_to_camelot
+
+        # Sanity check on mapping
+        self.assertEqual(key_to_camelot('Am'), '8A')
+
+        # Perform save
+        result = save_metadata('dummy.mp3', {'key': 'Am'})
+
+        # save_metadata should return True (mocked Mutagen supports easy mode)
+        self.assertTrue(result)
+
+        # Verify raw key was written as the 'key' tag
+        mock_audio.__setitem__.assert_any_call('key', ['Am'])
+
+        # Ensure Camelot code was NOT written as a tag
+        calls = [call.args for call in mock_audio.__setitem__.call_args_list]
+        self.assertNotIn(('camelot', ['8A']), calls)
+
+        # Ensure the file was saved
+        self.assertTrue(mock_audio.save.called)
+
+    def test_key_to_camelot_various(self):
+        """Test Camelot mapping for a variety of common keys."""
+        from audio.metadata import key_to_camelot
+        samples = {
+            'Am': '8A',
+            'A minor': '8A',
+            'C': '8B',
+            'G': '9B',
+            'Em': '9A',
+            'F#': '2B',
+            'F#m': '11A',
+            'Bb': '6B',
+            # Bb minor (relative major = Db/C#) should map to 3A
+            'Bb minor': '3A'
+        }
+        for k, expected in samples.items():
+            self.assertEqual(key_to_camelot(k), expected)
 
 if __name__ == '__main__':
     unittest.main()

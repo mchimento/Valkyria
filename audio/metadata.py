@@ -198,6 +198,12 @@ class MetadataExtractor:
                     pass
 
                 metadata['key'] = key
+                # Also compute Camelot notation for convenience (if key present)
+                try:
+                    camelot = key_to_camelot(key)
+                    metadata['camelot'] = camelot
+                except Exception:
+                    metadata['camelot'] = None
         except Exception as e:
             logger.error(f"Failed to extract metadata from {filepath}: {e}", exc_info=True)
             # Fallback to filename if metadata extraction fails
@@ -333,6 +339,8 @@ class MetadataExtractor:
                         info['metadata']['bpm'] = parsed_meta.get('bpm')
                     if 'key' in parsed_meta:
                         info['metadata']['key'] = parsed_meta.get('key')
+                    if 'camelot' in parsed_meta:
+                        info['metadata']['camelot'] = parsed_meta.get('camelot')
             except Exception:
                 pass
         except Exception:
@@ -725,6 +733,124 @@ def get_display_bpm(bpm):
     # Apply normalization based on preference
     display_bpm = normalize_bpm(bpm_float)
     return str(display_bpm) if display_bpm is not None else ""
+
+
+def key_to_camelot(key_str):
+    """Convert a musical key string to Camelot wheel notation.
+
+    Examples:
+        'A' -> '11B' (A major is 11B)
+        'Am' or 'A minor' -> '8A' (A minor is 8A)
+        'C' -> '8B' (C major is 8B)
+
+    Returns Camelot code like '8A' or '8B' or None if unrecognized.
+    """
+    if not key_str:
+        return None
+
+    s = str(key_str).strip()
+    if s == '':
+        return None
+
+    s = s.replace('\u200b', '')  # remove zero-width spaces
+    s = s.strip()
+
+    # Detect minor/major
+    lower = s.lower()
+    is_minor = False
+    if lower.endswith('m') and len(lower) <= 3:
+        # e.g., 'Am' or 'C#m'
+        root = s[:-1]
+        is_minor = True
+    elif 'minor' in lower:
+        parts = lower.split()
+        root = parts[0]
+        is_minor = True
+    elif 'maj' in lower or 'major' in lower:
+        parts = lower.split()
+        root = parts[0]
+        is_minor = False
+    else:
+        # Assume simple notation: if trailing 'm' already handled, else check uppercase 'm' maybe
+        if s[-1] in ('m', 'M') and len(s) <= 3:
+            root = s[:-1]
+            is_minor = True
+        else:
+            root = s
+            is_minor = False
+
+    root = root.strip()
+    # Normalize root (capitalize letter, keep accidental)
+    if len(root) == 0:
+        return None
+    note_letter = root[0].upper()
+    accidental = ''
+    if len(root) > 1:
+        if root[1] in ('#', 'b', '♯', '♭'):
+            accidental = root[1]
+
+    # Map to semitone (0=C, 1=C#/Db, ... 11=B)
+    note_map = {
+        'C': 0, 'B#': 0,
+        'C#': 1, 'Db': 1,
+        'D': 2,
+        'D#': 3, 'Eb': 3,
+        'E': 4, 'Fb': 4,
+        'F': 5, 'E#': 5,
+        'F#': 6, 'Gb': 6,
+        'G': 7,
+        'G#': 8, 'Ab': 8,
+        'A': 9,
+        'A#': 10, 'Bb': 10,
+        'B': 11, 'Cb': 11
+    }
+
+    # Compose key name
+    root_name = note_letter + accidental
+    # Try direct mapping
+    if root_name in note_map:
+        pc = note_map[root_name]
+    else:
+        # Try enharmonic flips (e.g., handle lowercase b accidentals)
+        alt = root.upper().replace('♭', 'b').replace('♯', '#')
+        if alt in note_map:
+            pc = note_map[alt]
+        else:
+            # Last resort: try single letter only
+            if note_letter in note_map:
+                pc = note_map[note_letter]
+            else:
+                return None
+
+    # Map major root pitch class to Camelot number for major mode
+    major_pc_to_num = {
+        0: 8,   # C
+        7: 9,   # G
+        2: 10,  # D
+        9: 11,  # A
+        4: 12,  # E
+        11: 1,  # B
+        6: 2,   # F#/Gb
+        1: 3,   # C#/Db
+        8: 4,   # Ab/G#
+        3: 5,   # Eb/D#
+        10: 6,  # Bb/A#
+        5: 7    # F
+    }
+
+    if is_minor:
+        # For minor, the Camelot number corresponds to the relative major
+        # which is +3 semitones from minor root
+        major_pc = (pc + 3) % 12
+        num = major_pc_to_num.get(major_pc)
+        if num is None:
+            return None
+        return f"{num}A"
+    else:
+        num = major_pc_to_num.get(pc)
+        if num is None:
+            return None
+        return f"{num}B"
 
 def analyze_bpm(filepath, sr=22050, duration=60):
     try:

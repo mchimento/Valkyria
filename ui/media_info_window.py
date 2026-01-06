@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
 import threading
-from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm, analyze_key
+from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm, analyze_key, key_to_camelot
 from audio.bpm import analysis_manager
 from ui.utils import center_window
 
@@ -300,7 +300,21 @@ class MediaInfoWindow:
 
         if key_val is not None and key_val != "":
             text.insert(tk.END, "Key\n", "label")
-            text.insert(tk.END, f"{key_val}\n\n", "value_highlight")
+            text.insert(tk.END, f"{key_val}\n", "value_highlight")
+
+            # Camelot notation if available; compute from raw key if missing
+            camelot_val = info.get('metadata', {}).get('camelot')
+            try:
+                if not camelot_val and key_val:
+                    # Compute on-the-fly for display if needed
+                    camelot_val = key_to_camelot(key_val)
+
+                if camelot_val:
+                    text.insert(tk.END, f"{camelot_val} (Camelot)\n\n", "value_highlight")
+                else:
+                    text.insert(tk.END, "\n", "value_highlight")
+            except Exception:
+                text.insert(tk.END, "\n\n", "value_highlight")
 
         text.insert(tk.END, "Format\n", "label")
         text.insert(tk.END, f"{info['format']}\n", "value_highlight")
