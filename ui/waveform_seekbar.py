@@ -12,6 +12,9 @@ import sys
 import customtkinter as ctk
 import soundfile as sf
 import numpy as np
+import tempfile
+import subprocess
+import shutil
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
@@ -174,11 +177,34 @@ class WaveformSeekbar(ctk.CTkCanvas):
                         y = y.mean(axis=1)
 
                 except (sf.LibsndfileError, RuntimeError):
-                    # Fallback for MP3 and other formats soundfile can't handle
-                    # Import librosa lazily to avoid import-time warnings from optional backends
-                    with suppress_c_stderr():
-                        import librosa
-                        y, sr = librosa.load(audio_file, sr=None, mono=True)
+                    # Fallback: try ffmpeg decode to WAV and read with soundfile
+                    if shutil.which('ffmpeg'):
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                            tmpname = tmp.name
+                        try:
+                            subprocess.run([
+                                'ffmpeg', '-y', '-i', audio_file,
+                                '-ar', '44100', '-ac', '1', tmpname
+                            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                            try:
+                                y, sr = sf.read(tmpname, dtype='float32', always_2d=False)
+                                if y.ndim > 1:
+                                    y = y.mean(axis=1)
+                            except Exception:
+                                # Fallback to librosa if soundfile can't read decoded WAV
+                                with suppress_c_stderr():
+                                    import librosa
+                                    y, sr = librosa.load(tmpname, sr=None, mono=True)
+                        finally:
+                            try:
+                                os.unlink(tmpname)
+                            except Exception:
+                                pass
+                    else:
+                        # Final fallback to librosa (may use audioread)
+                        with suppress_c_stderr():
+                            import librosa
+                            y, sr = librosa.load(audio_file, sr=None, mono=True)
 
             # Calculate the max peak for every pixel on the canvas
             num_pixels = self.width

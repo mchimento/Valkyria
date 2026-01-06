@@ -647,22 +647,74 @@ def get_display_bpm(bpm):
 
 def analyze_bpm(filepath, sr=22050, duration=60):
     try:
-        import librosa
+        # Prefer soundfile (libsndfile) for reads to avoid pulling in audioread
+        # and its deprecated modules. If soundfile fails for the given format
+        # (e.g., MP3), try an ffmpeg-decoded temporary WAV, and only as a last
+        # resort fall back to librosa.load which may use audioread.
         ext = os.path.splitext(filepath)[1].lower()
-
-        if ext == '.mp3' and shutil.which('ffmpeg'):
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-                tmpname = tmp.name
+        try:
+            import soundfile as sf
             try:
-                subprocess.run([
-                    'ffmpeg', '-y', '-i', filepath,
-                    '-t', str(duration), '-ar', str(sr), '-ac', '1', tmpname
-                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                y, sr_used = librosa.load(tmpname, sr=sr, mono=True)
-            finally:
-                os.unlink(tmpname)
-        else:
-            y, sr_used = librosa.load(filepath, sr=sr, mono=True, duration=duration)
+                # Read up to `duration` seconds to limit work
+                frames = int(sr * duration)
+                data, sr_used = sf.read(filepath, dtype='float32', always_2d=False)
+                # If duration limit is requested, truncate
+                if duration is not None and sr_used and len(data) > frames:
+                    data = data[:frames]
+                y = data
+                if y.ndim > 1:
+                    y = y.mean(axis=1)
+            except Exception:
+                raise
+        except Exception:
+            # If direct soundfile read fails, try ffmpeg decode for MP3/other
+            if shutil.which('ffmpeg'):
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                    tmpname = tmp.name
+                try:
+                    subprocess.run([
+                        'ffmpeg', '-y', '-i', filepath,
+                        '-t', str(duration), '-ar', str(sr), '-ac', '1', tmpname
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    # Read decoded WAV with soundfile if possible
+                    try:
+                        import soundfile as sf2
+                        y, sr_used = sf2.read(tmpname, dtype='float32', always_2d=False)
+                        if y.ndim > 1:
+                            y = y.mean(axis=1)
+                    except Exception:
+                        # Last resort, use librosa to load temp WAV
+                        import librosa
+                        y, sr_used = librosa.load(tmpname, sr=sr, mono=True)
+                finally:
+                    try:
+                        os.unlink(tmpname)
+                    except Exception:
+                        pass
+            else:
+                # As a last resort, use librosa.load which may use audioread
+                import librosa
+                y, sr_used = librosa.load(filepath, sr=sr, mono=True, duration=duration)
+
+        # Ensure audio is at requested sample rate for analysis — resample if needed
+        try:
+            sr_used_int = int(sr_used)
+        except Exception:
+            sr_used_int = None
+
+        if sr_used_int and sr_used_int != sr:
+            try:
+                # Use resample_poly for good quality; reduce up/down by GCD for efficiency
+                from math import gcd
+                import scipy.signal as sps
+                g = gcd(sr, sr_used_int)
+                up = sr // g
+                down = sr_used_int // g
+                # resample_poly expects 1D arrays
+                y = sps.resample_poly(y, up, down)
+                sr_used = sr
+            except Exception as e:
+                logger.debug("Resampling failed (%s), proceeding without resample: %s", (sr_used, sr), e)
 
         return dj_bpm_estimate(y, sr_used)
 
@@ -739,10 +791,16 @@ def dj_bpm_estimate(y, sr):
         # Fallback to beat_track which is more robust in many cases
         try:
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-            if tempo is None or not math.isfinite(tempo) or tempo <= 0:
-                logger.debug("BPM fallback beat_track failed: %s", tempo)
+            # Ensure tempo is a scalar float; handle numpy arrays safely
+            try:
+                tempo_val = float(np.asarray(tempo).item())
+            except Exception:
+                logger.debug("BPM fallback beat_track returned invalid tempo: %s", tempo)
                 return None
-            return float(tempo)
+            if not math.isfinite(tempo_val) or tempo_val <= 0:
+                logger.debug("BPM fallback beat_track failed: %s", tempo_val)
+                return None
+            return float(tempo_val)
         except Exception as e2:
             logger.debug("BPM fallback failed: %s", e2)
             return None
