@@ -27,6 +27,10 @@ def signal_handler(signum, frame):
 def main():
     global app_instance
 
+    # Support for Windows multiprocessing
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     # Setup signal handlers for clean shutdown
     signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal

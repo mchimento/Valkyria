@@ -1,7 +1,7 @@
 import tkinter as tk
 import customtkinter as ctk
 from audio.metadata import get_metadata, get_display_bpm, analyze_bpm
-from audio.bpm import analyze_bpm_worker, save_bpm_worker
+from audio.bpm import bpm_manager
 
 import logging
 import threading, os, sys
@@ -409,28 +409,14 @@ class DJFrameView(ctk.CTkFrame):
 
             def estimate_bpm():
                 try:
-                    # Lower thread priority to avoid interfering with audio playback
-                    try:
-                        if sys.platform == 'win32':
-                            import ctypes
-                            # Windows: Set thread priority to below normal
-                            handle = ctypes.windll.kernel32.GetCurrentThread()
-                            ctypes.windll.kernel32.SetThreadPriority(handle, -1)
-                        else:
-                            # Unix/Linux/Mac: Increase nice value (lower priority)
-                            os.nice(10)
-                    except Exception:
-                        # If priority setting fails, continue anyway
-                        pass
+                    # Submit to background manager
+                    bpm_manager.submit_analysis(filepath, self._on_bpm_analysis_complete, self)
 
-                    # Analyze BPM
-                    bpm = analyze_bpm(filepath)
-                    self.after(0, lambda: self._finish_estimation(filepath, bpm))
                 except Exception as e:
                     logger.error(f"BPM estimation error for {filepath}: {e}")
                     self.after(0, lambda: self._finish_estimation(filepath, None))
 
-            threading.Thread(target=estimate_bpm, daemon=True).start()
+            estimate_bpm()
 
         # Update Key (placeholder - requires key detection implementation)
         # For now, show placeholder
@@ -538,19 +524,14 @@ class DJFrameView(ctk.CTkFrame):
             # Button is only shown for saving estimated BPM
             if self.current_temp_bpm is not None:
                 self.save_btn.configure(state="disabled", text="Saving...")
-                thread = threading.Thread(
-                    target=self._save_bpm_worker,
-                    args=(filepath, self.current_temp_bpm),
-                    daemon=True,
-                )
-                thread.start()
+                self._save_bpm_worker(filepath, self.current_temp_bpm)
         except Exception as exc:
             logger.error("Error in BPM button click: %s", exc)
             self._reset_bpm_button()
 
     def _analyze_bpm_worker(self, filepath):
-        # Use self as the root for after calls
-        analyze_bpm_worker(filepath, self, self._on_bpm_analysis_complete)
+        # Use manager for analysis
+        bpm_manager.submit_analysis(filepath, self._on_bpm_analysis_complete, self)
 
     def _on_bpm_analysis_complete(self, filepath, bpm_value):
         try:
@@ -591,8 +572,8 @@ class DJFrameView(ctk.CTkFrame):
         self.current_temp_bpm = None
 
     def _save_bpm_worker(self, filepath, bpm_value):
-        # Use self as the root for after calls
-        save_bpm_worker(filepath, bpm_value, self, self._on_bpm_save_complete)
+        # Use manager for saving
+        bpm_manager.submit_save(filepath, bpm_value, self._on_bpm_save_complete, self)
 
     def _on_bpm_save_complete(self, filepath, success):
         try:
@@ -654,7 +635,7 @@ class DJFrameView(ctk.CTkFrame):
                         except Exception:
                             pass
                         # Start analyzer in background
-                        threading.Thread(target=lambda: self._analyze_bpm_worker(filepath), daemon=True).start()
+                        self._analyze_bpm_worker(filepath)
                     except Exception as exc:
                         logger.error(f"Failed to re-run BPM estimation: {exc}")
             else:

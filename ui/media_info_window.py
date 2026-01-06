@@ -5,8 +5,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
-import threading
 from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm
+from audio.bpm import bpm_manager
 from ui.utils import center_window
 
 
@@ -622,8 +622,8 @@ class MediaInfoWindow:
             if self.bpm_btn:
                 self.bpm_btn.configure(state="disabled", text="Calculating...")
 
-            thread = threading.Thread(target=self._calculate_bpm_worker, daemon=True)
-            thread.start()
+            # Use manager for analysis
+            bpm_manager.submit_analysis(self.file_path, self._on_bpm_calculation_complete, self.window)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start BPM analysis: {e}", parent=self.window)
@@ -631,18 +631,13 @@ class MediaInfoWindow:
             if self.bpm_btn:
                 self.bpm_btn.configure(state="normal", text="Calculate BPM")
 
-    def _calculate_bpm_worker(self):
-        """Worker function to calculate BPM in background."""
-        try:
-            analyzed_bpm = analyze_bpm(self.file_path)
-            self.window.after(0, self._on_bpm_calculation_complete, analyzed_bpm)
-
-        except Exception as e:
-            self.window.after(0, self._on_bpm_calculation_error, str(e))
-
-    def _on_bpm_calculation_complete(self, bpm_value):
+    def _on_bpm_calculation_complete(self, filepath, bpm_value):
         """Handle BPM calculation completion."""
         try:
+            # Check if filepath matches (though unlikely to mismatch in this modal)
+            if self.file_path != filepath:
+                return
+
             if bpm_value is not None:
                 if hasattr(self, 'entries') and 'bpm' in self.entries:
                     entry = self.entries['bpm']
@@ -656,7 +651,9 @@ class MediaInfoWindow:
                             entry.insert(0, str(bpm_value))
                             entry.raw_value = str(bpm_value)
             else:
-                messagebox.showwarning("BPM Analysis", "Could not calculate BPM for this file.", parent=self.window)
+                pass
+                # Silently fail or could show warning, but standard flow is just nothing happens if invalid
+                # messagebox.showwarning("BPM Analysis", "Could not calculate BPM for this file.", parent=self.window)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process BPM result: {e}", parent=self.window)
