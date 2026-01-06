@@ -244,6 +244,12 @@ class MainWindow:
         self.dj_view = DJFrameView(self.bottom_info_frame, self.state, self.theme, self.settings, self.player)
         self.dj_view.pack(side=tk.RIGHT, anchor="n")
 
+        # Register a global BPM listener so UI components can react when BPM is changed on disk
+        try:
+            metadata_extractor.register_bpm_listener(lambda fp: self._on_global_bpm_update(fp))
+        except Exception:
+            pass
+
         # Status bar with CustomTkinter (expands to fill remaining space)
         self.status_view = StatusFrameView(self.bottom_info_frame, self.state, self.theme, self.settings)
         self.status_view.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12), anchor="n")
@@ -302,6 +308,24 @@ class MainWindow:
         elif event_type == "crossfade":
             # Trigger next track logic when crossfade threshold is reached
             self.handle_track_end()
+
+    def _on_global_bpm_update(self, filepath):
+        """Handle global BPM updates by refreshing DJ view if it affects the current track."""
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+            current_path = self.state.playlist[idx]
+            if os.path.abspath(current_path) != os.path.abspath(filepath):
+                return
+
+            # Schedule update on main thread
+            try:
+                self.root.after(0, self.dj_view._on_bpm_metadata_changed, filepath)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     # ---------- Refresh helpers ----------
     def refresh_all(self):

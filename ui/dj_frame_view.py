@@ -450,6 +450,9 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set("--")
             self.save_btn.pack_forget()
 
+        # Clear estimating marker now that estimation finished (success or failure)
+        self._estimating_file = None
+
     def update_meter_values(self, lufs=-60.0, peak_dbfs=-60.0, limiter_activity=0.0, overall_lufs=None):
         """Update the meter values
 
@@ -551,18 +554,37 @@ class DJFrameView(ctk.CTkFrame):
 
     def _on_bpm_analysis_complete(self, filepath, bpm_value):
         try:
+            # If this was an active estimation request, delegate to _finish_estimation
+            if getattr(self, '_estimating_file', None) == filepath:
+                try:
+                    self._finish_estimation(filepath, bpm_value)
+                    return
+                except Exception:
+                    pass
+
             if bpm_value is not None:
                 self.current_temp_bpm = bpm_value
                 self.temporary_bpm_files.add(filepath)
                 # Update the BPM display
                 self.bpm_var.set(get_display_bpm(bpm_value))
-                # Button is already shown in update_info after estimation
+                # If not part of a direct estimation flow, ensure Save button is visible
+                try:
+                    self.save_btn.configure(text="Save BPM", state="normal")
+                    self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
+                except Exception:
+                    pass
             else:
                 # Keep button hidden if analysis failed
-                self.save_btn.pack_forget()
+                try:
+                    self.save_btn.pack_forget()
+                except Exception:
+                    pass
         except Exception as exc:
             logger.error("Error handling BPM analysis completion: %s", exc)
-            self.save_btn.pack_forget()
+            try:
+                self.save_btn.pack_forget()
+            except Exception:
+                pass
 
     def _reset_bpm_button(self):
         self.save_btn.configure(state="normal", text="Save BPM")
@@ -575,16 +597,74 @@ class DJFrameView(ctk.CTkFrame):
     def _on_bpm_save_complete(self, filepath, success):
         try:
             if success:
-                self.current_temp_bpm = None
+                # Keep the estimated BPM in memory so it can be saved again if the
+                # on-disk metadata changes (e.g., user removes BPM via Media Info)
                 self.temporary_bpm_files.discard(filepath)
                 # Hide button after successful save
                 self.save_btn.pack_forget()
+                # Mark that this file now has a saved BPM on disk
+                self._last_saved_bpm = True
             else:
                 # Reset button on failure
                 self._reset_bpm_button()
         except Exception as exc:
             logger.error("Error handling BPM save completion: %s", exc)
             self._reset_bpm_button()
+
+    def _on_bpm_metadata_changed(self, filepath):
+        """Called when metadata BPM for a file changes on disk.
+
+        If the current track lost its BPM metadata and we have a cached
+        estimated BPM, show the Save button again so the user can re-save it.
+        """
+        try:
+            # Only act if this file is the current track
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+            current_path = self.state.playlist[idx]
+            if os.path.abspath(current_path) != os.path.abspath(filepath):
+                return
+
+            # Refresh stored metadata and inspect BPM
+            meta = get_metadata(filepath)
+            bpm_on_disk = meta.get('bpm')
+
+            if (bpm_on_disk is None or bpm_on_disk == ""):
+                # If we have a cached estimate, show Save button immediately so the user can re-save
+                if getattr(self, 'current_temp_bpm', None) is not None:
+                    try:
+                        self.save_btn.configure(state='normal', text='Save BPM')
+                        self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
+                    except Exception:
+                        pass
+                else:
+                    # No cached estimate: re-run estimation automatically and hide/disable save button
+                    try:
+                        # Set UI to estimating state and start background worker
+                        self._estimating_file = filepath
+                        self.bpm_var.set("Estimating...")
+                        try:
+                            # Disable and hide the button during re-estimation to avoid confusion
+                            try:
+                                self.save_btn.configure(state='disabled')
+                            except Exception:
+                                pass
+                            self.save_btn.pack_forget()
+                        except Exception:
+                            pass
+                        # Start analyzer in background
+                        threading.Thread(target=lambda: self._analyze_bpm_worker(filepath), daemon=True).start()
+                    except Exception as exc:
+                        logger.error(f"Failed to re-run BPM estimation: {exc}")
+            else:
+                # Hide button otherwise
+                try:
+                    self.save_btn.pack_forget()
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error(f"Error handling BPM metadata change for {filepath}: {exc}")
 
     def update_theme(self):
         """Update colors based on current theme"""
