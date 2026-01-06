@@ -11,7 +11,6 @@ import os
 import sys
 import customtkinter as ctk
 import soundfile as sf
-import librosa
 import numpy as np
 from contextlib import contextmanager
 
@@ -176,8 +175,9 @@ class WaveformSeekbar(ctk.CTkCanvas):
 
                 except (sf.LibsndfileError, RuntimeError):
                     # Fallback for MP3 and other formats soundfile can't handle
-                    # Use librosa which handles MP3 and other formats well
+                    # Import librosa lazily to avoid import-time warnings from optional backends
                     with suppress_c_stderr():
+                        import librosa
                         y, sr = librosa.load(audio_file, sr=None, mono=True)
 
             # Calculate the max peak for every pixel on the canvas

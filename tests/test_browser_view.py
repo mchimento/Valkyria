@@ -5,8 +5,7 @@ from unittest.mock import Mock, MagicMock, patch
 import tkinter as tk
 from tkinter import ttk
 
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+from tests.tk_utils import HAS_TK as HAS_DISPLAY
 
 class TestBrowserView(unittest.TestCase):
     """Unit tests for BrowserView class."""
@@ -19,7 +18,10 @@ class TestBrowserView(unittest.TestCase):
     @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     def setUp(self):
         """Set up test fixtures."""
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
 
         # Mock State
         self.mock_state = MagicMock()

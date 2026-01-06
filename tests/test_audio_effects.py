@@ -6,13 +6,7 @@ import numpy as np
 from audio.audio_effects import AudioEffects
 
 # Detect whether Tkinter is available and usable (not just present in the environment)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
-if HAS_DISPLAY:
-    try:
-        _tmp_root = tk.Tk()
-        _tmp_root.destroy()
-    except Exception:
-        HAS_DISPLAY = False
+from tests.tk_utils import HAS_TK as HAS_DISPLAY
 
 
 @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
@@ -21,8 +15,11 @@ class TestAudioEffectsWindow(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.root = tk.Tk()
-        self.root.withdraw()
+        try:
+            self.root = tk.Tk()
+            self.root.withdraw()
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
 
     def tearDown(self):
         """Clean up test resources."""

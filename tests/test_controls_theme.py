@@ -9,8 +9,7 @@ from tkinter import ttk
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
 
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+from tests.tk_utils import HAS_TK as HAS_DISPLAY
 
 class TestControlsTheme(unittest.TestCase):
     """Unit tests for ControlsBar theme functionality."""
@@ -28,7 +27,10 @@ class TestControlsTheme(unittest.TestCase):
     @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     def setUp(self):
         """Set up test fixtures."""
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
 
         self.mock_player = MagicMock()
         self.mock_state = MagicMock()

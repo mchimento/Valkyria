@@ -1,21 +1,12 @@
 import unittest
-import os
 import tkinter as tk
 from unittest.mock import MagicMock
-
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
-if HAS_DISPLAY:
-    try:
-        _tmp = tk.Tk()
-        _tmp.destroy()
-    except Exception:
-        HAS_DISPLAY = False
+from tests.tk_utils import HAS_TK as HAS_DISPLAY, skip_if_no_tk
 
 
-@unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
 class TestDJFrameViewMetrics(unittest.TestCase):
     def setUp(self):
+        skip_if_no_tk(self)
         self.root = tk.Tk()
         self.root.withdraw()
 

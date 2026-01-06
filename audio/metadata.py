@@ -11,7 +11,6 @@ from mutagen.mp4 import MP4, MP4Cover
 import logging
 import shutil, tempfile, subprocess, math, os, glob, io
 from PIL import Image
-import librosa
 import numpy as np
 from math import log
 
@@ -648,6 +647,7 @@ def get_display_bpm(bpm):
 
 def analyze_bpm(filepath, sr=22050, duration=60):
     try:
+        import librosa
         ext = os.path.splitext(filepath)[1].lower()
 
         if ext == '.mp3' and shutil.which('ffmpeg'):
@@ -701,6 +701,7 @@ def dj_bpm_estimate(y, sr):
         return None
 
     try:
+        import librosa
         onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     except Exception as e:
         logger.debug("BPM error computing onset envelope: %s", e)

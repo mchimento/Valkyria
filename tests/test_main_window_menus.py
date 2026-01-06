@@ -8,8 +8,7 @@ import tkinter as tk
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
 
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+from tests.tk_utils import HAS_TK as HAS_DISPLAY
 # Ensure Tk is actually initializable (Windows can report a display but Tk may be broken)
 if HAS_DISPLAY:
     try:
@@ -40,6 +39,12 @@ class TestMainWindowMenus(unittest.TestCase):
     @patch('ui.main_window.PreferencesWindow')
     def setUp(self, mock_prefs, mock_tooltip, mock_playlist_view, mock_browser_view, mock_controls):
         """Set up test fixtures."""
+        try:
+            root = tk.Tk()
+            root.destroy()
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
+
         self.mock_state = MagicMock()
         self.mock_state.playlist = ["/path/to/song1.mp3", "/path/to/song2.mp3"]  # Add songs to playlist
         self.mock_state.current_index = 0
