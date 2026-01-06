@@ -328,6 +328,12 @@ class MetadataExtractor:
             # Clear cache for this file to force refresh
             if file_path in self._cache:
                 del self._cache[file_path]
+            # Notify BPM listeners if BPM is part of the saved metadata
+            try:
+                if 'bpm' in metadata_dict:
+                    self._notify_bpm_listeners(file_path)
+            except Exception:
+                pass
             return True
 
         except Exception:
