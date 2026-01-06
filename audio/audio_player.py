@@ -439,6 +439,31 @@ class AudioPlayer:
             self._audio_metrics_callback = callback
             logger.info("Audio metrics callback registered")
 
+    def _compute_and_notify_overall_lufs(self, path):
+        """Background worker to compute overall LUFS without blocking playback start.
+
+        Once computed, updates internal state and notifies any audio metrics callback so UI can refresh.
+        """
+        try:
+            val = self._calculate_overall_lufs(path)
+            with self._lock:
+                self._overall_lufs = val
+            logger.info(f"Overall LUFS for track (async): {self._overall_lufs:.1f}")
+
+            # If a UI callback is registered, send an update with conservative realtime metrics
+            try:
+                if self._audio_metrics_callback:
+                    # Provide placeholder current metrics (they will be updated by the regular audio metrics path)
+                    try:
+                        self._audio_metrics_callback(-60.0, self._overall_lufs, -60.0, 0.0, 0.0)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except Exception as e:
+            logger.debug(f"Async LUFS calculation failed for {path}: {e}")
+            # Leave overall LUFS as default (-60.0) on failure
+
     def _update_audio_metrics(self, audio_data):
         """Calculate and update LUFS, Peak dBFS, limiter activity, and energy from audio data without affecting playback."""
         try:
@@ -577,13 +602,15 @@ class AudioPlayer:
                 self._metrics_last_update = 0
                 self._rate_remainder = 0.0
 
-                # Calculate overall LUFS for the entire track (do this before creating buffer)
-                self._overall_lufs = self._calculate_overall_lufs(path)
-                logger.info(f"Overall LUFS for track: {self._overall_lufs:.1f}")
-
+                # Start playback immediately; calculate overall LUFS in background to avoid blocking
                 self._buffer = AudioBuffer(path)
                 self._paused = False
                 self._stopped_manually = False
+
+                # Compute overall LUFS asynchronously and notify listeners/UI when ready
+                # Only compute if an audio metrics callback is registered (i.e., UI is listening)
+                if self._audio_metrics_callback:
+                    threading.Thread(target=self._compute_and_notify_overall_lufs, args=(path,), daemon=True).start()
 
                 # Determine device index if set
                 device = None

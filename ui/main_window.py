@@ -984,6 +984,12 @@ class MainWindow:
         if self.show_dj_var.get():
             try:
                 self.dj_view.pack(side=tk.RIGHT, anchor="n")
+                # Register audio metrics callback so player begins producing metrics
+                try:
+                    if hasattr(self, 'player') and hasattr(self.dj_view, '_on_audio_metrics_update'):
+                        self.player.set_audio_metrics_callback(self.dj_view._on_audio_metrics_update)
+                except Exception:
+                    pass
                 # Ensure the geometry manager processes the change immediately
                 try:
                     self.dj_view.update_idletasks()
@@ -999,6 +1005,12 @@ class MainWindow:
                 pass
         else:
             try:
+                # Unregister audio metrics callback to avoid unnecessary computations
+                try:
+                    if hasattr(self, 'player'):
+                        self.player.set_audio_metrics_callback(None)
+                except Exception:
+                    pass
                 self.dj_view.pack_forget()
             except Exception:
                 pass

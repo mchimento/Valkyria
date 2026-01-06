@@ -166,81 +166,134 @@ class WaveformSeekbar(ctk.CTkCanvas):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                # Try soundfile first (handles WAV, FLAC, OGG, etc.)
+
+                # Optimized path: use block/seek sampling using SoundFile to avoid decoding entire file
                 try:
-                    # Suppress C-level warnings from libmpg123
                     with suppress_c_stderr():
-                        y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
+                        sf_f = sf.SoundFile(audio_file)
 
-                    # Convert to mono if stereo
-                    if y.ndim > 1:
-                        y = y.mean(axis=1)
+                    total_frames = len(sf_f)
+                    sr = sf_f.samplerate
 
-                except (sf.LibsndfileError, RuntimeError):
-                    # Fallback: try ffmpeg decode to WAV and read with soundfile
-                    if shutil.which('ffmpeg'):
-                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-                            tmpname = tmp.name
+                    num_pixels = self.width if self.width > 0 else 400
+                    samples_per_pixel = max(1, total_frames // num_pixels)
+
+                    # Read only a small window per pixel (reduces I/O & CPU for large files)
+                    window = min(2048, samples_per_pixel)
+                    peaks = np.zeros(num_pixels, dtype='float32')
+
+                    for i in range(num_pixels):
+                        start_frame = i * samples_per_pixel
                         try:
-                            subprocess.run([
-                                'ffmpeg', '-y', '-i', audio_file,
-                                '-ar', '44100', '-ac', '1', tmpname
-                            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                            try:
-                                y, sr = sf.read(tmpname, dtype='float32', always_2d=False)
-                                if y.ndim > 1:
-                                    y = y.mean(axis=1)
-                            except Exception:
-                                # Fallback to librosa if soundfile can't read decoded WAV
-                                with suppress_c_stderr():
-                                    import librosa
-                                    y, sr = librosa.load(tmpname, sr=None, mono=True)
-                        finally:
-                            try:
-                                os.unlink(tmpname)
-                            except Exception:
-                                pass
-                    else:
-                        # Final fallback to librosa (may use audioread)
+                            sf_f.seek(start_frame)
+                            data = sf_f.read(window, dtype='float32', always_2d=False)
+                        except Exception:
+                            data = None
+
+                        if data is None or len(data) == 0:
+                            peaks[i] = 0.0
+                        else:
+                            if getattr(data, 'ndim', 1) and data.ndim > 1:
+                                data = data.mean(axis=1)
+                            peaks[i] = float(np.max(np.abs(data))) if len(data) > 0 else 0.0
+
+                    try:
+                        sf_f.close()
+                    except Exception:
+                        pass
+
+                    # Normalize the peaks to 0-1 range based on the track's loudest point
+                    if peaks.max() > 0:
+                        peaks = peaks / peaks.max()
+
+                    # Save data and update length
+                    with self.waveform_lock:
+                        self.waveform_data = peaks
+                        self.audio_length = (total_frames / sr) * 1000
+
+                    # Schedule UI update
+                    self.after(0, self._draw_waveform)
+                    return
+
+                except (sf.LibsndfileError, RuntimeError, Exception):
+                    # Fall back to the previous logic which tries soundfile full-read, ffmpeg conversion, or librosa
+                    try:
+                        # Suppress C-level warnings from libmpg123
                         with suppress_c_stderr():
-                            import librosa
-                            y, sr = librosa.load(audio_file, sr=None, mono=True)
+                            y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
 
-            # Calculate the max peak for every pixel on the canvas
-            num_pixels = self.width
-            if num_pixels <= 0: num_pixels = 400 # Fallback
+                        # Convert to mono if stereo
+                        if y.ndim > 1:
+                            y = y.mean(axis=1)
 
-            # Calculate how many audio samples represent one horizontal pixel
-            samples_per_pixel = len(y) // num_pixels
+                    except (sf.LibsndfileError, RuntimeError):
+                        # Fallback: try ffmpeg decode to WAV and read with soundfile
+                        if shutil.which('ffmpeg'):
+                            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                                tmpname = tmp.name
+                            try:
+                                subprocess.run([
+                                    'ffmpeg', '-y', '-i', audio_file,
+                                    '-ar', '44100', '-ac', '1', tmpname
+                                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                                try:
+                                    y, sr = sf.read(tmpname, dtype='float32', always_2d=False)
+                                    if y.ndim > 1:
+                                        y = y.mean(axis=1)
+                                except Exception:
+                                    # Fallback to librosa if soundfile can't read decoded WAV
+                                    with suppress_c_stderr():
+                                        import librosa
+                                        y, sr = librosa.load(tmpname, sr=None, mono=True)
+                            finally:
+                                try:
+                                    os.unlink(tmpname)
+                                except Exception:
+                                    pass
+                        else:
+                            # Final fallback to librosa (may use audioread)
+                            with suppress_c_stderr():
+                                import librosa
+                                y, sr = librosa.load(audio_file, sr=None, mono=True)
 
-            if samples_per_pixel > 0:
-                # Reshape the array to (num_pixels, samples_per_pixel)
-                # and find the absolute maximum in each chunk
-                y_trimmed = y[:num_pixels * samples_per_pixel]
-                chunks = y_trimmed.reshape(num_pixels, samples_per_pixel)
-                peaks = np.max(np.abs(chunks), axis=1)
-            else:
-                # For very short files, just use the raw data
-                peaks = np.abs(y)
+                    # Calculate the max peak for every pixel on the canvas
+                    num_pixels = self.width
+                    if num_pixels <= 0: num_pixels = 400 # Fallback
 
-            # Normalize the peaks to 0-1 range based on the track's loudest point
-            if peaks.max() > 0:
-                peaks = peaks / peaks.max()
+                    # Calculate how many audio samples represent one horizontal pixel
+                    samples_per_pixel = len(y) // num_pixels
 
-            # Save data and update length
-            with self.waveform_lock:
-                self.waveform_data = peaks
-                self.audio_length = (len(y) / sr) * 1000
+                    if samples_per_pixel > 0:
+                        # Reshape the array to (num_pixels, samples_per_pixel)
+                        # and find the absolute maximum in each chunk
+                        y_trimmed = y[:num_pixels * samples_per_pixel]
+                        chunks = y_trimmed.reshape(num_pixels, samples_per_pixel)
+                        peaks = np.max(np.abs(chunks), axis=1)
+                    else:
+                        # For very short files, just use the raw data
+                        peaks = np.abs(y)
 
-            # Schedule UI update
-            self.after(0, self._draw_waveform)
+                    # Normalize the peaks to 0-1 range based on the track's loudest point
+                    if peaks.max() > 0:
+                        peaks = peaks / peaks.max()
+
+                    # Save data and update length
+                    with self.waveform_lock:
+                        self.waveform_data = peaks
+                        self.audio_length = (len(y) / sr) * 1000
+
+                    # Schedule UI update
+                    self.after(0, self._draw_waveform)
 
         except Exception as e:
             logger.error(f"Failed to generate waveform for {audio_file}: {e}")
             # Clear waveform on error and show placeholder
             with self.waveform_lock:
                 self.waveform_data = None
-            self.after(0, self.clear)
+            try:
+                self.after(0, self.clear)
+            except Exception:
+                pass
 
     def _draw_waveform(self):
         self._clear_waveform()
