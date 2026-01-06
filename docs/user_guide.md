@@ -277,17 +277,34 @@ BPM analysis sometimes produces "half-time" (too slow) or "double-time" (too fas
 
 #### KEY (Musical Key)
 
-Displays the musical key/tonality of the track.
+Displays the musical key/tonality of the track using Camelot wheel notation for convenient DJ mixing.
 
-* **Source**: Read from file metadata (not automatically detected)
-* **Display**: Shows "--" when key information is unavailable
-* **Format**: Standard musical notation (e.g., "A", "Cm", "F#", "Bbm")
+* **Source**: Read from file metadata or calculated using the "Calculate Key" control (analysis).
+* **Display**: Shown using the **Camelot wheel** format when available (e.g., `8A` for A minor, `8B` for C major). If Camelot cannot be determined, the raw key (e.g., `Am`, `C`) is shown.
+* **Entry behavior**: The Key input field shows the Camelot code (display-only) for easier DJ use; when you save metadata, the original raw key string is written to the file (no Camelot tag is written).
 * **Usage**: Harmonic mixing for DJs, music theory analysis, key-compatible playlist creation
 
 **Common Key Notations:**
 
 * Major keys: C, D, E, F, G, A, B (with sharps # or flats b)
 * Minor keys: Cm, Dm, Em, Fm, Gm, Am, Bm (with sharps # or flats b)
+
+**Camelot wheel**
+
+Codes useful for harmonic mixing:
+
+| Raw Key | Camelot |
+|---------|---------|
+| C       | 8B      |
+| Am      | 8A      |
+| G       | 9B      |
+| Em      | 9A      |
+| D       | 10B     |
+| Bm      | 10A     |
+| A       | 11B     |
+| F#m     | 11A     |
+| E       | 12B     |
+| C#m     | 12A     |
 
 Key information must be present in the audio file's metadata tags. Tango Studio does not automatically detect musical key.
 
