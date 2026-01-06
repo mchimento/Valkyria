@@ -566,6 +566,10 @@ class AudioPlayer:
         """
         self.stop()
 
+        # Delay to ensure stop() completes and hardware buffers are fully cleared
+        # This prevents ghost sounds from previous track
+        time.sleep(0.05)
+
         with self._lock:
             try:
                 # Reset audio metrics tracking for new track
@@ -589,15 +593,7 @@ class AudioPlayer:
                     except (ValueError, TypeError):
                         device = None
 
-                self._stream = sd.OutputStream(
-                    samplerate=self._buffer.samplerate,
-                    channels=self._buffer.channels,
-                    device=device,
-                    callback=self._stream_callback,
-                    finished_callback=self._on_stream_finished
-                )
-
-                # Prepare effects for this file
+                # Prepare effects for this file BEFORE creating stream
                 self.effects.prepare(self._buffer.samplerate, self._buffer.channels)
 
                 # Reset effects state to prevent ghost sounds from previous tracks
@@ -606,6 +602,14 @@ class AudioPlayer:
                 # Reset resampler state for new track
                 self._resample_buffer = None
                 self._resample_pos = 0.0
+
+                self._stream = sd.OutputStream(
+                    samplerate=self._buffer.samplerate,
+                    channels=self._buffer.channels,
+                    device=device,
+                    callback=self._stream_callback,
+                    finished_callback=self._on_stream_finished
+                )
 
                 self._stream.start()
             except Exception:
@@ -668,7 +672,11 @@ class AudioPlayer:
         # Perform cleanup outside lock to avoid deadlock with callback
         if stream_to_close:
             try:
+                # Use abort() instead of stop() to immediately discard buffered audio
+                # This prevents "ghost sounds" from previous track when changing songs
                 stream_to_close.abort()
+                # Delay to ensure hardware buffer is completely flushed
+                time.sleep(0.03)
                 stream_to_close.close()
             except Exception:
                 logger.error("Failed to stop stream", exc_info=True)
