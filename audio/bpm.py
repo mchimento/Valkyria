@@ -95,6 +95,12 @@ class AnalysisManager:
 
     def _result_listener(self):
         """Listen for results from the background process."""
+        # Import metadata_extractor lazily to avoid import cycles at module init
+        try:
+            from audio.metadata import metadata_extractor
+        except Exception:
+            metadata_extractor = None
+
         while self.running:
             try:
                 try:
@@ -115,6 +121,50 @@ class AnalysisManager:
                     if root_widget:
                         # Schedule callback on main thread
                         root_widget.after(0, callback, filepath, data)
+
+                    # If this was a save operation and it succeeded, update metadata cache
+                    # and notify listeners within the main thread context if possible
+                    if task_type in ('save_bpm', 'save_key') and data:
+                        try:
+                            if root_widget:
+                                def _notify():
+                                    try:
+                                        if metadata_extractor:
+                                            try:
+                                                metadata_extractor.update_cache(filepath)
+                                            except Exception:
+                                                pass
+                                            try:
+                                                if task_type == 'save_bpm':
+                                                    metadata_extractor._notify_bpm_listeners(filepath)
+                                                else:
+                                                    metadata_extractor._notify_key_listeners(filepath)
+                                            except Exception:
+                                                pass
+                                    except Exception:
+                                        pass
+
+                                try:
+                                    root_widget.after(0, _notify)
+                                except Exception:
+                                    # If scheduling fails, call directly as fallback
+                                    _notify()
+                            else:
+                                # No root widget provided - attempt direct update/notify
+                                if metadata_extractor:
+                                    try:
+                                        metadata_extractor.update_cache(filepath)
+                                    except Exception:
+                                        pass
+                                    try:
+                                        if task_type == 'save_bpm':
+                                            metadata_extractor._notify_bpm_listeners(filepath)
+                                        else:
+                                            metadata_extractor._notify_key_listeners(filepath)
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
 
             except Exception as e:
                 logger.error(f"Error in Analysis result listener: {e}")
