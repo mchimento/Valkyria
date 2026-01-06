@@ -247,6 +247,7 @@ class MainWindow:
         # Register a global BPM listener so UI components can react when BPM is changed on disk
         try:
             metadata_extractor.register_bpm_listener(lambda fp: self._on_global_bpm_update(fp))
+            metadata_extractor.register_key_listener(lambda fp: self._on_global_key_update(fp))
         except Exception:
             pass
 
@@ -322,6 +323,24 @@ class MainWindow:
             # Schedule update on main thread
             try:
                 self.root.after(0, self.dj_view._on_bpm_metadata_changed, filepath)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_global_key_update(self, filepath):
+        """Handle global Key updates by refreshing DJ view if it affects the current track."""
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+            current_path = self.state.playlist[idx]
+            if os.path.abspath(current_path) != os.path.abspath(filepath):
+                return
+
+            # Schedule update on main thread
+            try:
+                self.root.after(0, self.dj_view._on_key_metadata_changed, filepath)
             except Exception:
                 pass
         except Exception:

@@ -5,8 +5,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
 import os
-from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm
-from audio.bpm import bpm_manager
+import threading
+from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm, analyze_key
+from audio.bpm import analysis_manager
 from ui.utils import center_window
 
 
@@ -47,6 +48,7 @@ class MediaInfoWindow:
         # Register BPM update listener so UI refreshes when bpm is written
         try:
             metadata_extractor.register_bpm_listener(self._on_bpm_updated)
+            metadata_extractor.register_key_listener(self._on_key_updated)
         except Exception:
             pass
         # Store references to text widgets for theme updates
@@ -55,6 +57,7 @@ class MediaInfoWindow:
         self.close_btn = None
         self.save_btn = None
         self.bpm_btn = None
+        self.key_btn = None
 
         # Populate tabs
         self._populate_general_tab(general_frame)
@@ -172,6 +175,9 @@ class MediaInfoWindow:
         if self.bpm_btn:
             self.bpm_btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=bg)
 
+        if self.key_btn:
+            self.key_btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=bg)
+
         # Update notebook (tab bar) styling
         self._update_notebook_style()
 
@@ -285,6 +291,17 @@ class MediaInfoWindow:
             except (ValueError, TypeError):
                 text.insert(tk.END, "\n\n", "value_highlight")
 
+        # Key (if available)
+        key_val = None
+        try:
+            key_val = info.get('metadata', {}).get('key')
+        except Exception:
+            key_val = None
+
+        if key_val is not None and key_val != "":
+            text.insert(tk.END, "Key\n", "label")
+            text.insert(tk.END, f"{key_val}\n\n", "value_highlight")
+
         text.insert(tk.END, "Format\n", "label")
         text.insert(tk.END, f"{info['format']}\n", "value_highlight")
 
@@ -296,6 +313,15 @@ class MediaInfoWindow:
         text.configure(state=tk.DISABLED)
 
     def _on_bpm_updated(self, filepath):
+        if os.path.abspath(filepath) != os.path.abspath(self.file_path):
+            return
+        try:
+            if self.window.winfo_exists():
+                self.window.after(50, self._refresh_bpm)
+        except Exception:
+            pass
+
+    def _on_key_updated(self, filepath):
         if os.path.abspath(filepath) != os.path.abspath(self.file_path):
             return
         try:
@@ -357,6 +383,17 @@ class MediaInfoWindow:
                         except (ValueError, TypeError):
                             self.general_text.insert(tk.END, "\n\n", "value_highlight")
 
+                    # Key
+                    key_val = None
+                    try:
+                        key_val = info.get('metadata', {}).get('key')
+                    except Exception:
+                        key_val = None
+
+                    if key_val is not None and key_val != "":
+                         self.general_text.insert(tk.END, "Key\n", "label")
+                         self.general_text.insert(tk.END, f"{key_val}\n\n", "value_highlight")
+
                     self.general_text.insert(tk.END, "Format\n", "label")
                     self.general_text.insert(tk.END, f"{info['format']}\n", "value_highlight")
 
@@ -387,6 +424,18 @@ class MediaInfoWindow:
                         else:
                             entry.insert(0, "")
                             entry.raw_value = None
+                            entry.insert(0, "")
+                            entry.raw_value = None
+
+                if hasattr(self, 'entries') and 'key' in self.entries:
+                    val = self.file_info.get('metadata', {}).get('key')
+                    entry = self.entries.get('key')
+                    if entry is not None:
+                        entry.delete(0, tk.END)
+                        if val is not None and val != "":
+                            entry.insert(0, str(val))
+                        else:
+                            entry.insert(0, "")
             except Exception:
                 pass
         except Exception:
@@ -395,6 +444,10 @@ class MediaInfoWindow:
     def _on_close(self):
         try:
             metadata_extractor.unregister_bpm_listener(self._on_bpm_updated)
+        except Exception:
+            pass
+        try:
+            metadata_extractor.unregister_key_listener(self._on_key_updated)
         except Exception:
             pass
         try:
@@ -481,7 +534,8 @@ class MediaInfoWindow:
             ("Year", "date"),
             ("Genre", "genre"),
             ("Track Number", "tracknumber"),
-            ("BPM", "bpm")
+            ("BPM", "bpm"),
+            ("Key", "key")
         ]
 
         info = self.file_info['metadata']
@@ -527,6 +581,32 @@ class MediaInfoWindow:
 
                 # Store reference for theme updates
                 self.bpm_btn = bpm_btn
+            elif key == 'key':
+                # Create a frame for Key entry and button
+                key_frame = ttk.Frame(container)
+                key_frame.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=5)
+
+                entry = ttk.Entry(key_frame)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+                # Add Key calculation button
+                key_btn = ctk.CTkButton(
+                    key_frame,
+                    text="Calculate Key",
+                    command=self._calculate_key,
+                    font=("Segoe UI", 9),
+                    width=100,
+                    height=28,
+                    fg_color=btn_bg,
+                    text_color=btn_fg,
+                    text_color_disabled=btn_fg,
+                    hover_color=btn_hover,
+                    bg_color=bg
+                )
+                key_btn.pack(side=tk.RIGHT, padx=(5, 0))
+
+                # Store reference for theme updates
+                self.key_btn = key_btn
             else:
                 entry = ttk.Entry(container)
                 entry.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=5)
@@ -554,6 +634,8 @@ class MediaInfoWindow:
 
         if 'bpm' in self.entries:
             self.entries['bpm'].bind('<KeyRelease>', lambda e: self._on_bpm_entry_edit())
+        if 'key' in self.entries:
+            self.entries['key'].bind('<KeyRelease>', lambda e: self._on_key_entry_edit())
 
         # Save Button with modern styling
         if self.theme_manager:
@@ -623,7 +705,7 @@ class MediaInfoWindow:
                 self.bpm_btn.configure(state="disabled", text="Calculating...")
 
             # Use manager for analysis
-            bpm_manager.submit_analysis(self.file_path, self._on_bpm_calculation_complete, self.window)
+            analysis_manager.submit_bpm_analysis(self.file_path, self._on_bpm_calculation_complete, self.window)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start BPM analysis: {e}", parent=self.window)
@@ -674,3 +756,51 @@ class MediaInfoWindow:
             entry = self.entries['bpm']
             if entry and hasattr(entry, 'raw_value'):
                 entry.raw_value = None
+
+    def _calculate_key(self):
+        """Calculate Key for the current file in a background thread."""
+        try:
+            # Disable button during analysis
+            if self.key_btn:
+                self.key_btn.configure(state="disabled", text="Calculating...")
+
+            # Use manager for analysis
+            analysis_manager.submit_key_analysis(self.file_path, self._on_key_calculation_complete, self.window)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start Key analysis: {e}", parent=self.window)
+            # Reset button state
+            if self.key_btn:
+                self.key_btn.configure(state="normal", text="Calculate Key")
+
+    def _on_key_calculation_complete(self, filepath, key_value):
+        """Handle Key calculation completion."""
+        try:
+            if self.file_path != filepath:
+                return
+
+            if key_value is not None:
+                if hasattr(self, 'entries') and 'key' in self.entries:
+                    entry = self.entries['key']
+                    if entry:
+                        entry.delete(0, tk.END)
+                        entry.insert(0, str(key_value))
+            else:
+                messagebox.showwarning("Key Analysis", "Could not calculate Key for this file.", parent=self.window)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to process Key result: {e}", parent=self.window)
+
+        if self.key_btn:
+            self.key_btn.configure(state="normal", text="Calculate Key")
+
+    def _on_key_calculation_error(self, error_message):
+        """Handle Key calculation error."""
+        messagebox.showerror("Key Analysis Error", f"Failed to calculate Key: {error_message}", parent=self.window)
+
+        if self.key_btn:
+            self.key_btn.configure(state="normal", text="Calculate Key")
+
+    def _on_key_entry_edit(self):
+        """Handle manual editing of Key entry field."""
+        pass

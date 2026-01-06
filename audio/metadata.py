@@ -16,12 +16,21 @@ from math import log
 
 logger = logging.getLogger(__name__)
 
+# Ensure EasyID3 recognizes 'key' and 'initial_key' mapped to TKEY
+try:
+    from mutagen.easyid3 import EasyID3
+    EasyID3.RegisterTextKey('key', 'TKEY')
+    EasyID3.RegisterTextKey('initial_key', 'TKEY')
+except ImportError:
+    pass
+
 class MetadataExtractor:
     """Handles extraction and manipulation of audio file metadata."""
 
     def __init__(self):
         self._cache = {}
         self._bpm_listeners = []
+        self._key_listeners = []
 
     def get_metadata(self, filepath):
         """
@@ -159,6 +168,36 @@ class MetadataExtractor:
                     bpm = None
 
                 metadata['bpm'] = bpm
+
+                # Attempt to extract Key
+                key = None
+                try:
+                    # Try easy tags
+                    if audio and hasattr(audio, 'get'):
+                        for k in ('key', 'KEY', 'initial_key', 'INITIAL_KEY'):
+                            v = audio.get(k)
+                            if v:
+                                key = str(v[0])
+                                break
+
+                    if key is None:
+                        # Raw tags
+                        raw = MutagenFile(filepath)
+                        if raw and hasattr(raw, 'tags') and raw.tags:
+                            # ID3
+                            if 'TKEY' in raw.tags:
+                                key = str(raw.tags['TKEY'])
+                            # MP4
+                            elif '----:com.apple.iTunes:KEY' in raw.tags:
+                                val = raw.tags['----:com.apple.iTunes:KEY']
+                                key = val[0].decode('utf-8', errors='ignore') if isinstance(val, list) else str(val)
+                            elif '----:com.apple.iTunes:initial_key' in raw.tags:
+                                val = raw.tags['----:com.apple.iTunes:initial_key']
+                                key = val[0].decode('utf-8', errors='ignore') if isinstance(val, list) else str(val)
+                except Exception:
+                    pass
+
+                metadata['key'] = key
         except Exception as e:
             logger.error(f"Failed to extract metadata from {filepath}: {e}", exc_info=True)
             # Fallback to filename if metadata extraction fails
@@ -170,6 +209,7 @@ class MetadataExtractor:
                 "duration_s": None,
                 "bitrate": None,
                 "bpm": None,
+                "key": None,
                 "format": None
             }
 
@@ -288,8 +328,11 @@ class MetadataExtractor:
             # Also include parsed metadata such as bpm if available
             try:
                 parsed_meta = self.get_metadata(file_path)
-                if parsed_meta and 'bpm' in parsed_meta:
-                    info['metadata']['bpm'] = parsed_meta.get('bpm')
+                if parsed_meta:
+                    if 'bpm' in parsed_meta:
+                        info['metadata']['bpm'] = parsed_meta.get('bpm')
+                    if 'key' in parsed_meta:
+                        info['metadata']['key'] = parsed_meta.get('key')
             except Exception:
                 pass
         except Exception:
@@ -323,6 +366,20 @@ class MetadataExtractor:
                     if key in audio:
                         del audio[key]
 
+            # Special handling for Key cleanup: ensure INITIAL_KEY is also removed for FLAC/Vorbis
+            if 'key' in metadata_dict and not str(metadata_dict['key']).strip():
+                try:
+                    # Access underlying tags if available
+                    if hasattr(audio, 'tags') and audio.tags:
+                        # For Ogg/FLAC, keys are case-sensitive but usually uppercase
+                        for variant in ['INITIAL_KEY', 'initial_key']:
+                            if variant in audio.tags:
+                                del audio.tags[variant]
+                except Exception:
+                    pass
+
+            audio.save()
+
             audio.save()
             # Clear cache for this file to force refresh
             if file_path in self._cache:
@@ -331,6 +388,8 @@ class MetadataExtractor:
             try:
                 if 'bpm' in metadata_dict:
                     self._notify_bpm_listeners(file_path)
+                if 'key' in metadata_dict:
+                    self._notify_key_listeners(file_path)
             except Exception:
                 pass
             return True
@@ -366,6 +425,28 @@ class MetadataExtractor:
 
     def _notify_bpm_listeners(self, filepath):
         for cb in list(self._bpm_listeners):
+            try:
+                cb(filepath)
+            except Exception:
+                pass
+
+    def register_key_listener(self, callback):
+        """Register a callback to be notified when Key is updated for a file.
+
+        Callback will be called as callback(filepath).
+        """
+        if callback not in self._key_listeners:
+            self._key_listeners.append(callback)
+
+    def unregister_key_listener(self, callback):
+        """Unregister a Key listener callback."""
+        try:
+            self._key_listeners.remove(callback)
+        except ValueError:
+            pass
+
+    def _notify_key_listeners(self, filepath):
+        for cb in list(self._key_listeners):
             try:
                 cb(filepath)
             except Exception:
@@ -805,6 +886,127 @@ def dj_bpm_estimate(y, sr):
             logger.debug("BPM fallback failed: %s", e2)
             return None
 
+def analyze_key(filepath, duration=60):
+    """
+    Analyze audio file to detect musical key using chroma features.
+
+    Args:
+        filepath (str): Path to audio file
+        duration (int): Duration to analyze in seconds
+
+    Returns:
+        str: Detected key (e.g. "Am", "C", "F#m") or None if failed
+    """
+    try:
+        # Load audio using same robust logic as analyze_bpm
+        # We need librosa for chroma features anyway
+        import librosa
+
+        # Helper to load audio safely
+        def load_audio():
+            # Calculate offset to analyze middle of track (better for key signature)
+            offset = 0.0
+
+            # Try soundfile first
+            try:
+                import soundfile as sf
+                info = sf.info(filepath)
+                sr_native = info.samplerate
+                total_frames = info.frames
+                frames_to_read = int(duration * sr_native)
+
+                start_frame = 0
+                if total_frames > frames_to_read:
+                    start_frame = (total_frames - frames_to_read) // 2
+                    offset = start_frame / sr_native
+
+                data, sr_used = sf.read(filepath, start=start_frame, frames=frames_to_read, dtype='float32', always_2d=False)
+                y = data
+                if y.ndim > 1:
+                    y = y.mean(axis=1)
+                return y, sr_used
+            except Exception:
+                pass
+
+            # Try ffmpeg decode
+            if shutil.which('ffmpeg'):
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                    tmpname = tmp.name
+                try:
+                    # Determine start time for ffmpeg if possible, otherwise just read from start
+                    # Getting duration from ffmpeg is an extra call (ffprobe), so we might just skip offset or guess
+                    # Ideally we trust sf.read failed, so maybe just read first 60s to be safe and fast.
+
+                    subprocess.run([
+                        'ffmpeg', '-y', '-ss', str(offset), '-i', filepath,
+                        '-t', str(duration), '-ar', '22050', '-ac', '1', tmpname
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    try:
+                        import soundfile as sf2
+                        y, sr = sf2.read(tmpname, dtype='float32', always_2d=False)
+                        if y.ndim > 1:
+                            y = y.mean(axis=1)
+                        return y, sr
+                    except Exception:
+                        return librosa.load(tmpname, sr=22050, mono=True)
+                finally:
+                    try:
+                        os.unlink(tmpname)
+                    except Exception:
+                        pass
+
+            # Last resort
+            return librosa.load(filepath, sr=22050, mono=True, offset=offset, duration=duration)
+
+        y, sr = load_audio()
+
+        if y is None or len(y) == 0:
+            return None
+
+        # Compute chroma features
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+
+        # Sum chroma over time
+        chroma_sum = np.sum(chroma, axis=1)
+
+        # Major and Minor profiles (Krumhansl-Schmuckler)
+        major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+        minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+
+        # Normalize
+        major_profile = major_profile / np.sum(major_profile)
+        minor_profile = minor_profile / np.sum(minor_profile)
+        chroma_sum = chroma_sum / np.sum(chroma_sum)
+
+        # Correlate
+        max_cor = -1
+        best_key = None
+
+        notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+        # Test Major keys
+        for i in range(12):
+            # Rotate profile
+            profile = np.roll(major_profile, i)
+            cor = np.corrcoef(chroma_sum, profile)[0, 1]
+            if cor > max_cor:
+                max_cor = cor
+                best_key = notes[i]
+
+        # Test Minor keys
+        for i in range(12):
+            profile = np.roll(minor_profile, i)
+            cor = np.corrcoef(chroma_sum, profile)[0, 1]
+            if cor > max_cor:
+                max_cor = cor
+                best_key = notes[i] + "m"
+
+        return best_key
+
+    except Exception as e:
+        logger.debug("Key analysis failed for %s: %s", filepath, e)
+        return None
+
 def write_bpm(filepath, bpm):
     """Write BPM tag back into the audio file using mutagen when possible.
 
@@ -893,6 +1095,117 @@ def write_bpm(filepath, bpm):
                     except Exception:
                         pass
                     metadata_extractor._notify_bpm_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+    except Exception:
+        pass
+    return False
+
+def write_key(filepath, key):
+    """Write Key tag back into the audio file using mutagen when possible.
+
+    Returns True on success, False otherwise.
+    """
+    try:
+        if not key:
+            return False
+
+        # Normalize key string if needed (optional)
+        key_val = str(key).strip()
+
+        raw = MutagenFile(filepath)
+        # MP3 (ID3 TKEY)
+        try:
+            if filepath.lower().endswith('.mp3'):
+                try:
+                    id3 = ID3(filepath)
+                except ID3NoHeaderError:
+                    id3 = ID3()
+                # remove existing TKEY frames
+                try:
+                    id3.delall('TKEY')
+                except Exception:
+                    pass
+                from mutagen.id3 import TKEY
+                id3.add(TKEY(encoding=3, text=str(key_val)))
+                id3.save(filepath)
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_key_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+        # MP4/M4A key tag
+        try:
+            if isinstance(raw, MP4) or filepath.lower().endswith(('.m4a', '.mp4')):
+                mp4 = MP4(filepath)
+                tags = mp4.tags or {}
+                # iTunes standard key tag
+                tags['----:com.apple.iTunes:KEY'] = [key_val.encode('utf-8')]
+                # Also set initial_key for compatibility
+                tags['----:com.apple.iTunes:initial_key'] = [key_val.encode('utf-8')]
+                mp4.tags = tags
+                mp4.save()
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_key_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+        # FLAC Vorbis comment
+        try:
+            if isinstance(raw, FLAC) or filepath.lower().endswith('.flac'):
+                fl = FLAC(filepath)
+                fl['KEY'] = str(key_val)
+                fl['INITIAL_KEY'] = str(key_val)
+                fl.save()
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_key_listeners(filepath)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+
+        # Generic easy tag fallback
+        try:
+            easy = MutagenFile(filepath, easy=True)
+            if easy is not None:
+                # Some easy implementations map 'key' or 'initial_key'
+                try:
+                    easy['key'] = [str(key_val)]
+                except Exception:
+                    try:
+                        easy['initial_key'] = [str(key_val)]
+                    except Exception:
+                        pass
+                easy.save()
+                try:
+                    try:
+                        metadata_extractor.update_cache(filepath)
+                    except Exception:
+                        pass
+                    metadata_extractor._notify_key_listeners(filepath)
                 except Exception:
                     pass
                 return True

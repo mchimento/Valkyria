@@ -6,13 +6,11 @@ import logging
 from audio.metadata import analyze_bpm, write_bpm
 
 logger = logging.getLogger(__name__)
-
-import logging
 import multiprocessing
 import queue
 import threading
 import time
-from audio.metadata import analyze_bpm, write_bpm
+from audio.metadata import analyze_bpm, write_bpm, analyze_key, write_key
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,7 @@ def on_bpm_updated(filepath, state):
         # Fail silently - BPM updates are not critical
         pass
 
-def _bpm_process_worker(input_queue, output_queue):
+def _analysis_process_worker(input_queue, output_queue):
     """Function to run in the background process."""
     while True:
         try:
@@ -39,21 +37,28 @@ def _bpm_process_worker(input_queue, output_queue):
             task_type, filepath, args = task
 
             try:
-                if task_type == 'analyze':
+                if task_type == 'analyze_bpm':
                     result = analyze_bpm(filepath)
-                    output_queue.put(('analyze', filepath, result, None))
-                elif task_type == 'save':
+                    output_queue.put(('analyze_bpm', filepath, result, None))
+                elif task_type == 'save_bpm':
                     bpm_value = args[0]
                     write_bpm(filepath, bpm_value)
-                    output_queue.put(('save', filepath, True, None))
+                    output_queue.put(('save_bpm', filepath, True, None))
+                elif task_type == 'analyze_key':
+                    result = analyze_key(filepath)
+                    output_queue.put(('analyze_key', filepath, result, None))
+                elif task_type == 'save_key':
+                    key_value = args[0]
+                    write_key(filepath, key_value)
+                    output_queue.put(('save_key', filepath, True, None))
             except Exception as e:
                 output_queue.put((task_type, filepath, None, str(e)))
 
         except Exception:
             break
 
-class BPMAnalysisManager:
-    """Manages background BPM analysis and saving using a separate process to avoid blocking the audio thread."""
+class AnalysisManager:
+    """Manages background audio analysis (BPM, Key) and saving using a separate process."""
 
     _instance = None
 
@@ -68,7 +73,7 @@ class BPMAnalysisManager:
         self.output_queue = multiprocessing.Queue()
         self.process = None
         self.result_thread = None
-        self.callbacks = {}  # key: (task_type, filepath), value: callback_function
+        self.callbacks = {}  # key: (task_type, filepath), value: (callback, root_widget)
         self.running = False
 
     def start(self):
@@ -78,7 +83,7 @@ class BPMAnalysisManager:
 
         self.running = True
         self.process = multiprocessing.Process(
-            target=_bpm_process_worker,
+            target=_analysis_process_worker,
             args=(self.input_queue, self.output_queue),
             daemon=True
         )
@@ -86,7 +91,7 @@ class BPMAnalysisManager:
 
         self.result_thread = threading.Thread(target=self._result_listener, daemon=True)
         self.result_thread.start()
-        logger.info("BPM Analysis Manager started")
+        logger.info("Analysis Manager started")
 
     def _result_listener(self):
         """Listen for results from the background process."""
@@ -109,33 +114,46 @@ class BPMAnalysisManager:
 
                     if root_widget:
                         # Schedule callback on main thread
-                        if task_type == 'analyze':
-                            root_widget.after(0, callback, filepath, data)
-                        elif task_type == 'save':
-                            root_widget.after(0, callback, filepath, data)
+                        root_widget.after(0, callback, filepath, data)
 
             except Exception as e:
-                logger.error(f"Error in BPM result listener: {e}")
+                logger.error(f"Error in Analysis result listener: {e}")
 
-    def submit_analysis(self, filepath, callback, root_widget):
+    def submit_bpm_analysis(self, filepath, callback, root_widget):
         """Submit a BPM analysis task."""
         if not self.running:
             self.start()
 
-        key = ('analyze', filepath)
-        # Store callback
+        key = ('analyze_bpm', filepath)
         self.callbacks[key] = (callback, root_widget)
-        # Send task
-        self.input_queue.put(('analyze', filepath, None))
+        self.input_queue.put(('analyze_bpm', filepath, None))
 
-    def submit_save(self, filepath, bpm_value, callback, root_widget):
+    def submit_bpm_save(self, filepath, bpm_value, callback, root_widget):
         """Submit a BPM save task."""
         if not self.running:
             self.start()
 
-        key = ('save', filepath)
+        key = ('save_bpm', filepath)
         self.callbacks[key] = (callback, root_widget)
-        self.input_queue.put(('save', filepath, [bpm_value]))
+        self.input_queue.put(('save_bpm', filepath, [bpm_value]))
+
+    def submit_key_analysis(self, filepath, callback, root_widget):
+        """Submit a Key analysis task."""
+        if not self.running:
+            self.start()
+
+        key = ('analyze_key', filepath)
+        self.callbacks[key] = (callback, root_widget)
+        self.input_queue.put(('analyze_key', filepath, None))
+
+    def submit_key_save(self, filepath, key_value, callback, root_widget):
+        """Submit a Key save task."""
+        if not self.running:
+            self.start()
+
+        key = ('save_key', filepath)
+        self.callbacks[key] = (callback, root_widget)
+        self.input_queue.put(('save_key', filepath, [key_value]))
 
     def shutdown(self):
         """Shutdown the background process."""
@@ -146,5 +164,6 @@ class BPMAnalysisManager:
             if self.process.is_alive():
                 self.process.terminate()
 
-# Global accessor
-bpm_manager = BPMAnalysisManager.get_instance()
+# Global accessor - aliased for backward compat if needed, but renamed to analysis_manager
+analysis_manager = AnalysisManager.get_instance()
+bpm_manager = analysis_manager  # Alias for existing code until updated

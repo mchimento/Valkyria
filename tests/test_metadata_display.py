@@ -115,5 +115,36 @@ class TestMetadataDisplay(unittest.TestCase):
         self.assertEqual(result['duration_s'], 180)
         self.assertEqual(result['bitrate'], 320)
 
+    @patch('audio.metadata.MutagenFile')
+    def test_get_metadata_with_key(self, mock_mutagen):
+        """Test that Key metadata is correctly extracted."""
+        # Mock easy mode with Key tag
+        mock_audio = MagicMock()
+        mock_audio.keys.return_value = ['title', 'key']
+
+        def get_side_effect(key, default=None):
+            data = {
+                'title': ['Song with Key'],
+                'key': ['Am']
+            }
+            return data.get(key, default)
+
+        mock_audio.get.side_effect = get_side_effect
+
+        mock_info = MagicMock()
+        mock_info.length = 120
+        mock_info.bitrate = 320000
+        type(mock_audio).info = PropertyMock(return_value=mock_info)
+        mock_audio.__class__.__name__ = 'EasyMP3'
+
+        mock_mutagen.return_value = mock_audio
+
+        # Test
+        result = get_metadata("key_test.mp3")
+
+        # Verify Key was extracted
+        self.assertEqual(result['title'], 'Song with Key')
+        self.assertEqual(result['key'], 'Am')
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,7 @@
 import tkinter as tk
 import customtkinter as ctk
-from audio.metadata import get_metadata, get_display_bpm, analyze_bpm
-from audio.bpm import bpm_manager
+from audio.metadata import get_metadata, get_display_bpm, analyze_bpm, analyze_key, write_key
+from audio.bpm import analysis_manager
 
 import logging
 import threading, os, sys
@@ -39,6 +39,11 @@ class DJFrameView(ctk.CTkFrame):
         self.current_temp_bpm = None
         self.temporary_bpm_files = set()
         self._estimating_file = None
+
+        # Key analysis state
+        self.current_temp_key = None
+        self.temporary_key_files = set()
+        self._estimating_key_file = None
 
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
 
@@ -276,6 +281,20 @@ class DJFrameView(ctk.CTkFrame):
         self.save_btn.pack_forget()
         # Button starts hidden - only shown after BPM estimation
 
+        self.save_key_btn = ctk.CTkButton(
+            save_button_row,
+            text="Save Key",
+            command=self._on_key_button_click,
+            width=120,
+            height=25,
+            font=ctk.CTkFont(size=11),
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            text_color_disabled=btn_fg,
+            hover_color=btn_hover,
+        )
+        self.save_key_btn.pack_forget()
+
     def _draw_limiter_meter(self, border_color, bg_color):
         """Draw the horizontal limiter activity meter"""
         self.limiter_canvas.delete("all")
@@ -410,7 +429,7 @@ class DJFrameView(ctk.CTkFrame):
             def estimate_bpm():
                 try:
                     # Submit to background manager
-                    bpm_manager.submit_analysis(filepath, self._on_bpm_analysis_complete, self)
+                    analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
 
                 except Exception as e:
                     logger.error(f"BPM estimation error for {filepath}: {e}")
@@ -420,7 +439,30 @@ class DJFrameView(ctk.CTkFrame):
 
         # Update Key (placeholder - requires key detection implementation)
         # For now, show placeholder
-        self.key_var.set("--")
+        # Update Key
+        key = meta.get("key")
+        if key:
+            self.key_var.set(key)
+            self._estimating_key_file = None
+            self.current_temp_key = None
+            self.save_key_btn.pack_forget()
+        else:
+            if self._estimating_key_file == filepath:
+                return
+            self.key_var.set("Estimating...")
+            self._estimating_key_file = filepath
+            self.current_temp_key = None
+            self.save_key_btn.pack_forget()
+
+            def estimate_key():
+                try:
+                    # Key estimation
+                    analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
+                except Exception as e:
+                    logger.error(f"Key estimation error for {filepath}: {e}")
+                    self.after(0, lambda: self._finish_key_estimation(filepath, None))
+
+            estimate_key()
 
     def _finish_estimation(self, filepath, bpm):
         if self._estimating_file != filepath:
@@ -438,6 +480,21 @@ class DJFrameView(ctk.CTkFrame):
 
         # Clear estimating marker now that estimation finished (success or failure)
         self._estimating_file = None
+
+    def _finish_key_estimation(self, filepath, key):
+        if self._estimating_key_file != filepath:
+            return
+
+        if key:
+            self.key_var.set(key)
+            self.current_temp_key = key
+            self.save_key_btn.configure(text="Save Key", state="normal")
+            self.save_key_btn.pack(side=tk.RIGHT, padx=(0, 0))
+        else:
+            self.key_var.set("--")
+            self.save_key_btn.pack_forget()
+
+        self._estimating_key_file = None
 
     def update_meter_values(self, lufs=-60.0, peak_dbfs=-60.0, limiter_activity=0.0, overall_lufs=None):
         """Update the meter values
@@ -501,8 +558,11 @@ class DJFrameView(ctk.CTkFrame):
         self.lufs_label.configure(text="-60.0")
         # Hide save button when clearing info
         self.save_btn.pack_forget()
+        self.save_key_btn.pack_forget()
         self._estimating_file = None
         self.current_temp_bpm = None
+        self._estimating_key_file = None
+        self.current_temp_key = None
         is_dark = self.settings.theme.lower() == "dark"
         dj_bg = self.palette.get("status_bg", "#E8E8E8" if not is_dark else "#2A2A2A")
         dj_border = self.palette.get("status_border", "#D0D0D0" if not is_dark else "#3E3E3E")
@@ -531,7 +591,7 @@ class DJFrameView(ctk.CTkFrame):
 
     def _analyze_bpm_worker(self, filepath):
         # Use manager for analysis
-        bpm_manager.submit_analysis(filepath, self._on_bpm_analysis_complete, self)
+        analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
 
     def _on_bpm_analysis_complete(self, filepath, bpm_value):
         try:
@@ -573,7 +633,7 @@ class DJFrameView(ctk.CTkFrame):
 
     def _save_bpm_worker(self, filepath, bpm_value):
         # Use manager for saving
-        bpm_manager.submit_save(filepath, bpm_value, self._on_bpm_save_complete, self)
+        analysis_manager.submit_bpm_save(filepath, bpm_value, self._on_bpm_save_complete, self)
 
     def _on_bpm_save_complete(self, filepath, success):
         try:
@@ -593,11 +653,7 @@ class DJFrameView(ctk.CTkFrame):
             self._reset_bpm_button()
 
     def _on_bpm_metadata_changed(self, filepath):
-        """Called when metadata BPM for a file changes on disk.
-
-        If the current track lost its BPM metadata and we have a cached
-        estimated BPM, show the Save button again so the user can re-save it.
-        """
+        """Called when metadata BPM for a file changes on disk."""
         try:
             # Only act if this file is the current track
             idx = self.state.current_index
@@ -622,15 +678,9 @@ class DJFrameView(ctk.CTkFrame):
                 else:
                     # No cached estimate: re-run estimation automatically and hide/disable save button
                     try:
-                        # Set UI to estimating state and start background worker
                         self._estimating_file = filepath
                         self.bpm_var.set("Estimating...")
                         try:
-                            # Disable and hide the button during re-estimation to avoid confusion
-                            try:
-                                self.save_btn.configure(state='disabled')
-                            except Exception:
-                                pass
                             self.save_btn.pack_forget()
                         except Exception:
                             pass
@@ -639,13 +689,94 @@ class DJFrameView(ctk.CTkFrame):
                     except Exception as exc:
                         logger.error(f"Failed to re-run BPM estimation: {exc}")
             else:
-                # Hide button otherwise
                 try:
                     self.save_btn.pack_forget()
                 except Exception:
                     pass
         except Exception as exc:
             logger.error(f"Error handling BPM metadata change for {filepath}: {exc}")
+
+    def _on_key_metadata_changed(self, filepath):
+        """Called when metadata Key for a file changes on disk."""
+        try:
+            # Only act if this file is the current track
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+            current_path = self.state.playlist[idx]
+            if os.path.abspath(current_path) != os.path.abspath(filepath):
+                return
+
+            # Refresh stored metadata and inspect Key
+            meta = get_metadata(filepath)
+            key_on_disk = meta.get('key')
+
+            if (key_on_disk is None or key_on_disk == ""):
+                # If we have a cached estimate, show Save button immediately
+                if getattr(self, 'current_temp_key', None) is not None:
+                    try:
+                        self.save_key_btn.configure(state='normal', text='Save Key')
+                        self.save_key_btn.pack(side=tk.RIGHT, padx=(0, 0))
+                    except Exception:
+                        pass
+                else:
+                    # No cached estimate: re-run estimation
+                    try:
+                        self._estimating_key_file = filepath
+                        self.key_var.set("Estimating...")
+                        try:
+                            self.save_key_btn.pack_forget()
+                        except Exception:
+                            pass
+
+                        def estimate_key():
+                            try:
+                                analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
+                            except Exception:
+                                self.after(0, lambda: self._finish_key_estimation(filepath, None))
+
+                        estimate_key()
+                    except Exception as exc:
+                        logger.error(f"Failed to re-run Key estimation: {exc}")
+            else:
+                # Key present, hide button
+                try:
+                    self.save_key_btn.pack_forget()
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error(f"Error handling Key metadata change for {filepath}: {exc}")
+
+    def _on_key_button_click(self):
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+
+            filepath = self.state.playlist[idx]
+
+            if self.current_temp_key is not None:
+                self.save_key_btn.configure(state="disabled", text="Saving...")
+
+                analysis_manager.submit_key_save(filepath, self.current_temp_key, self._on_key_save_complete, self)
+        except Exception as exc:
+            logger.error("Error in Key button click: %s", exc)
+            self._reset_key_button()
+
+    def _on_key_save_complete(self, filepath, success):
+        try:
+            if success:
+                self.temporary_key_files.discard(filepath)
+                self.save_key_btn.pack_forget()
+            else:
+                self._reset_key_button()
+        except Exception as exc:
+            logger.error("Error handling Key save completion: %s", exc)
+            self._reset_key_button()
+
+    def _reset_key_button(self):
+        self.save_key_btn.configure(state="normal", text="Save Key")
+        self.current_temp_key = None
 
     def update_theme(self):
         """Update colors based on current theme"""
@@ -691,6 +822,14 @@ class DJFrameView(ctk.CTkFrame):
 
         # Save button
         self.save_btn.configure(
+            fg_color=btn_bg,
+            text_color=btn_fg,
+            text_color_disabled=btn_fg,
+            hover_color=btn_hover,
+        )
+
+        # Save Key button
+        self.save_key_btn.configure(
             fg_color=btn_bg,
             text_color=btn_fg,
             text_color_disabled=btn_fg,
