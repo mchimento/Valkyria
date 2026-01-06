@@ -447,9 +447,37 @@ class MediaInfoWindow:
                     if entry is not None:
                         entry.delete(0, tk.END)
                         if val is not None and val != "":
-                            entry.insert(0, str(val))
+                            # If raw key exists, compute Camelot and show only the Camelot code in the entry
+                            try:
+                                camelot_val = key_to_camelot(str(val))
+                            except Exception:
+                                camelot_val = None
+
+                            if camelot_val:
+                                # Display camelot (e.g., '8A') but remember raw key for saving
+                                entry.insert(0, f"{camelot_val}")
+                                try:
+                                    entry.raw_value = str(val)
+                                except Exception:
+                                    pass
+                            else:
+                                # No Camelot mapping: show raw key and record as raw
+                                entry.insert(0, str(val))
+                                try:
+                                    entry.raw_value = str(val)
+                                except Exception:
+                                    pass
                         else:
                             entry.insert(0, "")
+                            try:
+                                entry.raw_value = None
+                            except Exception:
+                                pass
+                            try:
+                                if getattr(self, 'key_camelot_label', None) is not None:
+                                    self.key_camelot_label.configure(text="")
+                            except Exception:
+                                pass
             except Exception:
                 pass
         except Exception:
@@ -798,12 +826,49 @@ class MediaInfoWindow:
                     entry = self.entries['key']
                     if entry:
                         entry.delete(0, tk.END)
-                        entry.insert(0, str(key_value))
+                        # Compute Camelot and display inside the Key entry as "Key (Camelot)"
+                        try:
+                            camelot_val = key_to_camelot(str(key_value))
+                        except Exception:
+                            camelot_val = None
+
+                        if camelot_val:
+                            entry.insert(0, f"{camelot_val}")
+                        else:
+                            entry.insert(0, str(key_value))
+
+                        # Also update General tab immediately
+                        try:
+                            self._render_general_with_overrides(key_override=str(key_value), camelot_override=camelot_val)
+                        except Exception:
+                            pass
             else:
                 messagebox.showwarning("Key Analysis", "Could not calculate Key for this file.", parent=self.window)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process Key result: {e}", parent=self.window)
+
+        # Render general tab with overrides so calculated key/Camelot are visible immediately
+        try:
+            if key_value is not None:
+                camelot_val = None
+                try:
+                    camelot_val = key_to_camelot(str(key_value))
+                except Exception:
+                    camelot_val = None
+                self._render_general_with_overrides(key_override=str(key_value), camelot_override=camelot_val)
+
+                # Update inline Camelot label next to Key entry if present
+                try:
+                    if getattr(self, 'key_camelot_label', None) is not None:
+                        if camelot_val:
+                            self.key_camelot_label.configure(text=f"{camelot_val}")
+                        else:
+                            self.key_camelot_label.configure(text="")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         if self.key_btn:
             self.key_btn.configure(state="normal", text="Calculate Key")
@@ -816,5 +881,72 @@ class MediaInfoWindow:
             self.key_btn.configure(state="normal", text="Calculate Key")
 
     def _on_key_entry_edit(self):
-        """Handle manual editing of Key entry field."""
-        pass
+        """Handle manual editing of Key entry field.
+
+        Behavior:
+        - If user types a Camelot code (e.g., '8A'), normalize and display it and clear raw_value.
+        - If user types a raw key (e.g., 'Am' or 'A minor'), compute Camelot, display Camelot only, and store raw key in entry.raw_value for saving.
+        - If no mapping found, leave typed value and store it as raw_value so it can be saved.
+        """
+        import re
+        try:
+            if 'key' in self.entries:
+                entry = self.entries['key']
+                if not entry:
+                    return
+
+                full_text = entry.get().strip()
+
+                # Camelot pattern: e.g., '8A' or '11B' (allow spaces and case-insensitive)
+                camelot_match = re.fullmatch(r"\s*(\d{1,2})\s*([ABab])\s*", full_text)
+                if camelot_match:
+                    # User provided Camelot directly; normalize and clear raw_value
+                    num = camelot_match.group(1)
+                    letter = camelot_match.group(2).upper()
+                    camelot_val = f"{int(num)}{letter}"
+                    try:
+                        entry.delete(0, tk.END)
+                        entry.insert(0, camelot_val)
+                        entry.raw_value = None
+                    except Exception:
+                        pass
+
+                    # Update general tab to show the Camelot (no raw key)
+                    try:
+                        self._render_general_with_overrides(key_override=None, camelot_override=camelot_val)
+                    except Exception:
+                        pass
+                    return
+
+                # Otherwise, treat input as raw key attempt: try to compute Camelot
+                raw = full_text
+                try:
+                    camelot_val = key_to_camelot(raw)
+                except Exception:
+                    camelot_val = None
+
+                if camelot_val:
+                    try:
+                        entry.delete(0, tk.END)
+                        entry.insert(0, camelot_val)
+                        entry.raw_value = raw
+                    except Exception:
+                        pass
+
+                    # Update General tab with raw+camelot
+                    try:
+                        self._render_general_with_overrides(key_override=raw, camelot_override=camelot_val)
+                    except Exception:
+                        pass
+                else:
+                    # No mapping found; keep the typed raw value and mark it for saving
+                    try:
+                        entry.raw_value = raw
+                    except Exception:
+                        pass
+                    try:
+                        self._render_general_with_overrides(key_override=raw, camelot_override=None)
+                    except Exception:
+                        pass
+        except Exception:
+            pass

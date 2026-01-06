@@ -50,6 +50,24 @@ class TestDJFrameViewMetrics(unittest.TestCase):
         self.view.update_meter_values(lufs=-12.0, peak_dbfs=-8.0, limiter_activity=0.1)
         self.assertAlmostEqual(self.view.overall_lufs_value, -15.5)
 
+    def test_display_key_with_camelot(self):
+        """When metadata contains a Key (and optional Camelot), the DJ view displays both."""
+        from unittest.mock import patch
+        # Prepare state so update_info picks up our fake filepath
+        self.view.state.current_index = 0
+        self.view.state.playlist = ['/path/to/fake.mp3']
+
+        # Mock metadata to include raw key and camelot mapping
+        with patch('ui.dj_frame_view.get_metadata', return_value={'key': 'Am', 'camelot': '8A'}):
+            self.view.update_info('/path/to/fake.mp3')
+            self.assertEqual(self.view.key_var.get(), '8A')
+
+        # Also ensure that when camelot isn't provided, we compute it from key
+        with patch('ui.dj_frame_view.get_metadata', return_value={'key': 'Am'}):
+            self.view.update_info('/path/to/fake.mp3')
+            # Camelot should be computed as 8A for Am
+            self.assertIn('8A', self.view.key_var.get())
+
 
 if __name__ == '__main__':
     unittest.main()

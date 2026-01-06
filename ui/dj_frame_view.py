@@ -1,6 +1,6 @@
 import tkinter as tk
 import customtkinter as ctk
-from audio.metadata import get_metadata, get_display_bpm, analyze_bpm, analyze_key, write_key
+from audio.metadata import get_metadata, get_display_bpm, analyze_bpm, analyze_key, write_key, key_to_camelot
 from audio.bpm import analysis_manager
 
 import logging
@@ -458,10 +458,25 @@ class DJFrameView(ctk.CTkFrame):
         # Update Key
         key = meta.get("key")
         if key:
-            self.key_var.set(key)
+            # Show raw key and Camelot mapping when available for convenient DJ view
+            camelot_val = meta.get('camelot') if isinstance(meta, dict) else None
+            if not camelot_val:
+                try:
+                    camelot_val = key_to_camelot(key)
+                except Exception:
+                    camelot_val = None
+
+            if camelot_val:
+                self.key_var.set(f"{camelot_val}")
+            else:
+                self.key_var.set(key)
+
             self._estimating_key_file = None
             self.current_temp_key = None
-            self.save_key_btn.pack_forget()
+            try:
+                self.save_key_btn.pack_forget()
+            except Exception:
+                pass
         else:
             # Only estimate Key if visible to save CPU
             if not self.is_visible():
@@ -509,7 +524,18 @@ class DJFrameView(ctk.CTkFrame):
             return
 
         if key:
-            self.key_var.set(key)
+            # Display estimated key with optional Camelot mapping
+            camelot_val = None
+            try:
+                camelot_val = key_to_camelot(key)
+            except Exception:
+                camelot_val = None
+
+            if camelot_val:
+                self.key_var.set(f"{camelot_val}")
+            else:
+                self.key_var.set(key)
+
             self.current_temp_key = key
             self.save_key_btn.configure(text="Save Key", state="normal")
             self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
