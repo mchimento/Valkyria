@@ -657,6 +657,10 @@ class AudioPlayer:
                 self._buffer = None
             self._paused = False
 
+            # Clear resampler state to prevent ghost sounds
+            self._resample_buffer = None
+            self._resample_pos = 0.0
+
             # Reset effects state on stop to ensure no residual audio in buffers
             if hasattr(self, 'effects'):
                 self.effects.reset_state()
@@ -664,7 +668,7 @@ class AudioPlayer:
         # Perform cleanup outside lock to avoid deadlock with callback
         if stream_to_close:
             try:
-                stream_to_close.stop()
+                stream_to_close.abort()
                 stream_to_close.close()
             except Exception:
                 logger.error("Failed to stop stream", exc_info=True)
