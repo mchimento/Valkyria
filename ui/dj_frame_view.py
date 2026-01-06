@@ -277,7 +277,7 @@ class DJFrameView(ctk.CTkFrame):
             save_button_row,
             text="Save BPM",
             command=self._on_bpm_button_click,
-            width=120,
+            width=90,
             height=25,
             font=ctk.CTkFont(size=11),
             fg_color=btn_bg,
@@ -496,7 +496,7 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set(display_bpm)
             self.current_temp_bpm = bpm
             self.save_btn.configure(text="Save BPM", state="normal")
-            self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
+            self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
         else:
             self.bpm_var.set("--")
             self.save_btn.pack_forget()
@@ -512,7 +512,7 @@ class DJFrameView(ctk.CTkFrame):
             self.key_var.set(key)
             self.current_temp_key = key
             self.save_key_btn.configure(text="Save Key", state="normal")
-            self.save_key_btn.pack(side=tk.RIGHT, padx=(0, 0))
+            self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
         else:
             self.key_var.set("--")
             self.save_key_btn.pack_forget()
@@ -634,7 +634,7 @@ class DJFrameView(ctk.CTkFrame):
                 # If not part of a direct estimation flow, ensure Save button is visible
                 try:
                     self.save_btn.configure(text="Save BPM", state="normal")
-                    self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
+                    self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
                 except Exception:
                     pass
             else:
@@ -695,7 +695,7 @@ class DJFrameView(ctk.CTkFrame):
                 if getattr(self, 'current_temp_bpm', None) is not None:
                     try:
                         self.save_btn.configure(state='normal', text='Save BPM')
-                        self.save_btn.pack(side=tk.LEFT, padx=(0, 0))
+                        self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
                     except Exception:
                         pass
                 else:
@@ -739,7 +739,7 @@ class DJFrameView(ctk.CTkFrame):
                 if getattr(self, 'current_temp_key', None) is not None:
                     try:
                         self.save_key_btn.configure(state='normal', text='Save Key')
-                        self.save_key_btn.pack(side=tk.RIGHT, padx=(0, 0))
+                        self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
                     except Exception:
                         pass
                 else:

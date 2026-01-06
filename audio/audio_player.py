@@ -568,7 +568,7 @@ class AudioPlayer:
 
         # Delay to ensure stop() completes and hardware buffers are fully cleared
         # This prevents ghost sounds from previous track
-        time.sleep(0.05)
+        time.sleep(0.06)
 
         with self._lock:
             try:
@@ -676,7 +676,7 @@ class AudioPlayer:
                 # This prevents "ghost sounds" from previous track when changing songs
                 stream_to_close.abort()
                 # Delay to ensure hardware buffer is completely flushed
-                time.sleep(0.03)
+                time.sleep(0.07)
                 stream_to_close.close()
             except Exception:
                 logger.error("Failed to stop stream", exc_info=True)
