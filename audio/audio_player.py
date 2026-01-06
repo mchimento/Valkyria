@@ -249,6 +249,16 @@ class AudioPlayer:
                     pass
                 self._buffer = None
 
+            # Reset audio metrics for UI as part of cleanup (ensure UI is reset)
+            try:
+                if self._audio_metrics_callback:
+                    threading.Thread(
+                        target=lambda: self._audio_metrics_callback(-60.0, -60.0, -60.0, 0.0, 0.0),
+                        daemon=True
+                    ).start()
+            except Exception:
+                pass
+
             # Stop all sounddevice operations
             import sounddevice as sd
             try:
@@ -665,6 +675,17 @@ class AudioPlayer:
             except Exception:
                 logger.error("Failed to close buffer", exc_info=True)
 
+        # Reset audio metrics for UI (ensure overall LUFS resets when playback stops)
+        try:
+            if self._audio_metrics_callback:
+                # Use a thread to avoid blocking
+                threading.Thread(
+                    target=lambda: self._audio_metrics_callback(-60.0, -60.0, -60.0, 0.0, 0.0),
+                    daemon=True
+                ).start()
+        except Exception:
+            # Don't let metrics reset failures interrupt stop
+            pass
     def set_volume(self, val):
         """
         Set the playback volume.

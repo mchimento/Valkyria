@@ -450,13 +450,15 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set("--")
             self.save_btn.pack_forget()
 
-    def update_meter_values(self, lufs=-60.0, peak_dbfs=-60.0, limiter_activity=0.0):
+    def update_meter_values(self, lufs=-60.0, peak_dbfs=-60.0, limiter_activity=0.0, overall_lufs=None):
         """Update the meter values
 
         Args:
             lufs: LUFS value (-60 to 0)
             peak_dbfs: Peak dBFS (-60 to 0)
             limiter_activity: Limiter activity (0.0 to 1.0)
+            overall_lufs: Optional overall LUFS value for the track (-60 to 0). If provided,
+                          updates both the stored value and the displayed label.
         """
         self.lufs_value = max(-60.0, min(0.0, lufs))
         self.peak_dbfs = max(-60.0, min(0.0, peak_dbfs))
@@ -464,6 +466,15 @@ class DJFrameView(ctk.CTkFrame):
 
         # Update labels
         self.lufs_label.configure(text=f"{self.lufs_value:.1f}")
+
+        # Optionally update overall LUFS if provided
+        if overall_lufs is not None:
+            self.overall_lufs_value = max(-60.0, min(0.0, overall_lufs))
+            try:
+                self.overall_lufs_label.configure(text=f"{self.overall_lufs_value:.1f}")
+            except Exception:
+                # If label isn't available for some reason, ignore silently
+                pass
 
         # Redraw meters
         is_dark = self.settings.theme.lower() == "dark"
@@ -494,6 +505,7 @@ class DJFrameView(ctk.CTkFrame):
         self.bpm_var.set("--")
         self.key_var.set("--")
         self.lufs_value = -60.0
+        self.overall_lufs_value = -60.0
         self.peak_dbfs = -60.0
         self.limiter_activity = 0.0
         self.energy_level = 0.0
