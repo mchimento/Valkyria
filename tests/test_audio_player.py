@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import Mock, MagicMock, patch
+import numpy as np
 from audio.audio_player import AudioPlayer
 
 class TestAudioPlayer(unittest.TestCase):
@@ -138,6 +139,77 @@ class TestAudioPlayer(unittest.TestCase):
             # Verify references were still cleared
             self.assertIsNone(player._stream)
             self.assertIsNone(player._buffer)
+
+
+class TestAudioPlayerResample(unittest.TestCase):
+    """Tests for the stateful resampler in AudioPlayer."""
+
+    class DummyBuffer:
+        def __init__(self, channels=2):
+            self.channels = channels
+            self.samplerate = 44100
+            self.absolute_read_pos = 0
+            self.eof = False
+            self._offset = 0
+
+        def read(self, frames):
+            # Simulate read returning more frames than requested (e.g., due to rate changes)
+            # Return 1704 frames of stereo audio (float32) with a slight offset per read
+            n = 1704
+            data = np.zeros((n, self.channels), dtype="float32")
+            # Fill with a simple ramp so values are deterministic and different per read
+            for ch in range(self.channels):
+                start = -0.5 + (self._offset * 1e-3)
+                end = 0.5 + (self._offset * 1e-3)
+                data[:, ch] = np.linspace(start, end, n, dtype="float32")
+            self._offset += 1
+            return data
+
+    def test_stream_callback_resample_does_not_broadcast_error(self):
+        player = AudioPlayer()
+
+        # Replace real effects with identity to avoid side-effects or state requirements
+        player.effects.process = lambda x: x
+
+        # Attach dummy buffer and set a playback rate that triggers resampling
+        player._buffer = self.DummyBuffer(channels=2)
+        player._playback_rate = 1.5
+
+        # Create outdata buffer matching a smaller frame request (e.g., 1136 frames)
+        frames = 1136
+        outdata = np.zeros((frames, 2), dtype="float32")
+
+        # Call the callback - it should not raise
+        player._stream_callback(outdata, frames, None, None)
+
+        # Ensure outdata contains non-zero data after processing (resampled/interpolated)
+        self.assertFalse(np.allclose(outdata, 0), "outdata appears to be silent after callback")
+
+    def test_resampler_stateful_continuity(self):
+        player = AudioPlayer()
+        player.effects.process = lambda x: x
+        player._buffer = self.DummyBuffer(channels=2)
+        player._playback_rate = 1.5
+
+        frames = 1136
+        out1 = np.zeros((frames, 2), dtype="float32")
+        player._stream_callback(out1, frames, None, None)
+
+        # Capture resampler position after first callback
+        pos_after_first = getattr(player, '_resample_pos', None)
+
+        out2 = np.zeros((frames, 2), dtype="float32")
+        player._stream_callback(out2, frames, None, None)
+
+        # Ensure both outputs are non-silent and the resampler state is reasonable
+        self.assertFalse(np.allclose(out1, 0))
+        self.assertFalse(np.allclose(out2, 0))
+        self.assertIsNotNone(pos_after_first)
+        self.assertGreaterEqual(pos_after_first, 0.0)
+
+        # Resample buffer should not grow unbounded for this use-case
+        buf_len = getattr(player, '_resample_buffer', np.zeros((0,))).shape[0]
+        self.assertLess(buf_len, 5000)
 
 
 if __name__ == '__main__':

@@ -205,6 +205,9 @@ class AudioPlayer:
         self._device_id = None
         self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
+        # Stateful resampler buffer (keeps continuity between callbacks)
+        self._resample_buffer = None
+        self._resample_pos = 0.0
 
         # Audio metrics calculation (LUFS, Peak dBFS, Energy)
         self._audio_metrics_callback = None
@@ -291,20 +294,80 @@ class AudioPlayer:
                 outdata[:] = 0
                 raise sd.CallbackStop
 
-        # Resample if needed
-        if abs(self._playback_rate - 1.0) < 0.01:
-            outdata[:] = data
+        # Resample if needed (stateful resampler for smoother speed changes)
+        rate = self._playback_rate
+        if abs(rate - 1.0) < 0.01:
+            # Direct copy with padding/truncation to match frames
+            n = data.shape[0]
+            if n >= frames:
+                outdata[:] = data[:frames]
+            else:
+                if n > 0:
+                    outdata[:n] = data
+                if frames > n:
+                    outdata[n:frames] = 0
         else:
-            # Resample full block: stretch read data to fit output frames
-            # Note: This simple interpolation does not maintain continuity across blocks
-            # but is sufficient for basic speed control.
-            x_old = np.linspace(0, 1, len(data))
-            x_new = np.linspace(0, 1, frames)
-            for ch in range(data.shape[1]):
-                outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
+            # Initialize resample state if missing
+            if not hasattr(self, '_resample_buffer') or self._resample_buffer is None:
+                # Create empty buffer with proper channels
+                self._resample_buffer = np.zeros((0, data.shape[1]), dtype='float32')
+                self._resample_pos = 0.0
 
-        # Apply Audio Effects
-        outdata[:] = data
+            # Append new samples to the resample buffer
+            if data.shape[0] > 0:
+                self._resample_buffer = np.concatenate((self._resample_buffer, data), axis=0)
+
+            buf = self._resample_buffer
+            buf_len = buf.shape[0]
+            channels = buf.shape[1] if buf_len > 0 else data.shape[1]
+
+            if buf_len == 0:
+                outdata[:] = 0
+            else:
+                # Compute source positions for each output frame
+                positions = self._resample_pos + np.arange(frames) * rate
+                floor_idx = np.floor(positions).astype(np.int64)
+                frac = positions - floor_idx
+                next_idx = np.minimum(floor_idx + 1, buf_len - 1)
+
+                valid = floor_idx < buf_len
+                out = np.zeros((frames, channels), dtype='float32')
+
+                for ch in range(channels):
+                    s1 = buf[np.clip(floor_idx, 0, buf_len - 1), ch]
+                    s2 = buf[next_idx, ch]
+                    samples = (1.0 - frac) * s1 + frac * s2
+                    # Zero out invalid positions (past EOF / insufficient buffer)
+                    samples[~valid] = 0.0
+                    out[:, ch] = samples
+
+                outdata[:] = out
+
+                # Determine how many integer source frames we consumed
+                if np.any(valid):
+                    consumed = int(np.max(floor_idx[valid])) + 1
+                else:
+                    consumed = 0
+
+                # Drop consumed frames from buffer and update position to next start
+                if consumed > 0:
+                    if consumed >= buf_len:
+                        # Keep a small empty buffer
+                        self._resample_buffer = np.zeros((0, channels), dtype='float32')
+                    else:
+                        self._resample_buffer = self._resample_buffer[consumed:]
+
+                    # Next position (absolute) minus number of dropped frames => relative pos
+                    self._resample_pos = (self._resample_pos + frames * rate) - consumed
+
+                # Trim buffer if it grows too large
+                max_buf = 44100 * 5  # 5 seconds guard
+                if self._resample_buffer.shape[0] > max_buf:
+                    drop = self._resample_buffer.shape[0] - max_buf
+                    self._resample_buffer = self._resample_buffer[drop:]
+                    self._resample_pos = max(0.0, self._resample_pos - drop)
+
+        # Apply Audio Effects (use outdata as the source for processing)
         outdata[:] = self.effects.process(outdata)
 
         # Apply Volume
@@ -497,6 +560,10 @@ class AudioPlayer:
 
                 # Reset effects state to prevent ghost sounds from previous tracks
                 self.effects.reset_state()
+
+                # Reset resampler state for new track
+                self._resample_buffer = None
+                self._resample_pos = 0.0
 
                 self._stream.start()
             except Exception:

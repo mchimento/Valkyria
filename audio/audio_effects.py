@@ -87,10 +87,12 @@ class AudioEffects:
         # Reset Compressor state
         self._compressor_envelope = 0.0
         self._compressor_rms_buffer.fill(0)
+        self._compressor_rms_index = 0
 
         # Reset Spatializer state
         if self._spat_buffer is not None:
             self._spat_buffer.fill(0)
+        self._spat_write_pos = 0
 
     def process(self, data):
         """Apply all enabled effects to the audio data."""
