@@ -317,55 +317,27 @@ class AudioPlayer:
             if data.shape[0] > 0:
                 self._resample_buffer = np.concatenate((self._resample_buffer, data), axis=0)
 
-            buf = self._resample_buffer
-            buf_len = buf.shape[0]
-            channels = buf.shape[1] if buf_len > 0 else data.shape[1]
+            # Use a high-quality sinc (windowed) resampler
+            out, consumed = self._sinc_resample(frames, rate)
+            outdata[:] = out
 
-            if buf_len == 0:
-                outdata[:] = 0
-            else:
-                # Compute source positions for each output frame
-                positions = self._resample_pos + np.arange(frames) * rate
-                floor_idx = np.floor(positions).astype(np.int64)
-                frac = positions - floor_idx
-                next_idx = np.minimum(floor_idx + 1, buf_len - 1)
-
-                valid = floor_idx < buf_len
-                out = np.zeros((frames, channels), dtype='float32')
-
-                for ch in range(channels):
-                    s1 = buf[np.clip(floor_idx, 0, buf_len - 1), ch]
-                    s2 = buf[next_idx, ch]
-                    samples = (1.0 - frac) * s1 + frac * s2
-                    # Zero out invalid positions (past EOF / insufficient buffer)
-                    samples[~valid] = 0.0
-                    out[:, ch] = samples
-
-                outdata[:] = out
-
-                # Determine how many integer source frames we consumed
-                if np.any(valid):
-                    consumed = int(np.max(floor_idx[valid])) + 1
+            # Drop consumed frames from buffer and update position
+            if consumed > 0:
+                buf_len = self._resample_buffer.shape[0]
+                channels = self._resample_buffer.shape[1] if buf_len > 0 else data.shape[1]
+                if consumed >= buf_len:
+                    self._resample_buffer = np.zeros((0, channels), dtype='float32')
                 else:
-                    consumed = 0
+                    self._resample_buffer = self._resample_buffer[consumed:]
 
-                # Drop consumed frames from buffer and update position to next start
-                if consumed > 0:
-                    if consumed >= buf_len:
-                        # Keep a small empty buffer
-                        self._resample_buffer = np.zeros((0, channels), dtype='float32')
-                    else:
-                        self._resample_buffer = self._resample_buffer[consumed:]
+                self._resample_pos = (self._resample_pos + frames * rate) - consumed
 
-                    # Next position (absolute) minus number of dropped frames => relative pos
-                    self._resample_pos = (self._resample_pos + frames * rate) - consumed
-
-                # Trim buffer if it grows too large
-                max_buf = 44100 * 5  # 5 seconds guard
-                if self._resample_buffer.shape[0] > max_buf:
-                    drop = self._resample_buffer.shape[0] - max_buf
-                    self._resample_buffer = self._resample_buffer[drop:]
-                    self._resample_pos = max(0.0, self._resample_pos - drop)
+            # Trim buffer if it grows too large
+            max_buf = 44100 * 5  # 5 seconds guard
+            if self._resample_buffer.shape[0] > max_buf:
+                drop = self._resample_buffer.shape[0] - max_buf
+                self._resample_buffer = self._resample_buffer[drop:]
+                self._resample_pos = max(0.0, self._resample_pos - drop)
 
         # Apply Audio Effects (use outdata as the source for processing)
         outdata[:] = self.effects.process(outdata)
@@ -390,6 +362,66 @@ class AudioPlayer:
                     self.on_track_end()
                 except Exception:
                     logger.error("Error in track end callback", exc_info=True)
+
+    def _sinc_resample(self, frames, rate, kernel_size=64):
+        """High-quality stateful sinc resampler.
+
+        Uses a windowed sinc kernel (Hann window) and linear convolution across a
+        kernel of size `kernel_size` to interpolate arbitrary fractional positions.
+        This keeps state in `self._resample_buffer` and `self._resample_pos`.
+        Returns (out, consumed_frames) where `out` is (frames, channels).
+        """
+        buf = self._resample_buffer
+        if buf is None or buf.shape[0] == 0:
+            # Nothing available; return silence
+            channels = self._buffer.channels if self._buffer else 2
+            return np.zeros((frames, channels), dtype='float32'), 0
+
+        buf_len = buf.shape[0]
+        channels = buf.shape[1]
+
+        # Kernel parameters
+        if kernel_size % 2 != 0:
+            kernel_size += 1
+        half = kernel_size // 2
+
+        # Positions in source frames for each output frame
+        positions = self._resample_pos + np.arange(frames) * rate
+        centers = np.floor(positions).astype(np.int64)
+
+        # Prepare index grid and offsets
+        n_range = np.arange(-half + 1, half + 1)  # length kernel_size
+        indices = centers[:, None] + n_range[None, :]
+
+        # Clip indices to buffer range for safe gathering and mark validity
+        valid_mask = (indices >= 0) & (indices < buf_len)
+        clipped = np.clip(indices, 0, buf_len - 1)
+
+        # Gather samples: shape (frames, kernel_size, channels)
+        samples = buf[clipped]
+
+        # Offsets for sinc: how far each tap is from the source position
+        offsets = positions[:, None] - indices  # shape (frames, kernel_size)
+
+        # Hann window applied to the sinc kernel
+        win = 0.5 * (1.0 + np.cos(np.pi * offsets / half))
+        win[np.abs(offsets) > half] = 0.0
+
+        # Sinc function: np.sinc uses sin(pi x)/(pi x)
+        kernel = np.sinc(offsets) * win
+        kernel *= valid_mask.astype('float32')
+
+        # Perform convolution for each channel using einsum for clarity
+        out = np.einsum('ij,ijk->ik', kernel, samples)
+
+        # Compute how many source frames we can drop: max floor index used + 1
+        row_valid = valid_mask.any(axis=1)
+        if np.any(row_valid):
+            consumed = int(np.max(centers[row_valid])) + 1
+        else:
+            consumed = 0
+
+        return out.astype('float32'), consumed
 
     def set_audio_metrics_callback(self, callback):
         """Set callback for audio metrics updates. Callback receives (lufs_value, overall_lufs, peak_dbfs, limiter_activity, energy_level)."""

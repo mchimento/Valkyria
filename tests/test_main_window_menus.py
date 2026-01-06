@@ -10,6 +10,13 @@ logging.disable(logging.CRITICAL)
 
 # Skip UI tests if running in headless environment (CI/CD)
 HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+# Ensure Tk is actually initializable (Windows can report a display but Tk may be broken)
+if HAS_DISPLAY:
+    try:
+        _tmp_root = tk.Tk()
+        _tmp_root.destroy()
+    except Exception:
+        HAS_DISPLAY = False
 
 
 class TestMainWindowMenus(unittest.TestCase):
