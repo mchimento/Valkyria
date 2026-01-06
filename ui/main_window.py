@@ -278,8 +278,13 @@ class MainWindow:
             self._restore_status()
             self._update_menu_state()
             self._set_track_info_enabled(True)
+        elif event_type == "resume":
+            # Resume should update menu state but not re-run the full status restore
+            # which triggers DJ view update/analysis — keep using cached values on resume
+            self._update_menu_state()
+            self._set_track_info_enabled(True)
         elif event_type == "pause":
-            self._restore_status()
+            # On pause, update UI state but avoid performing a status restore
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "stop":

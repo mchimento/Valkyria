@@ -37,12 +37,14 @@ class DJFrameView(ctk.CTkFrame):
 
         # BPM analysis state
         self.current_temp_bpm = None
-        self.temporary_bpm_files = set()
+        # Mapping of filepath -> estimated BPM value (keeps cached estimates per file)
+        self.temporary_bpm_values = {}
         self._estimating_file = None
 
         # Key analysis state
         self.current_temp_key = None
-        self.temporary_key_files = set()
+        # Mapping of filepath -> estimated Key value (keeps cached estimates per file)
+        self.temporary_key_values = {}
         self._estimating_key_file = None
 
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
@@ -438,6 +440,17 @@ class DJFrameView(ctk.CTkFrame):
                 self.save_btn.pack_forget()
             elif self._estimating_file == filepath:
                 return
+            elif filepath in getattr(self, 'temporary_bpm_values', {}):
+                # We already have a per-file estimated BPM for this file; show it instead of re-running estimation
+                try:
+                    bpm_val = self.temporary_bpm_values.get(filepath)
+                    self.current_temp_bpm = bpm_val
+                    self.bpm_var.set(get_display_bpm(bpm_val))
+                    self.save_btn.configure(text="Save BPM", state="normal")
+                    self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                except Exception:
+                    pass
+                self._estimating_file = None
             else:
                 self.bpm_var.set("Estimating...")
                 self._estimating_file = filepath
@@ -486,6 +499,27 @@ class DJFrameView(ctk.CTkFrame):
                 self.save_key_btn.pack_forget()
             elif self._estimating_key_file == filepath:
                 return
+            elif filepath in getattr(self, 'temporary_key_values', {}):
+                # We already have a per-file estimated Key for this file; show it instead of re-running estimation
+                try:
+                    key_val = self.temporary_key_values.get(filepath)
+                    camelot_val = None
+                    try:
+                        camelot_val = key_to_camelot(key_val)
+                    except Exception:
+                        camelot_val = None
+
+                    if camelot_val:
+                        self.key_var.set(f"{camelot_val}")
+                    else:
+                        self.key_var.set(key_val)
+
+                    self.current_temp_key = key_val
+                    self.save_key_btn.configure(text="Save Key", state="normal")
+                    self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                except Exception:
+                    pass
+                self._estimating_key_file = None
             else:
                 self.key_var.set("Estimating...")
                 self._estimating_key_file = filepath
@@ -524,21 +558,38 @@ class DJFrameView(ctk.CTkFrame):
             return
 
         if key:
-            # Display estimated key with optional Camelot mapping
-            camelot_val = None
+            # Cache per-file
+            self.temporary_key_values[filepath] = key
+            # Display estimated key with optional Camelot mapping if this is current track
             try:
-                camelot_val = key_to_camelot(key)
+                idx = getattr(self.state, 'current_index', None)
+                current_path = None
+                if idx is not None and idx < len(self.state.playlist):
+                    current_path = self.state.playlist[idx]
+                if current_path and os.path.abspath(current_path) == os.path.abspath(filepath):
+                    camelot_val = None
+                    try:
+                        camelot_val = key_to_camelot(key)
+                    except Exception:
+                        camelot_val = None
+
+                    if camelot_val:
+                        self.key_var.set(f"{camelot_val}")
+                    else:
+                        self.key_var.set(key)
+
+                    self.current_temp_key = key
+                    self.save_key_btn.configure(text="Save Key", state="normal")
+                    self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                else:
+                    # Keep the cached value for when the track becomes active
+                    try:
+                        self.save_key_btn.configure(text="Save Key", state="normal")
+                        self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                    except Exception:
+                        pass
             except Exception:
-                camelot_val = None
-
-            if camelot_val:
-                self.key_var.set(f"{camelot_val}")
-            else:
-                self.key_var.set(key)
-
-            self.current_temp_key = key
-            self.save_key_btn.configure(text="Save Key", state="normal")
-            self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                pass
         else:
             self.key_var.set("--")
             self.save_key_btn.pack_forget()
@@ -653,14 +704,26 @@ class DJFrameView(ctk.CTkFrame):
                     pass
 
             if bpm_value is not None:
-                self.current_temp_bpm = bpm_value
-                self.temporary_bpm_files.add(filepath)
-                # Update the BPM display
-                self.bpm_var.set(get_display_bpm(bpm_value))
-                # If not part of a direct estimation flow, ensure Save button is visible
+                # Cache BPM per-file
+                self.temporary_bpm_values[filepath] = bpm_value
+                # Update the BPM display if this is the current track
                 try:
-                    self.save_btn.configure(text="Save BPM", state="normal")
-                    self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                    idx = getattr(self.state, 'current_index', None)
+                    current_path = None
+                    if idx is not None and idx < len(self.state.playlist):
+                        current_path = self.state.playlist[idx]
+                    if current_path and os.path.abspath(current_path) == os.path.abspath(filepath):
+                        self.current_temp_bpm = bpm_value
+                        self.bpm_var.set(get_display_bpm(bpm_value))
+                        self.save_btn.configure(text="Save BPM", state="normal")
+                        self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                    else:
+                        # Keep the cached value for when the track becomes active
+                        try:
+                            self.save_btn.configure(text="Save BPM", state="normal")
+                            self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                        except Exception:
+                            pass
                 except Exception:
                     pass
             else:
@@ -687,9 +750,8 @@ class DJFrameView(ctk.CTkFrame):
     def _on_bpm_save_complete(self, filepath, success):
         try:
             if success:
-                # Keep the estimated BPM in memory so it can be saved again if the
-                # on-disk metadata changes (e.g., user removes BPM via Media Info)
-                self.temporary_bpm_files.discard(filepath)
+                # Keep the estimated BPM cached in memory so the value can be
+                # re-saved later if the on-disk metadata is removed.
                 # Hide button after successful save
                 self.save_btn.pack_forget()
                 # Mark that this file now has a saved BPM on disk
@@ -717,8 +779,8 @@ class DJFrameView(ctk.CTkFrame):
             bpm_on_disk = meta.get('bpm')
 
             if (bpm_on_disk is None or bpm_on_disk == ""):
-                # If we have a cached estimate, show Save button immediately so the user can re-save
-                if getattr(self, 'current_temp_bpm', None) is not None:
+                # If we have a cached per-file estimate, show Save button immediately so the user can re-save
+                if filepath in getattr(self, 'temporary_bpm_values', {}):
                     try:
                         self.save_btn.configure(state='normal', text='Save BPM')
                         self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
@@ -761,8 +823,8 @@ class DJFrameView(ctk.CTkFrame):
             key_on_disk = meta.get('key')
 
             if (key_on_disk is None or key_on_disk == ""):
-                # If we have a cached estimate, show Save button immediately
-                if getattr(self, 'current_temp_key', None) is not None:
+                # If we have a cached per-file estimate, show Save button immediately
+                if filepath in getattr(self, 'temporary_key_values', {}):
                     try:
                         self.save_key_btn.configure(state='normal', text='Save Key')
                         self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
@@ -815,7 +877,8 @@ class DJFrameView(ctk.CTkFrame):
     def _on_key_save_complete(self, filepath, success):
         try:
             if success:
-                self.temporary_key_files.discard(filepath)
+                # Remove cached estimate now that value is persisted
+                self.temporary_key_values.pop(filepath, None)
                 self.save_key_btn.pack_forget()
             else:
                 self._reset_key_button()

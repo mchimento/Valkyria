@@ -300,7 +300,8 @@ class ControlsBar(ttk.Frame):
                 self.is_playing = True
                 self._update_pause_button_state()
                 self._update_play_button_state()
-                self._send_status("play")
+                # Emit a distinct resume event to avoid full restore which triggers DJ re-analysis
+                self._send_status("resume")
             else:
                 # Pause playback - reset play button to normal
                 self.pause()

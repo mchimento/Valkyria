@@ -144,6 +144,37 @@ class TestMainWindowMenus(unittest.TestCase):
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
     @patch('ui.main_window.TooltipManager')
+    def test_resume_does_not_trigger_dj_reestimate(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
+        """Resuming playback (via 'resume' event) should not cause the DJ view to start new analyses."""
+        from ui.main_window import MainWindow
+        from audio import bpm as bpm_module
+
+        try:
+            root = tk.Tk()
+            self.root = root
+            main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
+
+            # Prepare a cached temporary estimate on DJ view
+            main_window.dj_view.current_temp_bpm = 120.0
+            main_window.dj_view.current_temp_key = 'Am'
+
+            # Patch analysis manager submission functions to detect unexpected calls
+            with patch.object(bpm_module.analysis_manager, 'submit_bpm_analysis') as mock_bpm_submit:
+                with patch.object(bpm_module.analysis_manager, 'submit_key_analysis') as mock_key_submit:
+                    # Simulate resume event (raised by ControlsBar on resume)
+                    main_window._controls_status_event('resume')
+
+                    mock_bpm_submit.assert_not_called()
+                    mock_key_submit.assert_not_called()
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+    @patch('ui.main_window.ControlsBar')
+    @patch('ui.main_window.BrowserView')
+    @patch('ui.main_window.PlaylistView')
+    @patch('ui.main_window.TooltipManager')
     def test_audio_device_menu_populated(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
         """Test Audio Device submenu is properly populated with devices."""
         from ui.main_window import MainWindow
