@@ -9,40 +9,42 @@ import os
 import sys
 
 
-def has_tk():
-    """Return True if a tk.Tk() instance can be created and destroyed.
-
-    If TCL_LIBRARY is not set, try to set it from the Python exec prefix
-    (common for Windows/MS Store installs) to reduce flaky failures.
+def has_tk(retries: int = 3, delay: float = 0.05) -> bool:
+    """
+    Return True if a tk.Tk() instance can be created and destroyed.
     """
     if 'TCL_LIBRARY' not in os.environ:
         candidate = os.path.join(sys.exec_prefix, 'tcl', 'tcl8.6')
         if os.path.exists(os.path.join(candidate, 'init.tcl')):
             os.environ['TCL_LIBRARY'] = candidate
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        # Also check ttk/theme subsystem to ensure full usable Tk/Ttk (themes may
-        # be missing on some broken installs). If importing ttk or querying
-        # theme names fails, consider Tk unusable.
+
+    for attempt in range(retries):
         try:
-            import tkinter.ttk as ttk
+            root = tk.Tk()
+            root.withdraw()
+            # Also check ttk/theme subsystem to ensure full usable Tk/Ttk
             try:
-                style = ttk.Style(root)
-                # Access theme_names to force loading of theme files
-                _ = style.theme_names()
+                import tkinter.ttk as ttk
+                try:
+                    style = ttk.Style(root)
+                    _ = style.theme_names()
+                except Exception:
+                    root.destroy()
+                    return False
             except Exception:
-                # Fail if ttk themes cannot be loaded
                 root.destroy()
                 return False
-        except Exception:
-            # If ttk import fails, treat as unusable
             root.destroy()
-            return False
-        root.destroy()
-        return True
-    except Exception:
-        return False
+            return True
+        except Exception:
+            # Small delay before retrying; this helps on flaky environments
+            try:
+                import time
+                time.sleep(delay)
+            except Exception:
+                pass
+            continue
+    return False
 
 
 # Module constant for convenience

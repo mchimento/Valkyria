@@ -8,6 +8,7 @@ from tkinter import ttk
 import sys
 import os
 from unittest.mock import Mock, patch
+import numpy as np
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ui.waveform_seekbar import WaveformSeekbar
 from audio.audio_player import AudioPlayer
 
-from tests.tk_utils import HAS_TK as HAS_DISPLAY
+from tests.tk_utils import HAS_TK as HAS_DISPLAY, skip_if_no_tk
 
 
 class TestWaveformSeekbar(unittest.TestCase):
@@ -23,6 +24,9 @@ class TestWaveformSeekbar(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
+        # Skip if Tk isn't available in this environment
+        skip_if_no_tk(self)
+
         # Create a root window for testing
         self.root = tk.Tk()
         self.root.withdraw()  # Hide the window during tests
@@ -215,6 +219,31 @@ class TestWaveformSeekbar(unittest.TestCase):
         # Should have started a thread
         mock_thread.assert_called_once()
         mock_thread_instance.start.assert_called_once()
+
+    def test_generate_waveform_ffmpeg_fallback(self):
+        """Test the ffmpeg fallback branch when soundfile can't read the input."""
+        import soundfile as sf
+        # Prepare synthetic audio to be returned by the second sf.read
+        sr = 44100
+        y = np.zeros(44100, dtype='float32')
+        y[::sr//2] = 0.8
+
+        # Make sf.read raise on first call (original file), succeed on second (decoded tmp)
+        original_read = sf.read
+        def fake_read(path, *args, **kwargs):
+            if path == "bad.mp3":
+                raise sf.LibsndfileError("cannot read mp3")
+            return (y, sr)
+
+        with patch('ui.waveform_seekbar.sf.read', side_effect=fake_read):
+            with patch('ui.waveform_seekbar.shutil.which', return_value='/usr/bin/ffmpeg'):
+                with patch('ui.waveform_seekbar.subprocess.run') as mock_run:
+                    # Call worker directly to avoid threading complexity
+                    self.waveform._generate_waveform_worker('bad.mp3')
+
+        # After worker runs, waveform_data should be present and non-empty
+        self.assertIsNotNone(self.waveform.waveform_data)
+        self.assertGreater(len(self.waveform.waveform_data), 0)
 
     def test_edge_cases(self):
         """Test edge cases and error handling."""

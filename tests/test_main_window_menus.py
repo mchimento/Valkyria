@@ -8,14 +8,9 @@ import tkinter as tk
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
 
-from tests.tk_utils import HAS_TK as HAS_DISPLAY
-# Ensure Tk is actually initializable (Windows can report a display but Tk may be broken)
-if HAS_DISPLAY:
-    try:
-        _tmp_root = tk.Tk()
-        _tmp_root.destroy()
-    except Exception:
-        HAS_DISPLAY = False
+# Use centralized Tk availability utility (handles retries and TCL_LIBRARY fallback)
+from tests import tk_utils
+HAS_DISPLAY = tk_utils.HAS_TK
 
 
 class TestMainWindowMenus(unittest.TestCase):
@@ -31,7 +26,6 @@ class TestMainWindowMenus(unittest.TestCase):
         """Re-enable logging after tests."""
         logging.disable(logging.NOTSET)
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -39,12 +33,7 @@ class TestMainWindowMenus(unittest.TestCase):
     @patch('ui.main_window.PreferencesWindow')
     def setUp(self, mock_prefs, mock_tooltip, mock_playlist_view, mock_browser_view, mock_controls):
         """Set up test fixtures."""
-        try:
-            root = tk.Tk()
-            root.destroy()
-        except Exception:
-            self.skipTest("Tkinter not available in this environment")
-
+        tk_utils.skip_if_no_tk(self)
         self.mock_state = MagicMock()
         self.mock_state.playlist = ["/path/to/song1.mp3", "/path/to/song2.mp3"]  # Add songs to playlist
         self.mock_state.current_index = 0
@@ -73,7 +62,6 @@ class TestMainWindowMenus(unittest.TestCase):
         except Exception:
             pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -100,7 +88,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -127,7 +114,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -154,7 +140,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -178,7 +163,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -203,7 +187,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -234,7 +217,6 @@ class TestMainWindowMenus(unittest.TestCase):
                 pass
 
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')

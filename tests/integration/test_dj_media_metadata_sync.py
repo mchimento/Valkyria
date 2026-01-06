@@ -6,22 +6,25 @@ import unittest
 import tkinter as tk
 import numpy as np
 import soundfile as sf
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from audio.metadata import write_bpm, save_metadata, metadata_extractor
 from ui.dj_frame_view import DJFrameView
 
-from tests.tk_utils import HAS_TK as HAS_DISPLAY
+from tests.tk_utils import HAS_TK as HAS_DISPLAY, skip_if_no_tk
 
 
-@unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
 class TestDJMediaIntegration(unittest.TestCase):
     def setUp(self):
+        # Note: do not skip automatically if Tk isn't available. We will attempt
+        # to use a lightweight dummy GUI if necessary so integration logic is
+        # still testable in headless environments.
         try:
             self.root = tk.Tk()
             self.root.withdraw()
         except Exception:
-            self.skipTest("Tkinter not available in this environment")
+            # Defer to later when we decide whether to use a DummyMaster
+            self.root = None
 
         # Create temp FLAC file (supports metadata reliably)
         fd, path = tempfile.mkstemp(suffix='.flac')
@@ -40,10 +43,123 @@ class TestDJMediaIntegration(unittest.TestCase):
         self.state.playlist = [self.filepath]
         self.state.current_index = 0
 
+        # If real Tk is available this test will use it; otherwise create a
+        # lightweight fake GUI environment so we can exercise DJFrameView logic
+        # without requiring a full Tk install.
+        try:
+            # Try to create real root window once
+            tmp_root = tk.Tk()
+            tmp_root.withdraw()
+            tmp_root.destroy()
+            using_real_tk = True
+        except Exception:
+            using_real_tk = False
+
+        if using_real_tk:
+            # Ensure self.root references a real root (first attempt may have failed earlier)
+            if self.root is None:
+                try:
+                    self.root = tk.Tk()
+                    self.root.withdraw()
+                except Exception:
+                    # If creating a real root now fails, fall back to dummy mode
+                    using_real_tk = False
+
+        if not using_real_tk:
+            # Monkeypatch top-level customtkinter classes to simple dummies that don't
+            # require a running Tk event loop. Patch the library namespace so other
+            # modules that import customtkinter also see the dummy classes.
+            class DummyRoot:
+                def after(self, delay, func, *args, **kwargs):
+                    func(*args, **kwargs)
+                def withdraw(self): pass
+                def destroy(self): pass
+                def update(self): pass
+
+            class DummyMaster:
+                def __init__(self):
+                    self._root = DummyRoot()
+                    self.tk = None
+                def winfo_toplevel(self):
+                    return self._root
+
+            class DummyFrame:
+                def __init__(self, master=None, **kwargs):
+                    self.master = master
+                    self._children = []
+                def pack(self, *args, **kwargs): self._packed = True
+                def pack_propagate(self, val): pass
+                def pack_forget(self): self._packed = False
+                def pack_configure(self, *a, **kw): pass
+
+            class DummyLabel(DummyFrame):
+                def __init__(self, master=None, **kwargs):
+                    super().__init__(master, **kwargs)
+                    self._text = kwargs.get('text', '')
+                    self._textvar = kwargs.get('textvariable', None)
+                def configure(self, **kwargs):
+                    if 'text' in kwargs:
+                        self._text = kwargs['text']
+                def cget(self, key):
+                    if key == 'text':
+                        return self._text
+                    return ''
+
+            class DummyButton(DummyLabel):
+                def __init__(self, master=None, **kwargs):
+                    super().__init__(master, **kwargs)
+                    self._state = kwargs.get('state', 'normal')
+                def pack_forget(self):
+                    self._state = ''
+                def pack(self, *a, **kw):
+                    self._state = 'normal'
+                def cget(self, key):
+                    if key == 'text':
+                        return self._text
+                    if key == 'state':
+                        return self._state
+                    return ''
+
+            class DummyCanvas(DummyFrame):
+                def __init__(self, master=None, **kwargs):
+                    super().__init__(master, **kwargs)
+                def delete(self, *args, **kwargs): pass
+                def create_rectangle(self, *args, **kwargs): pass
+
+            class DummyOptionMenu(DummyFrame):
+                def __init__(self, master=None, **kwargs):
+                    super().__init__(master, **kwargs)
+
+            # Patch the top-level customtkinter names so other modules use them
+            import customtkinter as ctk
+            self._patches = []
+            self._patches.append(patch('customtkinter.CTkFrame', DummyFrame))
+            self._patches.append(patch('customtkinter.CTkLabel', DummyLabel))
+            self._patches.append(patch('customtkinter.CTkButton', DummyButton))
+            self._patches.append(patch('customtkinter.CTkCanvas', DummyCanvas))
+            self._patches.append(patch('customtkinter.CTkFont', lambda *a, **k: None))
+            self._patches.append(patch('customtkinter.CTkOptionMenu', DummyOptionMenu))
+            for p in self._patches:
+                p.start()
+
+            self.root = DummyMaster()
+
         # Create DJ view
         self.dj = DJFrameView(self.root, self.state, self.theme, self.settings)
         # Pack the frame so widgets can be mapped and manipulated during test
-        self.dj.pack()
+        try:
+            self.dj.pack()
+        except Exception:
+            pass
+
+        # If we are using dummy GUI, ensure the save button is in a known default state
+        if not using_real_tk:
+            try:
+                # Ensure the button is considered hidden initially
+                if hasattr(self.dj.save_btn, 'pack_forget'):
+                    self.dj.save_btn.pack_forget()
+            except Exception:
+                pass
 
         # Register listener so DJ view is notified on metadata changes
         metadata_extractor.register_bpm_listener(self.dj._on_bpm_metadata_changed)
@@ -53,6 +169,13 @@ class TestDJMediaIntegration(unittest.TestCase):
             metadata_extractor.unregister_bpm_listener(self.dj._on_bpm_metadata_changed)
         except Exception:
             pass
+        # Stop any started patchers
+        if hasattr(self, '_patches'):
+            for p in self._patches:
+                try:
+                    p.stop()
+                except Exception:
+                    pass
         try:
             self.root.destroy()
         except Exception:

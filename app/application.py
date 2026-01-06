@@ -29,23 +29,7 @@ class TangoStudioApp:
         except Exception:
             pass
 
-        # Warm up BPM analysis libraries in background to prevent first-time lag
-        threading.Thread(target=self._warmup_bpm_analysis, daemon=True).start()
-
         logger.info("Tango Studio initialized successfully")
-
-    def _warmup_bpm_analysis(self):
-        """Preload heavy libraries used for BPM analysis to avoid first-time interruption."""
-        try:
-            import numpy as np
-            import librosa
-            # Create a small dummy audio signal to trigger library initialization
-            # Use 1 second of audio to avoid FFT warnings
-            dummy_audio = np.random.randn(22050).astype(np.float32)
-            _ = librosa.onset.onset_strength(y=dummy_audio, sr=22050, hop_length=512, n_fft=2048)
-        except Exception:
-            # Silently fail - warmup is optional
-            pass
 
     def _on_track_end(self):
         """Called from audio backend thread context via event; schedule UI-safe callback."""
