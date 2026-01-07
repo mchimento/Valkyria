@@ -9,8 +9,7 @@ from tkinter import ttk
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
 
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+from tests.tk_utils import HAS_TK as HAS_DISPLAY
 
 class TestThemeSwitching(unittest.TestCase):
     """Integration tests for theme switching functionality."""
@@ -28,8 +27,11 @@ class TestThemeSwitching(unittest.TestCase):
     @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     def setUp(self):
         """Set up test fixtures."""
-        self.root = tk.Tk()
-        self.root.withdraw()  # Hide window during tests
+        try:
+            self.root = tk.Tk()
+            self.root.withdraw()  # Hide window during tests
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
 
     def tearDown(self):
         """Clean up after tests."""
@@ -267,12 +269,12 @@ class TestThemeSwitching(unittest.TestCase):
 
         # Measure time for multiple theme switches
         start_time = time.time()
-        
+
         for i in range(5):  # Reduced from 10 to 5 for faster testing
             mock_settings.theme = "light" if i % 2 == 0 else "dark"
             theme_manager.reload()
             controls.update_theme()
-        
+
         end_time = time.time()
         elapsed_time = end_time - start_time
 
@@ -292,7 +294,7 @@ class TestThemeSwitching(unittest.TestCase):
         with patch('themes.theme_manager.get_resource_path') as mock_get_path:
             # Simulate missing theme files
             mock_get_path.return_value = Path("nonexistent_file.json")
-            
+
             # Should not crash
             try:
                 theme_manager = ThemeManager(mock_settings)

@@ -7,15 +7,42 @@ Provides a visual representation of audio waveform with interactive seeking capa
 import logging
 import threading
 import warnings
-import subprocess
+import os
 import sys
 import customtkinter as ctk
 import soundfile as sf
-from pydub import AudioSegment
-import pydub.utils
 import numpy as np
+import tempfile
+import subprocess
+import shutil
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def suppress_c_stderr():
+    """
+    Context manager to suppress C-level stderr output.
+    Useful for silencing libmpg123 warnings.
+    """
+    try:
+        # Open a null file
+        with open(os.devnull, 'w') as fnull:
+            # Save the original stderr file descriptor
+            original_stderr_fd = sys.stderr.fileno()
+            saved_stderr_fd = os.dup(original_stderr_fd)
+
+            try:
+                # Redirect stderr to null
+                os.dup2(fnull.fileno(), original_stderr_fd)
+                yield
+            finally:
+                # Restore stderr
+                os.dup2(saved_stderr_fd, original_stderr_fd)
+                os.close(saved_stderr_fd)
+    except Exception:
+        # If anything goes wrong (e.g. no fileno), just execute code
+        yield
 
 
 class WaveformSeekbar(ctk.CTkCanvas):
@@ -100,8 +127,6 @@ class WaveformSeekbar(ctk.CTkCanvas):
         # Draw initial placeholder line
         self._draw_placeholder_line()
 
-        logger.info("WaveformSeekbar initialized")
-
     def load_waveform(self, audio_file: str):
         """
         Load and generate waveform for the given audio file.
@@ -131,8 +156,6 @@ class WaveformSeekbar(ctk.CTkCanvas):
         )
         self.waveform_thread.start()
 
-        logger.info(f"Started waveform generation for {audio_file}")
-
     def _generate_waveform_worker(self, audio_file: str):
         """
         Worker function to generate waveform data in background thread.
@@ -143,100 +166,134 @@ class WaveformSeekbar(ctk.CTkCanvas):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                # Try soundfile first (handles WAV, FLAC, OGG, etc.)
+
+                # Optimized path: use block/seek sampling using SoundFile to avoid decoding entire file
                 try:
-                    y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
+                    with suppress_c_stderr():
+                        sf_f = sf.SoundFile(audio_file)
 
-                    # Convert to mono if stereo
-                    if y.ndim > 1:
-                        y = y.mean(axis=1)
+                    total_frames = len(sf_f)
+                    sr = sf_f.samplerate
 
-                except (sf.LibsndfileError, RuntimeError):
-                    # Fallback for MP3 and other formats soundfile can't handle
-                    # Use pydub which handles MP3 well
+                    num_pixels = self.width if self.width > 0 else 400
+                    samples_per_pixel = max(1, total_frames // num_pixels)
 
-                    # Monkey patch subprocess.Popen to suppress console window on Windows
-                    if sys.platform == 'win32':
-                        _original_subprocess_Popen = subprocess.Popen
-                        _original_pydub_Popen = getattr(pydub.utils, 'Popen', None)
+                    # Read only a small window per pixel (reduces I/O & CPU for large files)
+                    window = min(2048, samples_per_pixel)
+                    peaks = np.zeros(num_pixels, dtype='float32')
 
-                        def _patched_Popen(*args, **kwargs):
-                            if 'startupinfo' not in kwargs:
-                                startupinfo = subprocess.STARTUPINFO()
-                                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                                kwargs['startupinfo'] = startupinfo
-                            if 'creationflags' not in kwargs:
-                                kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
-                            return _original_subprocess_Popen(*args, **kwargs)
-
-                        subprocess.Popen = _patched_Popen
-                        if _original_pydub_Popen:
-                            pydub.utils.Popen = _patched_Popen
-
+                    for i in range(num_pixels):
+                        start_frame = i * samples_per_pixel
                         try:
-                            audio = AudioSegment.from_file(audio_file)
-                        finally:
-                            subprocess.Popen = _original_subprocess_Popen
-                            if _original_pydub_Popen:
-                                pydub.utils.Popen = _original_pydub_Popen
+                            sf_f.seek(start_frame)
+                            data = sf_f.read(window, dtype='float32', always_2d=False)
+                        except Exception:
+                            data = None
+
+                        if data is None or len(data) == 0:
+                            peaks[i] = 0.0
+                        else:
+                            if getattr(data, 'ndim', 1) and data.ndim > 1:
+                                data = data.mean(axis=1)
+                            peaks[i] = float(np.max(np.abs(data))) if len(data) > 0 else 0.0
+
+                    try:
+                        sf_f.close()
+                    except Exception:
+                        pass
+
+                    # Normalize the peaks to 0-1 range based on the track's loudest point
+                    if peaks.max() > 0:
+                        peaks = peaks / peaks.max()
+
+                    # Save data and update length
+                    with self.waveform_lock:
+                        self.waveform_data = peaks
+                        self.audio_length = (total_frames / sr) * 1000
+
+                    # Schedule UI update
+                    self.after(0, self._draw_waveform)
+                    return
+
+                except (sf.LibsndfileError, RuntimeError, Exception):
+                    # Fall back to the previous logic which tries soundfile full-read, ffmpeg conversion, or librosa
+                    try:
+                        # Suppress C-level warnings from libmpg123
+                        with suppress_c_stderr():
+                            y, sr = sf.read(audio_file, dtype='float32', always_2d=False)
+
+                        # Convert to mono if stereo
+                        if y.ndim > 1:
+                            y = y.mean(axis=1)
+
+                    except (sf.LibsndfileError, RuntimeError):
+                        # Fallback: try ffmpeg decode to WAV and read with soundfile
+                        if shutil.which('ffmpeg'):
+                            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                                tmpname = tmp.name
+                            try:
+                                subprocess.run([
+                                    'ffmpeg', '-y', '-i', audio_file,
+                                    '-ar', '44100', '-ac', '1', tmpname
+                                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                                try:
+                                    y, sr = sf.read(tmpname, dtype='float32', always_2d=False)
+                                    if y.ndim > 1:
+                                        y = y.mean(axis=1)
+                                except Exception:
+                                    # Fallback to librosa if soundfile can't read decoded WAV
+                                    with suppress_c_stderr():
+                                        import librosa
+                                        y, sr = librosa.load(tmpname, sr=None, mono=True)
+                            finally:
+                                try:
+                                    os.unlink(tmpname)
+                                except Exception:
+                                    pass
+                        else:
+                            # Final fallback to librosa (may use audioread)
+                            with suppress_c_stderr():
+                                import librosa
+                                y, sr = librosa.load(audio_file, sr=None, mono=True)
+
+                    # Calculate the max peak for every pixel on the canvas
+                    num_pixels = self.width
+                    if num_pixels <= 0: num_pixels = 400 # Fallback
+
+                    # Calculate how many audio samples represent one horizontal pixel
+                    samples_per_pixel = len(y) // num_pixels
+
+                    if samples_per_pixel > 0:
+                        # Reshape the array to (num_pixels, samples_per_pixel)
+                        # and find the absolute maximum in each chunk
+                        y_trimmed = y[:num_pixels * samples_per_pixel]
+                        chunks = y_trimmed.reshape(num_pixels, samples_per_pixel)
+                        peaks = np.max(np.abs(chunks), axis=1)
                     else:
-                        audio = AudioSegment.from_file(audio_file)
+                        # For very short files, just use the raw data
+                        peaks = np.abs(y)
 
-                    # Convert to mono
-                    if audio.channels > 1:
-                        audio = audio.set_channels(1)
+                    # Normalize the peaks to 0-1 range based on the track's loudest point
+                    if peaks.max() > 0:
+                        peaks = peaks / peaks.max()
 
-                    # Get sample rate
-                    sr = audio.frame_rate
+                    # Save data and update length
+                    with self.waveform_lock:
+                        self.waveform_data = peaks
+                        self.audio_length = (len(y) / sr) * 1000
 
-                    # Convert to numpy array
-                    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-
-                    # Normalize to -1.0 to 1.0 range
-                    if audio.sample_width == 1:  # 8-bit
-                        y = (samples - 128) / 128.0
-                    elif audio.sample_width == 2:  # 16-bit
-                        y = samples / 32768.0
-                    elif audio.sample_width == 4:  # 32-bit
-                        y = samples / 2147483648.0
-                    else:
-                        y = samples / (2 ** (audio.sample_width * 8 - 1))
-
-            # Calculate the max peak for every pixel on the canvas
-            num_pixels = self.width
-            if num_pixels <= 0: num_pixels = 400 # Fallback
-
-            # Calculate how many audio samples represent one horizontal pixel
-            samples_per_pixel = len(y) // num_pixels
-
-            if samples_per_pixel > 0:
-                # Reshape the array to (num_pixels, samples_per_pixel)
-                # and find the absolute maximum in each chunk
-                y_trimmed = y[:num_pixels * samples_per_pixel]
-                chunks = y_trimmed.reshape(num_pixels, samples_per_pixel)
-                peaks = np.max(np.abs(chunks), axis=1)
-            else:
-                # For very short files, just use the raw data
-                peaks = np.abs(y)
-
-            # Normalize the peaks to 0-1 range based on the track's loudest point
-            if peaks.max() > 0:
-                peaks = peaks / peaks.max()
-
-            # Save data and update length
-            with self.waveform_lock:
-                self.waveform_data = peaks
-                self.audio_length = (len(y) / sr) * 1000
-
-            # Schedule UI update
-            self.after(0, self._draw_waveform)
+                    # Schedule UI update
+                    self.after(0, self._draw_waveform)
 
         except Exception as e:
             logger.error(f"Failed to generate waveform for {audio_file}: {e}")
             # Clear waveform on error and show placeholder
             with self.waveform_lock:
                 self.waveform_data = None
-            self.after(0, self.clear)
+            try:
+                self.after(0, self.clear)
+            except Exception:
+                pass
 
     def _draw_waveform(self):
         self._clear_waveform()

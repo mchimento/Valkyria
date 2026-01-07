@@ -9,6 +9,8 @@ import tempfile
 import shutil
 from unittest.mock import patch, MagicMock
 import sys
+import numpy as np
+import soundfile as sf
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -460,6 +462,48 @@ class TestBPMRawFormat(unittest.TestCase):
                     # But the stored value should still be raw
                     self.assertEqual(bpm_val, 128.75,
                         f"Stored BPM should remain raw '{128.75}', got '{bpm_val}'")
+
+
+
+
+class TestBPMResampling(unittest.TestCase):
+    def test_analyze_bpm_resamples_to_target_sr(self):
+        # Create a click track at 120 BPM sampled at 48 kHz and ensure
+        # analyze_bpm at 22050 Hz detects ~120 BPM
+        sr_src = 48000
+        bpm = 120
+        beat_interval = 60.0 / bpm
+        duration = 16.0
+
+        # Generate impulse click train (longer duration for improved tempogram stability)
+        n_samples = int(sr_src * duration)
+        y = np.zeros(n_samples, dtype='float32')
+        beat_times = np.arange(0, duration, beat_interval)
+        for bt in beat_times:
+            idx = int(round(bt * sr_src))
+            if 0 <= idx < n_samples:
+                y[idx] = 1.0
+
+        # Smooth impulses a bit so onset detection works well
+        kernel = np.ones(32, dtype='float32') / 32.0
+        y = np.convolve(y, kernel, mode='same')
+
+        tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        tmp.close()
+        try:
+            sf.write(tmp.name, y, sr_src, subtype='FLOAT')
+            estimated_22050 = analyze_bpm(tmp.name, sr=22050, duration=duration)
+            estimated_48000 = analyze_bpm(tmp.name, sr=48000, duration=duration)
+            self.assertIsNotNone(estimated_22050, "BPM analysis returned None for sr=22050")
+            self.assertIsNotNone(estimated_48000, "BPM analysis returned None for sr=48000")
+            # Results should be consistent across resampling paths
+            diff = abs(float(estimated_22050) - float(estimated_48000))
+            self.assertLessEqual(diff, 4.0, f"BPM difference too large after resampling: {diff}")
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
 
 
 if __name__ == '__main__':

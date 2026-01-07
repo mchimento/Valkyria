@@ -2,6 +2,7 @@
 Application coordinator
 """
 import logging
+import threading
 from app.state import AppState
 from app.settings import Settings
 from themes.theme_manager import ThemeManager
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class TangoStudioApp:
-    def __init__(self) -> None:
+    def __init__(self):
         logger.info("Initializing Tango Studio")
 
         self.state = AppState()
@@ -30,7 +31,7 @@ class TangoStudioApp:
 
         logger.info("Tango Studio initialized successfully")
 
-    def _on_track_end(self) -> None:
+    def _on_track_end(self):
         """Called from audio backend thread context via event; schedule UI-safe callback."""
         try:
             self.window.on_track_end_from_backend()
@@ -41,7 +42,7 @@ class TangoStudioApp:
             except Exception:
                 logger.error("Fallback track end handler also failed", exc_info=True)
 
-    def run(self) -> None:
+    def run(self):
         """Start the application main loop."""
         logger.info("Starting Tango Studio")
         self.window.start()

@@ -6,17 +6,93 @@ import logging
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
-from typing import Optional, Callable
 import threading
-from audio.metadata import get_metadata, analyze_bpm, metadata_extractor
 from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)
 
 
+class ExtrasBar(ttk.Frame):
+    def __init__(self, master, theme, repeat_var, on_toggle_repeat, on_open_effects, tooltip_manager=None):
+        super().__init__(master)
+        self.theme = theme
+        self.repeat_var = repeat_var
+        self.on_toggle_repeat = on_toggle_repeat
+        self.on_open_effects = on_open_effects
+        self.tooltip_manager = tooltip_manager
+
+        self._create_widgets()
+
+        # Trace repeat variable to update icon
+        if self.repeat_var:
+            self.repeat_var.trace_add("write", self._update_repeat_icon)
+            self._update_repeat_icon()
+
+    def _create_widgets(self):
+        # Get button colors from theme palette
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+
+        btn_width = 45
+        btn_height = 40
+
+        # Repeat Button
+        self.btn_repeat = ctk.CTkButton(self, text="🔁", command=self.on_toggle_repeat,
+                                      font=("Segoe UI Symbol", 20), width=btn_width, height=btn_height,
+                                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_repeat.pack(side=tk.LEFT, padx=4)
+
+        # Effects Button
+        self.btn_effects = ctk.CTkButton(self, text="🎚🎚", command=self.on_open_effects,
+                                       font=("Segoe UI Symbol", 23), width=btn_width, height=btn_height,
+                                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_effects.pack(side=tk.LEFT, padx=4)
+
+        if self.tooltip_manager:
+            self.tooltip_manager.attach(self.btn_repeat, lambda: f"Repeat Mode: {self.repeat_var.get().title() if self.repeat_var else 'None'}")
+            self.tooltip_manager.attach(self.btn_effects, lambda: "Audio Effects (F7)")
+
+    def _update_repeat_icon(self, *args):
+        if not self.repeat_var:
+            return
+
+        mode = self.repeat_var.get()
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+
+        # Default colors
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_pressed = palette.get("button_pressed", palette.get("accent", "#0078d4"))
+
+        if mode == "none":
+            self.btn_repeat.configure(text="🔁", fg_color=btn_bg, text_color=btn_fg) # Normal
+        elif mode == "one":
+            self.btn_repeat.configure(text="🔂", fg_color=btn_pressed, text_color=btn_fg) # Active/Pressed
+        elif mode == "all":
+            self.btn_repeat.configure(text="🔁", fg_color=btn_pressed, text_color=btn_fg) # Active/Pressed
+
+    def update_theme(self):
+        palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
+        btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
+        btn_fg = palette.get("button_fg_color", "#ffffff")
+        btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
+        frame_bg = palette.get("bg", "#1E1E1E")
+
+        # Update Effects button
+        self.btn_effects.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+
+        # Update Repeat button (icon update handles specific colors based on state)
+        self._update_repeat_icon()
+        # But we need to update hover color and bg_color
+        self.btn_repeat.configure(hover_color=btn_hover, bg_color=frame_bg)
+
+
 class ControlsBar(ttk.Frame):
     def __init__(self, master, player, state, theme, playlist=None,
-                 tooltip_manager=None, status_callback: Optional[Callable] = None, settings=None) -> None:
+                 tooltip_manager=None, status_callback=None, settings=None,
+                 repeat_var=None, on_toggle_repeat=None, on_open_effects=None):
         super().__init__(master)
 
         self.player = player
@@ -31,6 +107,10 @@ class ControlsBar(ttk.Frame):
         self.is_playing = False
         self.is_muted = False
         self.crossfade_triggered = False
+
+        self.repeat_var = repeat_var
+        self.on_toggle_repeat = on_toggle_repeat
+        self.on_open_effects = on_open_effects
 
         left = ttk.Frame(self)
         left.pack(side=tk.LEFT, padx=6)
@@ -98,10 +178,10 @@ class ControlsBar(ttk.Frame):
         self.total_time_label = ttk.Label(middle, textvariable=self.total_time_var, width=8, anchor="center")
         self.total_time_label.pack(side=tk.LEFT)
 
-        # Play on double-click checkbutton
-        self.play_on_double_var = tk.BooleanVar(value=self.state.play_on_double)
-        self.play_on_double_var.trace_add('write', lambda *args: self._on_play_on_double_change())
-        ttk.Checkbutton(middle, text="Play on double-click", variable=self.play_on_double_var, style='TCheckbutton').pack(side=tk.LEFT, padx=(12, 0))
+        # ---------------- EXTRAS BAR ----------------
+        if self.repeat_var and self.on_toggle_repeat and self.on_open_effects:
+            self.extras = ExtrasBar(self, self.theme, self.repeat_var, self.on_toggle_repeat, self.on_open_effects, self.tooltip_manager)
+            self.extras.pack(side=tk.LEFT, padx=6)
 
         # ---------------- VOLUME ----------------
         right = ttk.Frame(self)
@@ -181,7 +261,10 @@ class ControlsBar(ttk.Frame):
 
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
-            self.player.play(path)
+
+            # Run player.play in a thread to prevent UI blocking
+            threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
+
             self.crossfade_triggered = False
             # Load waveform for the new track
             self.waveform_seekbar.load_waveform(path)
@@ -217,7 +300,8 @@ class ControlsBar(ttk.Frame):
                 self.is_playing = True
                 self._update_pause_button_state()
                 self._update_play_button_state()
-                self._send_status("play")
+                # Emit a distinct resume event to avoid full restore which triggers DJ re-analysis
+                self._send_status("resume")
             else:
                 # Pause playback - reset play button to normal
                 self.pause()
@@ -331,11 +415,18 @@ class ControlsBar(ttk.Frame):
         except Exception:
             pass
 
-    def _get_mute_label(self, is_muted: bool) -> str:
+    def _volume_step(self, delta):
+        """Adjust volume by delta amount (+/- 5 typically)."""
+        current = self.volume.get()
+        new_volume = max(0, min(100, current + delta))
+        self.volume.set(new_volume)
+        self._on_volume_change(new_volume)
+
+    def _get_mute_label(self, is_muted):
         """Get the mute button symbol based on mute state."""
         return "🔇" if is_muted else "🔊"
 
-    def _get_mute_tooltip(self, is_muted: bool) -> str:
+    def _get_mute_tooltip(self, is_muted):
         """Get the mute button tooltip based on mute state."""
         return "Muted (M)" if is_muted else "Mute (M)"
 
@@ -463,6 +554,13 @@ class ControlsBar(ttk.Frame):
         except Exception:
             pass
 
+        # Update extras bar theme
+        try:
+            if hasattr(self, 'extras'):
+                self.extras.update_theme()
+        except Exception:
+            pass
+
     def destroy(self):
         if self._update_id:
             try:
@@ -478,44 +576,3 @@ class ControlsBar(ttk.Frame):
     def _send_status(self, event_type):
         if callable(self.status_callback):
             self.status_callback(event_type)
-
-    def _on_play_on_double_change(self):
-        """Handle play on double-click setting change."""
-        new_value = self.play_on_double_var.get()
-
-        # Update both settings and state
-        if self.settings:
-            self.settings.play_on_double = new_value
-            try:
-                self.settings.save()
-            except Exception:
-                pass
-
-        # Update state as well since playlist view checks state.play_on_double
-        self.state.play_on_double = new_value
-
-    def _check_and_analyze_bpm(self, filepath):
-        """Check if BPM is missing and analyze it in a background thread."""
-        try:
-            # Get current metadata to check if BPM exists
-            metadata = get_metadata(filepath)
-            if metadata.get('bpm') is None:
-                thread = threading.Thread(target=self._analyze_bpm_worker, args=(filepath,), daemon=True)
-                thread.start()
-        except Exception as e:
-            logger.error(f"Error checking BPM for {filepath}: {e}")
-
-    def _analyze_bpm_worker(self, filepath):
-        """Worker function to analyze BPM and update UI temporarily."""
-        try:
-            analyzed_bpm = analyze_bpm(filepath)
-
-            if analyzed_bpm is not None:
-                # Store temporary BPM in metadata extractor cache without writing to file
-                metadata_extractor._cache[filepath]['bpm'] = analyzed_bpm
-                # Notify listeners to update UI with temporary BPM
-                metadata_extractor._notify_bpm_listeners(filepath)
-            else:
-                logger.warning(f"BPM analysis returned None for {filepath}")
-        except Exception as e:
-            logger.error(f"Error in BPM analysis worker for {filepath}: {e}")

@@ -10,6 +10,14 @@
         "preamp": 0,
         "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       },
+      "Bachata (Traditional)": {
+        "preamp": -4,
+        "gains": [3.0, 2.0, 1.0, 3.0, 4.0, 3.0, 2.0, 0, -1.0, -2.0]
+      },
+      "Bachata (Modern)": {
+        "preamp": -5,
+        "gains": [5.0, 3.0, 1.0, 2.0, 3.0, 2.0, 1.0, 0, -1.0, -2.0]
+      },
       "Classical": {
         "preamp": 0,
         "gains": [0, 0, 0, 0, 0, 0, -7.2, -7.2, -7.2, -9.6]
@@ -58,6 +66,10 @@
         "preamp": -7,
         "gains": [8, 4.8, -5.6, -8, -3.2, 4, 8.8, 11.2, 11.2, 11.2]
       },
+      "Salsa": {
+        "preamp": -6,
+        "gains": [6.0, 4.5, 1.0, 0.0, 2.5, 4.5, 6.0, 4.0, 2.5, 1.0]
+      },
       "Ska": {
         "preamp": -6,
         "gains": [-2.4, -4.8, -4, 0, 4, 5.6, 8.8, 9.6, 11.2, 9.6]
@@ -69,6 +81,18 @@
       "Soft Rock": {
         "preamp": -5,
         "gains": [4, 4, 2.4, 0, -4, -5.6, -3.2, 0, 2.4, 8.8]
+      },
+      "Tango": {
+        "preamp": -4,
+        "gains": [3.0, 2.0, 1.0, 3.0, 4.0, 3.0, 2.0, 1.0, 0, -1.0]
+      },
+      "Tango (Golden Age)": {
+        "preamp": -3,
+        "gains": [2.0, 1.0, 0, 4.0, 5.0, 4.0, 3.0, 1.0, 0, -2.0]
+      },
+      "Tango Electronic": {
+        "preamp": -6,
+        "gains": [6.0, 4.0, 2.0, 2.0, 3.0, 2.0, 2.0, 3.0, 3.0, 2.0]
       },
       "Techno": {
         "preamp": -7,
@@ -99,5 +123,13 @@
     "default_rate": 1.0,
     "min_rate": 0.25,
     "max_rate": 4.0
+  },
+  "channel_mode": {
+    "mode": "stereo",
+    "options": ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff)"]
+  },
+  "vocal_remover": {
+    "enabled": false,
+    "intensity": 0.5
   }
 }

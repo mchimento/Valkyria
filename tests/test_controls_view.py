@@ -1,4 +1,4 @@
-"""Tests for ControlsBar theme update functionality."""
+"""Tests for ControlsBar view."""
 import unittest
 import logging
 import os
@@ -9,8 +9,7 @@ from tkinter import ttk
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
 
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+from tests.tk_utils import HAS_TK as HAS_DISPLAY
 
 class TestControlsTheme(unittest.TestCase):
     """Unit tests for ControlsBar theme functionality."""
@@ -28,7 +27,10 @@ class TestControlsTheme(unittest.TestCase):
     @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     def setUp(self):
         """Set up test fixtures."""
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
 
         self.mock_player = MagicMock()
         self.mock_state = MagicMock()
@@ -374,6 +376,256 @@ class TestControlsTheme(unittest.TestCase):
         # Verify final theme is applied
         self.assertEqual(controls.btn_mute.cget('fg_color'), "#0000FF")
         self.assertEqual(controls.volume.cget('bg_color'), "#FAFAFA")
+
+
+class TestMuteAudio(unittest.TestCase):
+    """Unit tests for mute functionality in AudioPlayer."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Suppress logging for all tests in this class."""
+        logging.disable(logging.CRITICAL)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Re-enable logging after tests."""
+        logging.disable(logging.NOTSET)
+
+    def test_get_mute_state_false(self):
+        """Test get_mute_state returns False when not muted."""
+        with patch('sounddevice.play') as mock_play:
+            from audio.audio_player import AudioPlayer
+            player = AudioPlayer()
+            self.assertFalse(player.get_mute_state())
+
+    def test_get_mute_state_true(self):
+        """Test get_mute_state returns True when muted."""
+        with patch('sounddevice.play') as mock_play:
+            from audio.audio_player import AudioPlayer
+            player = AudioPlayer()
+            # Manually set muted state
+            player._muted = True
+            self.assertTrue(player.get_mute_state())
+
+    def test_set_mute_true(self):
+        """Test set_mute with mute=True."""
+        with patch('sounddevice.play') as mock_play:
+            from audio.audio_player import AudioPlayer
+            player = AudioPlayer()
+            player.set_mute(True)
+            self.assertTrue(player.get_mute_state())
+
+    def test_set_mute_false(self):
+        """Test set_mute with mute=False."""
+        with patch('sounddevice.play') as mock_play:
+            from audio.audio_player import AudioPlayer
+            player = AudioPlayer()
+            player.set_mute(False)
+            self.assertFalse(player.get_mute_state())
+
+    def test_set_mute_error_handling(self):
+        """Test set_mute handles errors gracefully."""
+        with patch('sounddevice.play') as mock_play:
+            from audio.audio_player import AudioPlayer
+            player = AudioPlayer()
+
+            # Should not raise exception for valid values
+            try:
+                player.set_mute(True)
+                player.set_mute(False)
+            except Exception:
+                self.fail("set_mute should not raise exception for valid boolean values")
+
+    def test_get_mute_state_error_handling(self):
+        """Test get_mute_state handles errors gracefully."""
+        with patch('sounddevice.play') as mock_play:
+            from audio.audio_player import AudioPlayer
+            player = AudioPlayer()
+            # Should return False on error
+            self.assertFalse(player.get_mute_state())
+
+
+class TestMuteSettings(unittest.TestCase):
+    """Unit tests for mute settings persistence."""
+
+    def test_mute_property_default(self):
+        """Test mute property defaults to False."""
+        with patch('app.settings.Settings.load'):
+            from app.settings import Settings
+            settings = Settings()
+            self.assertFalse(settings.mute)
+
+    def test_mute_property_set(self):
+        """Test mute property can be set."""
+        from app.settings import Settings
+        settings = Settings()
+        settings.mute = True
+        self.assertTrue(settings.mute)
+
+    def test_mute_in_save_data(self):
+        """Test mute is included in saved data."""
+        import tempfile
+        import json
+        from pathlib import Path
+
+        # Create temp directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / 'config.json'
+
+            # Patch the settings path
+            with patch('app.settings.get_user_data_path', return_value=Path(tmpdir)):
+                from app.settings import Settings
+                settings = Settings()
+                settings.mute = True
+                settings.save()
+
+                # Verify file exists and contains mute setting
+                self.assertTrue(config_path.exists())
+                with open(config_path, 'r') as f:
+                    data = json.load(f)
+                self.assertIn('mute', data)
+                self.assertTrue(data['mute'])
+
+    def test_mute_loads_from_file(self):
+        """Test mute setting loads from saved file."""
+        import tempfile
+        import json
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / 'config.json'
+
+            # Write config file with mute=True
+            config_data = {
+                "theme": "light",
+                "window_geometry": None,
+                "volume": 80,
+                "mute": True
+            }
+            with open(config_path, 'w') as f:
+                json.dump(config_data, f)
+
+            # Patch and load
+            with patch('app.settings.get_user_data_path', return_value=Path(tmpdir)):
+                from app.settings import Settings
+                settings = Settings()
+                self.assertTrue(settings.mute)
+
+
+class TestAudioDevices(unittest.TestCase):
+    """Unit tests for audio device management in AudioPlayer."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Suppress logging for all tests in this class."""
+        logging.disable(logging.CRITICAL)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Re-enable logging after tests."""
+        logging.disable(logging.NOTSET)
+
+    @patch('sounddevice.query_devices')
+    @patch('sounddevice.default')
+    def test_get_audio_devices_empty(self, mock_default, mock_query_devices):
+        """Test get_audio_devices returns default when no devices found."""
+        mock_default.device = [0, 0]
+        mock_query_devices.return_value = []
+
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        devices = player.get_audio_devices()
+
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0][0], '__DEFAULT__')
+        self.assertEqual(devices[0][1], 'Default Audio Device')
+
+    @patch('sounddevice.query_devices')
+    @patch('sounddevice.default')
+    def test_get_audio_devices_with_devices(self, mock_default, mock_query_devices):
+        """Test get_audio_devices properly enumerates available devices."""
+        mock_default.device = [0, 0]
+        mock_query_devices.return_value = [
+            {'name': 'Default Device', 'max_output_channels': 2, 'hostapi': 0}
+        ]
+
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        devices = player.get_audio_devices()
+
+        self.assertEqual(len(devices), 2)  # Default + one device
+        self.assertEqual(devices[0][0], '__DEFAULT__')
+        self.assertEqual(devices[0][1], 'Default Audio Device')
+        self.assertEqual(devices[1][1], 'Default Device')
+
+    @patch('sounddevice.query_devices')
+    @patch('sounddevice.default')
+    def test_get_audio_devices_multiple(self, mock_default, mock_query_devices):
+        """Test get_audio_devices with multiple devices."""
+        mock_default.device = [0, 0]
+        mock_query_devices.return_value = [
+            {'name': 'Default Device', 'max_output_channels': 2, 'hostapi': 0},
+            {'name': 'Speakers', 'max_output_channels': 2, 'hostapi': 0}
+        ]
+
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        devices = player.get_audio_devices()
+
+        self.assertEqual(len(devices), 3)  # Default + two devices
+        self.assertEqual(devices[0][0], '__DEFAULT__')
+        self.assertEqual(devices[0][1], 'Default Audio Device')
+        self.assertEqual(devices[1][1], 'Default Device')
+        self.assertEqual(devices[2][1], 'Speakers')
+
+    @patch('sounddevice.query_devices')
+    @patch('sounddevice.default')
+    def test_get_audio_devices_bytes_decoding(self, mock_default, mock_query_devices):
+        """Test get_audio_devices properly decodes bytes to strings."""
+        mock_default.device = [0, 0]
+        mock_query_devices.return_value = [
+            {'name': b'Headphones', 'max_output_channels': 2, 'hostapi': 0}
+        ]
+
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        devices = player.get_audio_devices()
+
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices[1][1], 'Headphones')
+        self.assertIsInstance(devices[1][1], str)
+
+    def test_set_audio_device_default(self):
+        """Test set_audio_device with default device."""
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        player.set_audio_device('__DEFAULT__')
+        self.assertIsNone(player._device_id)
+
+    def test_set_audio_device_specific(self):
+        """Test set_audio_device with specific device GUID."""
+        from audio.audio_player import AudioPlayer
+        device_guid = '1'
+        player = AudioPlayer()
+        player.set_audio_device(device_guid)
+        self.assertEqual(player._device_id, device_guid)
+
+    def test_set_audio_device_error_handling(self):
+        """Test set_audio_device handles errors gracefully."""
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        # Should not raise
+        player.set_audio_device('invalid-device')
+        self.assertEqual(player._device_id, 'invalid-device')
+
+    def test_is_paused(self):
+        """Test is_paused method."""
+        from audio.audio_player import AudioPlayer
+        player = AudioPlayer()
+        self.assertFalse(player.is_paused())
+        player._paused = True
+        self.assertTrue(player.is_paused())
+
 
 if __name__ == '__main__':
     unittest.main()

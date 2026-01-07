@@ -28,6 +28,9 @@ class PlaylistView(ttk.Frame):
         # Track clicked item for distinguishing click vs drag
         self._clicked_item = None
 
+        # Track last highlighted index for efficient updates
+        self._last_highlighted_index = None
+
         # Column resize tracking
         self._resize_indicators = []  # List to hold multiple indicators
         self._last_hover_region = None
@@ -376,6 +379,9 @@ class PlaylistView(ttk.Frame):
         # Update scrollbar
         self._update_scrollbar()
 
+        # Update last highlighted index
+        self._last_highlighted_index = self.state.current_index
+
         # Hide/show tree and scrollbar based on playlist content
         is_empty = len(self.state.playlist) == 0
         if is_empty:
@@ -399,21 +405,36 @@ class PlaylistView(ttk.Frame):
         return get_metadata(filepath)
 
     def _highlight_current(self):
-        """Update visual highlighting for currently playing track."""
+        """Update visual highlighting for currently playing track efficiently."""
         children = self.tree.get_children()
 
-        for i, iid in enumerate(children):
-            # Base tag (striping)
-            tags = ["odd" if i % 2 == 1 else "even"]
-            icon = ""
+        # Handle previous highlight
+        if self._last_highlighted_index is not None:
+            if 0 <= self._last_highlighted_index < len(children):
+                prev_iid = children[self._last_highlighted_index]
+                # Reset to base tag
+                tags = ["odd" if self._last_highlighted_index % 2 == 1 else "even"]
+                # Check if it's hovered (optional, but good for consistency)
+                current_tags = self.tree.item(prev_iid, "tags")
+                if "hover" in current_tags:
+                    tags.append("hover")
 
-            # Only add playing tag and icon if this is the actual current playing track
-            if self.state.current_index is not None and i == self.state.current_index:
-                icon = "▶"
+                self.tree.item(prev_iid, text="", tags=tuple(tags))
+
+        # Handle new highlight
+        if self.state.current_index is not None:
+            if 0 <= self.state.current_index < len(children):
+                curr_iid = children[self.state.current_index]
+                tags = ["odd" if self.state.current_index % 2 == 1 else "even"]
                 tags.append("playing")
+                # Preserve hover
+                current_tags = self.tree.item(curr_iid, "tags")
+                if "hover" in current_tags:
+                    tags.append("hover")
 
-            # Update the item
-            self.tree.item(iid, text=icon, tags=tuple(tags))
+                self.tree.item(curr_iid, text="▶", tags=tuple(tags))
+
+        self._last_highlighted_index = self.state.current_index
 
     # ========== Event Handlers ==========
 
@@ -424,10 +445,16 @@ class PlaylistView(ttk.Frame):
 
         sels = self.tree.selection()
         if not sels:
-            return
+            # If no selection (e.g. due to timing issues), try to identify row under mouse
+            item = self.tree.identify_row(event.y)
+            if item:
+                self.tree.selection_set(item)
+                sels = [item]
+            else:
+                return
 
         self.state.current_index = self.tree.index(sels[0])
-        self.master.event_generate("<<PlaylistDouble>>", when="tail")
+        self.master.event_generate("<<PlaylistDouble>>")
         self._highlight_current()
 
     def _on_selection_change(self, event):
@@ -539,11 +566,18 @@ class PlaylistView(ttk.Frame):
         # Hide resize indicators when mouse button is pressed
         self._hide_resize_indicators()
 
+        # Check if click is on header or separator (for resizing)
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "separator":
+            self._is_resizing = True
+            return
+        elif region == "heading":
+            return
+
         item = self.tree.identify_row(event.y)
         if item:
             current_selection = self.tree.selection()
             if item in current_selection and len(current_selection) == 1:
-                self._single_click_timer = self.after(100, lambda: self._handle_single_click(item))
                 self._clicked_item = item
                 self.state.dragged_index = self.tree.index(item)
                 return "break"
@@ -565,23 +599,13 @@ class PlaylistView(ttk.Frame):
             self.state.dragged_index = None
             return "break"
 
-    def _handle_single_click(self, item):
-        """Handle a confirmed single click by removing selection."""
-        if item and item in self.tree.selection():
-            self.tree.selection_remove(item)
-            self.state.selected_indices = []
-
     def _on_mouse_motion(self, event):
         """Handle drag motion with live swapping."""
         if self.state.dragged_index is None:
             return
 
-        # Cancel single-click timer if mouse moves (indicating drag intent)
-        if hasattr(self, '_single_click_timer'):
-            self.after_cancel(self._single_click_timer)
-            delattr(self, '_single_click_timer')
-            # Mark that mouse moved (drag started)
-            self._mouse_moved = True
+        # Mark that mouse moved (drag started)
+        self._mouse_moved = True
 
         self._clicked_item = None
 
@@ -730,19 +754,32 @@ class PlaylistView(ttk.Frame):
 
     def _on_button_release(self, event):
         """End drag operation."""
-        if hasattr(self, '_single_click_timer') and hasattr(self, '_mouse_moved'):
-            self.after_cancel(self._single_click_timer)
-            delattr(self, '_single_click_timer')
-            delattr(self, '_mouse_moved')
+        self._is_resizing = False
 
         # Handle single-click selection if no drag occurred
         if self._clicked_item and self.state.dragged_index is not None:
             current_selection = self.tree.selection()
             drag_occurred = hasattr(self, '_mouse_moved')
+
             if not drag_occurred:
-                # Always select the clicked item on single click (regardless of current selection)
-                self.tree.selection_set(self._clicked_item)
-                self.state.selected_indices = [self.tree.index(self._clicked_item)]
+                # If item is already selected
+                if self._clicked_item in current_selection:
+                    # If it's the only selected item, deselect it (toggle off)
+                    if len(current_selection) == 1:
+                        self.tree.selection_remove(self._clicked_item)
+                        self.state.selected_indices = []
+                    # If multiple items are selected, select only this one
+                    else:
+                        self.tree.selection_set(self._clicked_item)
+                        self.state.selected_indices = [self.tree.index(self._clicked_item)]
+                else:
+                    # Fallback: select the item
+                    self.tree.selection_set(self._clicked_item)
+                    self.state.selected_indices = [self.tree.index(self._clicked_item)]
+
+        # Clean up mouse moved flag
+        if hasattr(self, '_mouse_moved'):
+            delattr(self, '_mouse_moved')
 
         # Clear clicked item
         self._clicked_item = None

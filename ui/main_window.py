@@ -7,23 +7,24 @@ import logging
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
-import threading, os, io
-from audio.metadata import get_metadata, get_best_artwork, analyze_bpm, write_bpm, metadata_extractor, get_display_bpm
-from PIL import Image, ImageDraw, ImageFont
-from audio.bpm import on_bpm_updated, analyze_bpm_worker, save_bpm_worker
+import os
+from audio.metadata import metadata_extractor
 
 from audio import m3u as m3u_module, playback
 from ui.playlist_view import PlaylistView
 from ui.browser_view import BrowserView
 from ui.controls import ControlsBar
+from ui.status_frame_view import StatusFrameView
+from ui.dj_frame_view import DJFrameView
 from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
 from ui.utils import center_window
 from ui.custom_menu_bar import CustomMenuBar
-from ui.documentation_view import BPMAnalysisWindow
+from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
+from ui.playback_features_view import PlaybackFeaturesView
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class MainWindow:
         # Apply initial visibility from settings for playlist and browser
         self.toggle_playlist_visibility()
         self.toggle_browser_visibility()
+        self.toggle_dj_visibility()
 
         # Bind custom events from subcomponents
         self.root.bind("<<BrowserAddSelected>>", self._on_browser_add_selected)
@@ -80,259 +82,6 @@ class MainWindow:
         # Ensure player stopped on exit and save geometry
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
-        # Store current artwork image reference
-        self.current_artwork_image = None
-        self.current_artwork_photo = None
-
-        # Register as BPM listener to refresh status when BPM is calculated
-        metadata_extractor.register_bpm_listener(self._on_bpm_updated)
-
-    def _create_placeholder_image(self):
-        """Create a placeholder image with music note symbol."""
-        import platform
-
-        placeholder_image = Image.new('RGBA', (100, 100), (0, 0, 0, 0))  # transparent background
-        draw = ImageDraw.Draw(placeholder_image)
-
-        # Get theme color for the symbol
-        text_color = self.palette.get('status_meta_fg', '#E0E0E0')
-
-        # Try different fonts based on platform
-        system = platform.system().lower()
-        font = None
-
-        # Try platform-specific fonts first
-        if system == "windows":
-            font_paths = [
-                r"C:\Windows\Fonts\seguisym.ttf",  # Segoe UI Symbol
-                r"C:\Windows\Fonts\arial.ttf",     # Arial
-                r"C:\Windows\Fonts\tahoma.ttf",    # Tahoma
-            ]
-        elif system == "darwin":  # macOS
-            font_paths = [
-                "/System/Library/Fonts/Apple Symbols.ttf",
-                "/Library/Fonts/Arial.ttf",
-                "/System/Library/Fonts/Arial.ttf",
-            ]
-        else:  # Linux and others
-            font_paths = [
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            ]
-
-        # Try font paths
-        for font_path in font_paths:
-            try:
-                font = ImageFont.truetype(font_path, 48)
-                break
-            except (OSError, IOError):
-                continue
-
-        # If no font path worked, try common font names
-        if font is None:
-            common_fonts = ["Arial", "Helvetica", "DejaVu Sans", "Liberation Sans", "FreeSans"]
-            for font_name in common_fonts:
-                try:
-                    font = ImageFont.truetype(font_name, 48)
-                    break
-                except (OSError, IOError):
-                    continue
-
-        # Ultimate fallback
-        if font is None:
-            font = ImageFont.load_default()
-
-        draw.text((50, 45), "♫", fill=text_color, font=font, anchor="mm")  # Two quavers
-
-        ctk_image = ctk.CTkImage(placeholder_image, size=(100, 100))
-        return ctk_image, placeholder_image
-
-    def _on_bpm_updated(self, filepath):
-        """Handle BPM update notifications by refreshing status if current track matches."""
-        try:
-            # Check if the updated file is currently playing track
-            idx = self.state.current_index
-            if idx is not None and idx < len(self.state.playlist):
-                current_path = self.state.playlist[idx]
-                if current_path == filepath:
-                    # Use _update_meta_with_temp_bpm instead of _restore_status to preserve button states
-                    self._update_meta_with_temp_bpm()
-        except Exception:
-            # Fail silently - BPM updates are not critical
-            pass
-
-    def _update_artwork(self, filepath):
-        """Update the artwork display for a given file."""
-        try:
-            # Get artwork data using the fallback hierarchy
-            artwork_data = get_best_artwork(filepath)
-
-            if artwork_data:
-                # Load image from bytes
-                image = Image.open(io.BytesIO(artwork_data))
-
-                # Resize to fit the artwork frame (100x100)
-                image = image.resize((100, 100), Image.Resampling.LANCZOS)
-
-                # Convert to CTkImage for CustomTkinter compatibility
-                ctk_image = ctk.CTkImage(image, size=(100, 100))
-
-                # Update the label to show the image
-                self.artwork_label.configure(image=ctk_image, text="")
-                self.artwork_label.image = ctk_image  # Keep a reference
-
-                # Store reference to prevent garbage collection
-                self.current_artwork_photo = ctk_image
-                self.current_artwork_image = image
-            else:
-                # No artwork found, create music note placeholder image
-                ctk_image, placeholder_image = self._create_placeholder_image()
-
-                self.artwork_label.configure(image=ctk_image, text="")
-                self.artwork_label.image = ctk_image
-
-                self.current_artwork_photo = ctk_image
-                self.current_artwork_image = placeholder_image
-
-        except Exception:
-            # On error, also show music note placeholder
-            ctk_image, placeholder_image = self._create_placeholder_image()
-
-            self.artwork_label.configure(image=ctk_image, text="")
-            self.artwork_label.image = ctk_image
-
-            self.current_artwork_photo = ctk_image
-            self.current_artwork_image = placeholder_image
-
-    def _on_bpm_button_click(self):
-        """Handle single BPM button click based on current state."""
-        try:
-            idx = self.state.current_index
-            if idx is None or idx >= len(self.state.playlist):
-                return
-
-            filepath = self.state.playlist[idx]
-
-            if self.bpm_button_state == "analyze":
-                # Start BPM analysis
-                self.bpm_button_state = "analyzing"
-                self.btn_bpm.configure(state="disabled", text="Analyzing...")
-
-                # Start BPM analysis in background thread
-                thread = threading.Thread(target=self._analyze_bpm_worker, args=(filepath,), daemon=True)
-                thread.start()
-
-            elif self.bpm_button_state == "save":
-                # Save BPM to file
-                if self.current_temp_bpm is not None:
-                    self.bpm_button_state = "saving"
-                    self.btn_bpm.configure(state="disabled", text="Saving...")
-
-                    # Start save operation in background thread
-                    thread = threading.Thread(target=self._save_bpm_worker, args=(filepath, self.current_temp_bpm), daemon=True)
-                    thread.start()
-
-        except Exception as e:
-            logger.error(f"Error in BPM button click: {e}")
-            # Reset to analyze state on error
-            self.bpm_button_state = "analyze"
-            self.btn_bpm.configure(state="normal", text="Analyze BPM")
-
-    def _analyze_bpm_worker(self, filepath):
-        analyze_bpm_worker(filepath, self.root, self._on_bpm_analysis_complete)
-
-    def _on_bpm_analysis_complete(self, filepath, bpm_value):
-        """Handle BPM analysis completion."""
-        try:
-            if bpm_value is not None:
-                # Store temporary BPM value
-                self.current_temp_bpm = bpm_value
-                self.temporary_bpm_files.add(filepath)  # Track this file as having temporary BPM
-
-                # Update metadata cache temporarily (don't write to file)
-                metadata_extractor._cache[filepath]['bpm'] = bpm_value
-
-                # Update meta label to include the temporary BPM
-                self._update_meta_with_temp_bpm()
-
-                # Change button to Save state
-                self.bpm_button_state = "save"
-                self.btn_bpm.configure(state="normal", text="Save BPM")
-            else:
-                # Analysis failed, reset to analyze state
-                self._reset_bpm_button_to_analyze()
-                self._set_temporary_status("BPM analysis failed")
-
-        except Exception as e:
-            logger.error(f"Error handling BPM analysis completion: {e}")
-            self._reset_bpm_button_to_analyze()
-
-    def _reset_bpm_button_to_analyze(self):
-        """Reset BPM button back to analyze state."""
-        self.bpm_button_state = "analyze"
-        self.btn_bpm.configure(state="normal", text="Analyze BPM")
-        self.current_temp_bpm = None
-        # Don't clear temporary_bpm_files here as other files might still have temporary BPMs
-
-    def _update_meta_with_temp_bpm(self):
-        """Update the meta label to include temporary BPM without calling _restore_status."""
-        try:
-            idx = self.state.current_index
-            if idx is None or idx >= len(self.state.playlist):
-                return
-
-            path = self.state.playlist[idx]
-            meta = get_metadata(path)
-
-            duration_s = meta.get("duration_s")
-            bitrate = meta.get("bitrate")
-            bpm = meta.get("bpm")  # This will now include the temporary BPM from cache
-
-            # Build metadata line parts (duration, bitrate, bpm, format)
-            parts = []
-            if duration_s:
-                parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
-            if bitrate:
-                parts.append(f"{bitrate} kbps")
-            if bpm:
-                bpm_str = f" • {get_display_bpm(bpm)} BPM"
-            else:
-                bpm_str =  " • BPM info missing"
-
-            self.meta_var.set(" • ".join(parts) + bpm_str)
-
-            # Notify BPM listeners to update playlist
-            metadata_extractor._notify_bpm_listeners(path)
-
-        except Exception as e:
-            logger.error(f"Error updating meta with temporary BPM: {e}")
-
-    def _save_bpm_worker(self, filepath, bpm_value):
-        save_bpm_worker(filepath, bpm_value, self.root, self._on_bpm_save_complete)
-
-    def _on_bpm_save_complete(self, filepath, success):
-        """Handle BPM save completion."""
-        try:
-            if success:
-                # Clear temporary BPM since it's now saved
-                self.current_temp_bpm = None
-                self.temporary_bpm_files.discard(filepath)  # Remove from temporary tracking
-
-                # Update UI to reflect saved state
-                self.bpm_button_state = "analyze"
-                self.btn_bpm.configure(state="normal", text="Analyze BPM")
-
-                # Notify user of success
-                self._set_temporary_status("BPM saved successfully")
-            else:
-                # Notify user of failure
-                self._set_temporary_status("Failed to save BPM")
-
-        except Exception as e:
-            logger.error(f"Error handling BPM save completion: {e}")
-            self._set_temporary_status("Error saving BPM")
-
     # ---------- Build UI ----------
     def _build_menu(self):
         # Create custom menu bar and pack it at the top
@@ -344,6 +93,8 @@ class MainWindow:
         show_browser_initial = bool(getattr(self.settings, "show_browser", True))
         self.show_playlist_var = tk.BooleanVar(value=show_playlist_initial)
         self.show_browser_var = tk.BooleanVar(value=show_browser_initial)
+        show_dj_initial = bool(getattr(self.settings, "show_dj", True))
+        self.show_dj_var = tk.BooleanVar(value=show_dj_initial)
         self.always_on_top_var = tk.BooleanVar(value=False)
         self.play_on_double_var = tk.BooleanVar(value=bool(getattr(self.settings, "play_on_double", False)))
         self.repeat_mode_var = tk.StringVar(value="none")
@@ -411,6 +162,8 @@ class MainWindow:
              "command": self.toggle_playlist_visibility, "accelerator": "F9"},
             {"label": "Show Browser", "checkbutton": True, "variable": self.show_browser_var,
              "command": self.toggle_browser_visibility, "accelerator": "F10"},
+            {"label": "Show Live Audio Analysis", "checkbutton": True, "variable": self.show_dj_var,
+             "command": self.toggle_dj_visibility, "accelerator": "F11"},
             {"separator": True},
             {"label": "Always on Top", "checkbutton": True, "variable": self.always_on_top_var,
              "command": self.toggle_always_on_top}
@@ -424,7 +177,8 @@ class MainWindow:
 
         tools_items = [
             audio_device_item,
-            {"label": "Audio Effects and Filters", "command": self.open_audio_effects},
+            {"label": "Audio Effects and Filters", "command": self.open_audio_effects, "accelerator": "F7"},
+            {"label": "Playback features", "command": self.open_playback_features, "accelerator": "F8"},
             {"separator": True},
             {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
@@ -432,8 +186,13 @@ class MainWindow:
         self.menu_item_refs["audio_device"] = audio_device_item
 
         # Help menu
+        documentation_submenu = [
+            {"label": "User Guide", "command": lambda: self.open_documentation("user_guide.md")},
+            {"label": "BPM Analysis", "command": lambda: self.open_documentation("bpm_analysis.md")}
+        ]
+
         help_items = [
-            {"label": "BPM Analysis", "command": self.open_bpm_analysis},
+            {"label": "Documentation", "submenu": documentation_submenu},
             {"separator": True},
             {"label": "About", "command": self.open_about, "accelerator": "F1"}
         ]
@@ -477,154 +236,24 @@ class MainWindow:
         # Link browser view to playlist view for drag and drop
         self.browser_view.set_playlist_view(self.playlist_view)
 
-        # Middle: Buttons column
-        self.mid_frame = ttk.Frame(self.main_frame, style="TFrame")
-        self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
+        # Bottom info frames container
+        self.bottom_info_frame = ttk.Frame(self.root, style="TFrame")
+        self.bottom_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=(12, 12), pady=(0, 20))
 
-        # Create a container to center buttons vertically
-        button_container = ttk.Frame(self.mid_frame, style="TFrame")
-        button_container.pack(expand=True, fill=tk.BOTH)
+        # DJ Frame (right-aligned)
+        self.dj_view = DJFrameView(self.bottom_info_frame, self.state, self.theme, self.settings, self.player)
+        self.dj_view.pack(side=tk.RIGHT, anchor="n")
 
-        # Create another frame to center buttons horizontally within the container
-        center_frame = ttk.Frame(button_container, style="TFrame")
-        center_frame.pack(expand=True)
+        # Register a global BPM listener so UI components can react when BPM is changed on disk
+        try:
+            metadata_extractor.register_bpm_listener(lambda fp: self._on_global_bpm_update(fp))
+            metadata_extractor.register_key_listener(lambda fp: self._on_global_key_update(fp))
+        except Exception:
+            pass
 
-        # Get button colors from theme palette (already available in self.palette)
-        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
-        btn_fg = self.palette.get("button_fg_color", "#ffffff")
-        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
-
-        ctk.CTkButton(center_frame, text="📂 Folder", command=self.browser_view.browse_folder, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(center_frame, text="🎵 File", command=self.browser_view.browse_files, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=6)
-        ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
-        ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover).pack(pady=8)
-
-        # Status bar with CustomTkinter
-        # Use root background color instead of transparent for better theme support
-        is_dark = self.settings.theme.lower() == 'dark'
-        initial_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
-        self.status_frame = ctk.CTkFrame(
-            self.root,
-            fg_color=initial_bg,
-            bg_color=initial_bg,  # Match root background for seamless edges
-            corner_radius=0  # No rounded corners on outer frame
-        )
-        self.status_frame.pack(
-            side=tk.BOTTOM,
-            fill=tk.X,
-            padx=(12, 12),  # (left, right) - 6px left, 12px right
-            pady=(0, 20)
-        )
-
-        # Status bar background - larger with more padding
-        # Use status_bg from theme for better visibility, with more contrasting colors
-        initial_status_bg = self.palette.get('status_bg', '#E8E8E8' if not is_dark else '#2A2A2A')
-        initial_border = self.palette.get('status_border', '#D0D0D0' if not is_dark else '#3E3E3E')
-        self.status_bg = ctk.CTkFrame(
-            self.status_frame,
-            corner_radius=6,
-            fg_color=initial_status_bg,
-            bg_color=initial_bg,  # Match parent frame for seamless corners
-            border_color=initial_border,
-            border_width=1  # Add border for better visibility
-        )
-        self.status_bg.pack(fill=tk.X, pady=(3, 0), padx=0, expand=True)
-
-        # Status text with larger, more prominent styling
-        self.status_var = tk.StringVar(value="")
-        initial_status_fg = self.palette.get('status_fg', '#202020' if not is_dark else '#FFFFFF')
-        initial_meta_fg = self.palette.get('status_meta_fg', '#505050' if not is_dark else '#E0E0E0')
-
-        # Create content frame for horizontal layout
-        self.status_content = ctk.CTkFrame(self.status_bg, fg_color="transparent", height=120)
-        self.status_content.pack(fill=tk.X, padx=12, pady=10)
-        self.status_content.pack_propagate(False)  # Prevent frame from resizing based on content
-
-        # Artwork frame on the left
-        self.artwork_frame = ctk.CTkFrame(self.status_content, fg_color="transparent", width=100, height=100)
-        self.artwork_frame.pack(side=tk.LEFT, padx=(0, 12))
-        self.artwork_frame.pack_propagate(False)  # Prevent frame from shrinking
-
-        # Artwork label (will display the image)
-        self.artwork_label = ctk.CTkLabel(
-            self.artwork_frame,
-            text="",
-            font=ctk.CTkFont(size=40),
-            text_color=initial_meta_fg,
-            fg_color="transparent",
-            anchor="center"
-        )
-        self.artwork_label.pack(side=tk.TOP, fill=tk.BOTH)
-
-        self.text_frame = ctk.CTkFrame(self.status_content, fg_color="transparent")
-        self.text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(0, 0))
-
-        self.status_label = ctk.CTkLabel(
-            self.text_frame,
-            textvariable=self.status_var,
-            anchor="w",
-            font=ctk.CTkFont(size=15, weight="bold"),
-            text_color=initial_status_fg,
-            bg_color=initial_status_bg,
-            justify="left"
-        )
-        self.status_label.pack(side=tk.TOP, fill=tk.X, pady=(15, 40))
-
-        # Meta info frame - container for metadata and BPM controls
-        self.meta_frame = ctk.CTkFrame(self.text_frame, fg_color="transparent")
-        self.meta_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 2))
-
-        # Meta info label
-        self.meta_var = tk.StringVar(value="")
-        self.meta_label = ctk.CTkLabel(
-            self.meta_frame,
-            textvariable=self.meta_var,
-            anchor="w",
-            font=ctk.CTkFont(size=14),
-            text_color=initial_meta_fg,
-            bg_color=initial_status_bg,
-            justify="left",
-            height=1
-        )
-        self.meta_label.pack(side=tk.LEFT, fill=tk.X)
-
-        # BPM control frame (initially hidden)
-        self.bpm_control_frame = ctk.CTkFrame(self.meta_frame, fg_color="transparent")
-        self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
-        self.bpm_control_frame.pack_forget()  # Initially hidden
-
-        # BPM buttons container
-        self.bpm_buttons_frame = ctk.CTkFrame(self.bpm_control_frame, fg_color="transparent")
-        self.bpm_buttons_frame.pack(side=tk.LEFT)
-
-        # Get button colors from theme palette
-        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
-        btn_fg = self.palette.get("button_fg_color", "#ffffff")
-        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
-
-        # Single BPM button (starts as Analyze, becomes Save after analysis)
-        self.btn_bpm = ctk.CTkButton(
-            self.bpm_buttons_frame,
-            text="Analyze BPM",
-            command=self._on_bpm_button_click,
-            width=100,
-            height=28,
-            font=ctk.CTkFont(size=11),
-            fg_color=btn_bg,
-            text_color=btn_fg,
-            text_color_disabled=btn_fg,
-            hover_color=btn_hover
-        )
-        self.btn_bpm.pack(side=tk.LEFT)
-
-        # Store current temporary BPM value and button state
-        self.current_temp_bpm = None
-        self.temporary_bpm_files = set()  # Track files with temporary BPMs
-        self.bpm_button_state = "analyze"  # Can be "analyze", "analyzing", "save", "saving"
+        # Status bar with CustomTkinter (expands to fill remaining space)
+        self.status_view = StatusFrameView(self.bottom_info_frame, self.state, self.theme, self.settings)
+        self.status_view.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12), anchor="n")
 
         # Bottom: Controls bar
         self.controls = ControlsBar(
@@ -635,7 +264,10 @@ class MainWindow:
             self.playlist_view,
             tooltip_manager=self.tooltip_manager,
             status_callback=self._controls_status_event,
-            settings=self.settings
+            settings=self.settings,
+            repeat_var=self.repeat_mode_var,
+            on_toggle_repeat=self.toggle_repeat_mode,
+            on_open_effects=self.open_audio_effects
         )
         self.controls.configure(padding=(0, 0, 0, 15))
         self.controls.pack(side=tk.BOTTOM, fill=tk.X)
@@ -646,35 +278,19 @@ class MainWindow:
             self._restore_status()
             self._update_menu_state()
             self._set_track_info_enabled(True)
+        elif event_type == "resume":
+            # Resume should update menu state but not re-run the full status restore
+            # which triggers DJ view update/analysis — keep using cached values on resume
+            self._update_menu_state()
+            self._set_track_info_enabled(True)
         elif event_type == "pause":
-            if self.status_var.get().startswith("Pause:"):
-                self._restore_status()
-            else:
-                self._restore_status(prefix="Pause")
+            # On pause, update UI state but avoid performing a status restore
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "stop":
-            if self.status_var.get():
-                self.status_var.set("")
-            self.meta_var.set("")
-
-            if hasattr(self, "_status_restore_job"):
-                self.root.after_cancel(self._status_restore_job)
-                self._status_restore_job = None
-
+            self.status_view.handle_stop()
+            self.dj_view._clear_info()
             self.state.current_index = None
-
-            try:
-                self.artwork_frame.pack_forget()
-            except Exception:
-                pass
-
-            # Hide BPM control frame when stopping
-            try:
-                self.bpm_control_frame.pack_forget()
-            except Exception:
-                pass
-
             self.refresh_all()
             self._update_menu_state()
             self._set_track_info_enabled(False)
@@ -685,17 +301,55 @@ class MainWindow:
             self._set_temporary_status(f"Added {count} file(s) to Songs list")
         elif event_type == "added_to_playlist":
             if count > 0:
+                self.refresh_all()
                 self._set_temporary_status(f"Added {count} file(s) to the bottom of the playlist")
             else:
                 self._set_temporary_status("No new files added to playlist (duplicates skipped)")
         elif event_type == "added_to_playlist_below":
             if count > 0:
+                self.refresh_all()
                 self._set_temporary_status(f"Added {count} file(s) below current track in playlist")
             else:
                 self._set_temporary_status("No new songs were added to playlist (duplicates skipped)")
         elif event_type == "crossfade":
             # Trigger next track logic when crossfade threshold is reached
             self.handle_track_end()
+
+    def _on_global_bpm_update(self, filepath):
+        """Handle global BPM updates by refreshing DJ view if it affects the current track."""
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+            current_path = self.state.playlist[idx]
+            if os.path.abspath(current_path) != os.path.abspath(filepath):
+                return
+
+            # Schedule update on main thread
+            try:
+                self.root.after(0, self.dj_view._on_bpm_metadata_changed, filepath)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_global_key_update(self, filepath):
+        """Handle global Key updates by refreshing DJ view if it affects the current track."""
+        try:
+            idx = self.state.current_index
+            if idx is None or idx >= len(self.state.playlist):
+                return
+            current_path = self.state.playlist[idx]
+            if os.path.abspath(current_path) != os.path.abspath(filepath):
+                return
+
+            # Schedule update on main thread
+            try:
+                self.root.after(0, self.dj_view._on_key_metadata_changed, filepath)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     # ---------- Refresh helpers ----------
     def refresh_all(self):
@@ -911,26 +565,13 @@ class MainWindow:
         except:
             pass
 
-        # Update sidebar buttons specifically
-        btn_bg = self.palette.get("button_bg_color", self.palette.get("accent", "#0078d4"))
-        btn_fg = self.palette.get("button_fg_color", "#ffffff")
-        btn_hover = self.palette.get("button_hover", self.palette.get("accent_hover", "#106ebe"))
+        # Update status view
+        if hasattr(self, 'status_view'):
+            self.status_view.update_theme()
 
-        def update_buttons_in_frame(frame):
-            for widget in frame.winfo_children():
-                if isinstance(widget, ctk.CTkButton):
-                    # Ensure button background matches surrounding frame
-                    frame_bg = self.palette.get("bg", "#1E1E1E" if self.settings.theme == "Dark" else "#FAFAFA")
-                    widget.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
-                elif isinstance(widget, ttk.Frame):
-                    # Recursively search in nested frames
-                    update_buttons_in_frame(widget)
-
-        update_buttons_in_frame(self.mid_frame)
-
-        # Update status frame buttons (including BPM button)
-        if hasattr(self, 'bpm_buttons_frame'):
-            update_buttons_in_frame(self.bpm_buttons_frame)
+        # Update DJ view
+        if hasattr(self, 'dj_view'):
+            self.dj_view.update_theme()
 
         # Update controls
         self.controls.update_theme()
@@ -944,51 +585,6 @@ class MainWindow:
         if hasattr(self, 'menubar') and self.menubar:
             self.menubar.update_theme()
 
-        # Update status bar colors
-        if hasattr(self, 'status_bg'):
-            # Use status_bg from theme with more contrasting colors for better visibility
-            if is_dark:
-                status_bg_color = self.palette.get('status_bg', '#2A2A2A')  # Lighter than bg for contrast
-                status_text_color = self.palette.get('status_fg', '#FFFFFF')
-                status_meta_color = self.palette.get('status_meta_fg', '#E0E0E0')
-                status_border_color = self.palette.get('status_border', '#3E3E3E')
-            else:
-                # Light mode: use a darker gray for clear contrast against light background
-                status_bg_color = self.palette.get('status_bg', '#E8E8E8')  # Darker gray for visibility
-                status_text_color = self.palette.get('status_fg', '#202020')
-                status_meta_color = self.palette.get('status_meta_fg', '#505050')
-                status_border_color = self.palette.get('status_border', '#D0D0D0')
-
-            frame_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
-
-            # Update parent frame background - ensure it matches root background
-            self.status_frame.configure(
-                fg_color=frame_bg,
-                bg_color=frame_bg  # Critical: bg_color affects frame edges/corners
-            )
-
-            # Update status bar frame with subtle border for better visibility
-            self.status_bg.configure(
-                fg_color=status_bg_color,
-                bg_color=frame_bg,  # This controls corner colors - must match parent
-                border_color=status_border_color,  # Subtle border for separation
-                border_width=1
-            )
-
-            # Update status and meta labels
-            self.status_label.configure(
-                text_color=status_text_color,
-                bg_color=status_bg_color
-            )
-            self.meta_label.configure(
-                text_color=status_meta_color,
-                bg_color=status_bg_color
-            )
-
-            # Force update the frames to prevent visual glitches
-            self.status_frame.update_idletasks()
-            self.status_bg.update_idletasks()
-
         # Update main_frame background to ensure padding areas are correct
         if hasattr(self, 'main_frame'):
             try:
@@ -996,14 +592,14 @@ class MainWindow:
             except:
                 pass
 
-        # Update open documentation windows
+        # Update open windows
         for window in self.root.winfo_children():
-            if isinstance(window, BPMAnalysisWindow):
+            if isinstance(window, AudioEffectsWindow):
                 try:
                     window.update_theme()
                 except Exception:
                     pass
-            if isinstance(window, AudioEffectsWindow):
+            if isinstance(window, PlaybackFeaturesView):
                 try:
                     window.update_theme()
                 except Exception:
@@ -1011,10 +607,6 @@ class MainWindow:
 
         # Trigger refresh to redraw
         self.refresh_all()
-
-        # Update artwork if there's a current track to refresh placeholder colors
-        if self.state.current_index is not None and 0 <= self.state.current_index < len(self.state.playlist):
-            self._update_artwork(self.state.playlist[self.state.current_index])
 
     def open_preferences(self):
         def on_apply(selected_theme):
@@ -1043,6 +635,13 @@ class MainWindow:
                         pass
 
         PreferencesWindow(self.root, self.settings, self.theme, on_apply=on_apply, on_bpm_preference_change=on_bpm_preference_change)
+
+    def open_playback_features(self):
+        """Open the Playback Features window."""
+        try:
+            PlaybackFeaturesView(self.root, self.state, self.settings, self.theme)
+        except Exception as e:
+            logger.error(f"Failed to open playback features: {e}", exc_info=True)
 
     def open_audio_effects(self):
         """Open the Audio Effects window."""
@@ -1205,9 +804,9 @@ class MainWindow:
         # Show window after all setup is complete
         about_window.deiconify()
 
-    def open_bpm_analysis(self):
-        """Open BPM Analysis documentation window."""
-        BPMAnalysisWindow(self.root, self.theme, self.settings)
+    def open_documentation(self, doc_filename):
+        """Open a documentation file in the default web browser."""
+        open_doc_in_browser(doc_filename, self.theme)
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")
@@ -1217,16 +816,16 @@ class MainWindow:
             self.settings.save()
         except Exception:
             logger.error("Failed to save window geometry on exit", exc_info=True)
-        # Stop player
-        try:
-            self.player.stop()
-        except Exception:
-            logger.error("Failed to stop player on exit", exc_info=True)
-        # Destroy window
+        # Destroy window immediately (player cleanup will happen in background)
         try:
             self.root.destroy()
         except Exception:
             logger.error("Failed to destroy window on exit", exc_info=True)
+        # Stop player after window is destroyed (non-blocking for user)
+        try:
+            self.player.stop()
+        except Exception:
+            logger.error("Failed to stop player on exit", exc_info=True)
         logger.info("Tango Studio shut down complete")
 
     # ---------- Playlist operations (menu) ----------
@@ -1246,6 +845,18 @@ class MainWindow:
             self._set_temporary_status("Playlist cleared")
 
     # ---------- Repeat Mode ----------
+    def toggle_repeat_mode(self):
+        """Cycle through repeat modes: none -> all -> one -> none."""
+        modes = ["none", "one", "all"]
+        current = self.repeat_mode_var.get()
+        try:
+            idx = modes.index(current)
+        except ValueError:
+            idx = 0
+        new_mode = modes[(idx + 1) % len(modes)]
+        self.repeat_mode_var.set(new_mode)
+        self._set_repeat_mode(new_mode)
+
     def _set_repeat_mode(self, mode):
         """Set the repeat mode (none, one, all)."""
         self.state.repeat_mode = mode
@@ -1356,17 +967,15 @@ class MainWindow:
                 pass
 
     def toggle_browser_visibility(self):
-        """Toggle browser visibility and mid_frame buttons."""
+        """Toggle browser visibility."""
         if self.show_browser_var.get():
-            # Show browser frame and middle buttons
+            # Show browser frame
             self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
             self.browser_view.pack(fill=tk.BOTH, expand=True)
-            self.mid_frame.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
         else:
-            # Hide browser frame and middle buttons
+            # Hide browser frame
             self.browser_view.pack_forget()
             self.right_frame.pack_forget()
-            self.mid_frame.pack_forget()
         # Persist setting
         if hasattr(self, "settings"):
             try:
@@ -1375,18 +984,52 @@ class MainWindow:
             except Exception:
                 pass
 
+    def toggle_dj_visibility(self):
+        """Toggle DJ (Live Audio Analysis) visibility."""
+        if self.show_dj_var.get():
+            try:
+                self.dj_view.pack(side=tk.RIGHT, anchor="n")
+                # Register audio metrics callback so player begins producing metrics
+                try:
+                    if hasattr(self, 'player') and hasattr(self.dj_view, '_on_audio_metrics_update'):
+                        self.player.set_audio_metrics_callback(self.dj_view._on_audio_metrics_update)
+                except Exception:
+                    pass
+                # Ensure the geometry manager processes the change immediately
+                try:
+                    self.dj_view.update_idletasks()
+                except Exception:
+                    pass
+                # Trigger update to start analysis for current track if playing
+                try:
+                    if self.state.current_index is not None:
+                        self.dj_view.update_info()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        else:
+            try:
+                # Unregister audio metrics callback to avoid unnecessary computations
+                try:
+                    if hasattr(self, 'player'):
+                        self.player.set_audio_metrics_callback(None)
+                except Exception:
+                    pass
+                self.dj_view.pack_forget()
+            except Exception:
+                pass
+        # Persist setting
+        if hasattr(self, "settings"):
+            try:
+                self.settings.show_dj = self.show_dj_var.get()
+                self.settings.save()
+            except Exception:
+                pass
+
     def toggle_always_on_top(self):
         """Toggle always on top window attribute."""
         self.root.attributes('-topmost', self.always_on_top_var.get())
-
-    # ---------- Middle Buttons: Browse Song, Add, Add below ----------
-    def add_selected_to_playlist(self):
-        self.browser_view.add_selected_to_playlist()
-        self.refresh_all()
-
-    def add_selected_below_playlist(self):
-        self.browser_view.add_selected_below_playlist()
-        self.refresh_all()
 
     # ---------- Handlers for custom events from subcomponents ----------
     def _on_global_click(self, event):
@@ -1602,7 +1245,10 @@ class MainWindow:
             # Reset repeat mode to 'none' after replaying
             self.state.repeat_mode = 'none'
             self.repeat_mode_var.set('none')
-            self._set_temporary_status("Repeat: None")
+
+            self._restore_status()
+            if hasattr(self, 'status_view'):
+                self.status_view.schedule_restore(3000)
         elif repeat_mode == 'all':
             # Loop to beginning
             if self.state.current_index + 1 < len(self.state.playlist):
@@ -1621,105 +1267,27 @@ class MainWindow:
             else:
                 # end of playlist: stop player
                 try:
-                    self.player.stop()
-                    # Ensure status is updated to clear artwork when playlist ends
-                    self._controls_status_event("stop")
+                    if hasattr(self, 'controls') and self.controls:
+                        self.controls.stop()
+                    else:
+                        self.player.stop()
+                        # Ensure status is updated to clear artwork when playlist ends
+                        self._controls_status_event("stop")
                 except Exception:
                     pass
 
     # ---------- Status bar helpers ----------
     def _set_temporary_status(self, message, duration=3000):
         """Show temporary status message, then restore now-playing."""
-        self.status_var.set(message)
+        if hasattr(self, 'status_view'):
+            self.status_view.set_temporary_status(message, duration)
 
-        # Cancel prior restore timer if any
-        if hasattr(self, "_status_restore_job"):
-            self.root.after_cancel(self._status_restore_job)
-
-        # Restore after timeout
-        self._status_restore_job = self.root.after(duration, self._restore_status)
-
-    def _restore_status(self, prefix="Playing"):
-        """
-        Restore playing status and populate metadata line.
-
-        Uses the centralized metadata module to read tags (title, artist), duration and bitrate.
-        """
-        idx = self.state.current_index
-        if idx is None or idx >= len(self.state.playlist):
-            self.status_var.set("")
-            self.meta_var.set("")
-            self.artwork_label.configure(image=None)
-            self.artwork_label.image = None
-            # Hide artwork frame when no track is active
-            try:
-                self.artwork_frame.pack_forget()
-            except Exception:
-                pass
-            return
-
-        # Show artwork frame when there is a current track
-        try:
-            self.artwork_frame.pack(side=tk.LEFT, padx=(0, 12), before=self.text_frame)
-        except Exception:
-            pass
-
-        path = self.state.playlist[idx]
-        name = os.path.basename(path)
-
-        # Get metadata using the centralized module
-        meta = get_metadata(path)
-
-        title = meta.get("title") or name
-        artist = meta.get("artist")
-        duration_s = meta.get("duration_s")
-        bitrate = meta.get("bitrate")
-        fmt = meta.get("format")
-        bpm = meta.get("bpm")
-
-        # Update artwork display
-        self._update_artwork(path)
-
-        if artist:
-            self.status_var.set(f"{prefix}: {title} — {artist}")
-        else:
-            self.status_var.set(f"{prefix}: {title}")
-
-        # Build metadata line parts (duration, bitrate, bpm, format)
-        parts = []
-        if duration_s:
-            parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
-        if bitrate:
-            parts.append(f"{bitrate} kbps")
-
-        if bpm:
-            bpm_str = f" • {get_display_bpm(bpm)} BPM"
-        else:
-            bpm_str =  " • BPM info missing"
-
-        self.meta_var.set(" • ".join(parts) + bpm_str)
-
-        # Handle BPM buttons visibility
-        if bpm is None:
-            # Show BPM control frame when BPM is missing
-            self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
-            # Reset button state and text
-            self.bpm_button_state = "analyze"
-            self.btn_bpm.configure(state="normal", text="Analyze BPM")
-            self.current_temp_bpm = None
-        else:
-            # Check if this BPM is a temporary one (needs saving)
-            if path in self.temporary_bpm_files:
-                # This is a temporary BPM, show save button
-                self.bpm_control_frame.pack(side=tk.LEFT, padx=(8, 0))
-                self.bpm_button_state = "save"
-                self.btn_bpm.configure(state="normal", text="Save BPM")
-                # Restore the temporary BPM value
-                self.current_temp_bpm = metadata_extractor._cache[path].get('bpm')
-            else:
-                # Hide BPM control frame when BPM is permanently saved
-                self.bpm_control_frame.pack_forget()
-                self.current_temp_bpm = None
+    def _restore_status(self):
+        """Restore playing status and populate metadata line."""
+        if hasattr(self, 'status_view'):
+            self.status_view.restore_status()
+        if hasattr(self, 'dj_view'):
+            self.dj_view.update_info()
 
     # ---------- Keyboard Accelerators ----------
     def _bind_keyboard_accelerators(self):
@@ -1756,9 +1324,12 @@ class MainWindow:
         # View menu accelerators
         self.root.bind_all("<F9>", lambda e: self._toggle_playlist_visibility())
         self.root.bind_all("<F10>", lambda e: self._toggle_browser_visibility())
+        self.root.bind_all("<F11>", lambda e: self._toggle_dj_visibility())
 
         # Tools menu accelerators
         self.root.bind("<Control-p>", lambda e: self.open_preferences())
+        self.root.bind("<F7>", lambda e: self.open_audio_effects())
+        self.root.bind("<F8>", lambda e: self.open_playback_features())
 
         # Help menu accelerators
         self.root.bind("<F1>", lambda e: self.open_about())
@@ -1782,6 +1353,11 @@ class MainWindow:
         """Toggle browser visibility for keyboard accelerator."""
         self.show_browser_var.set(not self.show_browser_var.get())
         self.toggle_browser_visibility()
+
+    def _toggle_dj_visibility(self):
+        """Toggle DJ visibility for keyboard accelerator."""
+        self.show_dj_var.set(not self.show_dj_var.get())
+        self.toggle_dj_visibility()
 
     # ---------- Start UI mainloop ----------
     def start(self):

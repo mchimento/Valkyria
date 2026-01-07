@@ -67,49 +67,16 @@ python main.py
 -   `themes/`: Theme definitions and management.
 -   `README.md`: Documentation for the tool.
 
-## 🎧 Automatic BPM (Tempo) Analysis
+## Documentation
 
-Tango Studio can automatically analyze and store the **BPM (Beats Per
-Minute)** of your music files. This enables DJ-style features such as
-tempo sorting, smart playlists, and smooth beat-matched transitions.
+Comprehensive documentation is available within the application and in the `docs/` folder:
 
-### What is BPM?
+### User Guide
+Complete guide covering all features, controls, and workflows. Access via **Help → Documentation → User Guide** in the application, or view the file directly here: [User Guide](docs/user_guide.md).
 
-BPM represents the musical tempo of a track --- how fast the beat moves
---- and is different from audio quality metrics such as *kbps*. BPM is a
-musical property and must be computed from the audio signal itself.
+### BPM Analysis
+Detailed technical documentation about the automatic tempo detection system. Access via **Help → Documentation → BPM Analysis** in the application, or view the file directly here: [BPM Analysis](docs/bpm_analysis.md).
 
-### How BPM is Calculated
-
-Tango Studio uses the **librosa** audio analysis library to estimate BPM
-directly from the sound waveform.
-
-1. **Audio Decoding**
-   - The audio file is decoded into a mono waveform at a fixed sample rate.
-   - For MP3 files, a short segment is first decoded using FFmpeg to ensure reliable analysis.
-
-2. **Onset Strength Detection**
-   - librosa computes an onset strength envelope.
-   - This highlights moments where musical energy suddenly increases (such as drum hits, kicks, and claps).
-   - These peaks represent the rhythmic pulse of the track.
-
-3. **Tempogram Analysis**
-   - A tempogram is generated from the onset envelope.
-   - The tempogram measures repeating rhythmic patterns over time and reveals the dominant beat periodicities in the song.
-
-4. **Global Tempo Estimation**
-   - The strongest rhythmic periodicity is selected from the tempogram.
-   - This produces a **raw physical tempo value** expressed in BPM.
-
-5. **Optional Tempo Normalization**
-   - Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range.
-   - This resolves common half-tempo and double-tempo ambiguities and allows BPM values to match professional DJ software.
-   - Normalization is controlled by user preference and can be disabled to expose the raw tempo.
-
-6. **Metadata Storage**
-   - The resulting BPM value can be written back into the audio file’s metadata.
-   - BPM is always stored in its raw form, i.e. not normalized.
-   - Once analyzed, BPM is cached inside the file and does not need to be recomputed again.
 
 ## Troubleshooting
 

@@ -8,8 +8,9 @@ import tkinter as tk
 # Suppress logging during tests
 logging.disable(logging.CRITICAL)
 
-# Skip UI tests if running in headless environment (CI/CD)
-HAS_DISPLAY = os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY') or os.name == 'nt'
+# Use centralized Tk availability utility (handles retries and TCL_LIBRARY fallback)
+from tests import tk_utils
+HAS_DISPLAY = tk_utils.HAS_TK
 
 
 class TestMainWindowMenus(unittest.TestCase):
@@ -25,7 +26,6 @@ class TestMainWindowMenus(unittest.TestCase):
         """Re-enable logging after tests."""
         logging.disable(logging.NOTSET)
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -33,6 +33,7 @@ class TestMainWindowMenus(unittest.TestCase):
     @patch('ui.main_window.PreferencesWindow')
     def setUp(self, mock_prefs, mock_tooltip, mock_playlist_view, mock_browser_view, mock_controls):
         """Set up test fixtures."""
+        tk_utils.skip_if_no_tk(self)
         self.mock_state = MagicMock()
         self.mock_state.playlist = ["/path/to/song1.mp3", "/path/to/song2.mp3"]  # Add songs to playlist
         self.mock_state.current_index = 0
@@ -61,7 +62,6 @@ class TestMainWindowMenus(unittest.TestCase):
         except Exception:
             pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -88,7 +88,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -115,7 +114,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -142,7 +140,37 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
+    @patch('ui.main_window.ControlsBar')
+    @patch('ui.main_window.BrowserView')
+    @patch('ui.main_window.PlaylistView')
+    @patch('ui.main_window.TooltipManager')
+    def test_resume_does_not_trigger_dj_reestimate(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
+        """Resuming playback (via 'resume' event) should not cause the DJ view to start new analyses."""
+        from ui.main_window import MainWindow
+        from audio import bpm as bpm_module
+
+        try:
+            root = tk.Tk()
+            self.root = root
+            main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
+
+            # Prepare a cached temporary estimate on DJ view
+            main_window.dj_view.current_temp_bpm = 120.0
+            main_window.dj_view.current_temp_key = 'Am'
+
+            # Patch analysis manager submission functions to detect unexpected calls
+            with patch.object(bpm_module.analysis_manager, 'submit_bpm_analysis') as mock_bpm_submit:
+                with patch.object(bpm_module.analysis_manager, 'submit_key_analysis') as mock_key_submit:
+                    # Simulate resume event (raised by ControlsBar on resume)
+                    main_window._controls_status_event('resume')
+
+                    mock_bpm_submit.assert_not_called()
+                    mock_key_submit.assert_not_called()
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -166,7 +194,6 @@ class TestMainWindowMenus(unittest.TestCase):
             except Exception:
                 pass
 
-    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
     @patch('ui.main_window.ControlsBar')
     @patch('ui.main_window.BrowserView')
     @patch('ui.main_window.PlaylistView')
@@ -185,6 +212,68 @@ class TestMainWindowMenus(unittest.TestCase):
 
             # Verify player's set_audio_device was called
             self.mock_player.set_audio_device.assert_called_with(device_id)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    @patch('ui.main_window.ControlsBar')
+    @patch('ui.main_window.BrowserView')
+    @patch('ui.main_window.PlaylistView')
+    @patch('ui.main_window.TooltipManager')
+    def test_playlist_end_triggers_controls_stop(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
+        """Ensure playlist end clears waveform by invoking ControlsBar.stop."""
+        from ui.main_window import MainWindow
+
+        mock_controls_instance = MagicMock()
+        mock_controls.return_value = mock_controls_instance
+
+        self.mock_state.playlist = ["/path/to/song1.mp3"]
+        self.mock_state.current_index = 0
+        self.mock_state.repeat_mode = 'none'
+
+        try:
+            root = tk.Tk()
+            self.root = root
+            main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
+
+            main_window.handle_track_end()
+
+            mock_controls_instance.stop.assert_called_once()
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+
+    @patch('ui.main_window.ControlsBar')
+    @patch('ui.main_window.BrowserView')
+    @patch('ui.main_window.PlaylistView')
+    @patch('ui.main_window.TooltipManager')
+    def test_show_live_audio_analysis_toggle(self, mock_tooltip, mock_playlist, mock_browser, mock_controls):
+        """Verify the 'Show Live Audio Analysis' menu toggle shows/hides the DJ view."""
+        from ui.main_window import MainWindow
+
+        try:
+            root = tk.Tk()
+            self.root = root
+            main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
+
+            # Ensure variable exists and reflects the setting (defaults to True)
+            self.assertTrue(hasattr(main_window, 'show_dj_var'))
+            self.assertIsInstance(main_window.show_dj_var, tk.BooleanVar)
+
+            # Toggle off and verify DJ view hidden (no geometry manager)
+            main_window.show_dj_var.set(False)
+            main_window.toggle_dj_visibility()
+            self.assertEqual(main_window.dj_view.winfo_manager(), '')
+
+            # Toggle on and verify DJ view is managed by pack
+            main_window.show_dj_var.set(True)
+            main_window.toggle_dj_visibility()
+            self.assertEqual(main_window.dj_view.winfo_manager(), 'pack')
         finally:
             try:
                 root.destroy()

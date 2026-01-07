@@ -13,7 +13,8 @@
       0.0,
       0.0
     ],
-    "preamp": 0.0
+    "preamp": 0.0,
+    "selected_preset": ""
   },
   "compressor": {
     "enabled": false,
@@ -38,5 +39,12 @@
     "default_rate": 1.0,
     "min_rate": 0.25,
     "max_rate": 4.0
+  },
+  "vocal_remover": {
+    "enabled": false,
+    "intensity": 0.5
+  },
+  "channel_mode": {
+    "mode": "Stereo"
   }
 }

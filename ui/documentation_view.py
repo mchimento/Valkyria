@@ -1,224 +1,232 @@
-import tkinter as tk
-import customtkinter as ctk
+"""
+Documentation viewer for Tango Studio.
+Opens markdown documentation in the default web browser.
+"""
 
-class BPMAnalysisWindow(ctk.CTkToplevel):
-    """Documentation window for BPM Analysis feature."""
+import webbrowser
+import tempfile
+import logging
+import re
 
-    def __init__(self, parent, theme_manager, settings):
-        super().__init__(parent)
+logger = logging.getLogger(__name__)
 
-        self.theme_manager = theme_manager
-        self.settings = settings
 
-        self.title("BPM Analysis Documentation")
-        self.geometry("700x700")
-        self.resizable(True, True)
+def open_documentation(doc_filename, theme_manager):
+    """
+    Open a markdown documentation file in the default web browser.
 
-        # Hide window initially to prevent flickering during positioning
-        self.withdraw()
+    Args:
+        doc_filename: Name of the markdown file (e.g., 'user_guide.md')
+        theme_manager: ThemeManager instance with palette colors
+    """
+    from app.paths import get_docs_path
 
-        # Center the window
-        self.transient(parent)
+    try:
+        # Import markdown library
+        import markdown
 
-        # Get theme colors
-        palette = self.theme_manager.palette
-        self.bg_color = palette.get("bg", "#1E1E1E" if self.settings.theme == "dark" else "#FAFAFA")
-        self.fg_color = palette.get("fg", "#FFFFFF" if self.settings.theme == "dark" else "#000000")
-        self.accent_color = palette.get("accent", "#0078d4")
-        self.btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
-        self.btn_fg_color = palette.get("button_fg_color", "#FFFFFF" if self.settings.theme == "dark" else "#000000")
+        # Read markdown file
+        doc_path = get_docs_path() / doc_filename
+        with open(doc_path, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
 
-        self.configure(fg_color=self.bg_color)
+        # Preprocess markdown content
+        lines = markdown_content.split('\n')
+        processed_lines = []
 
-        # Initialize scrollable frame reference
-        self.scrollable_frame = None
+        for line in lines:
+            # Convert plain URLs to markdown links
+            if 'http://' in line or 'https://' in line:
+                if not re.search(r'\[.+?\]\(https?://.+?\)', line):
+                    line = re.sub(
+                        r'(?<!\()(https?://[^\s,;)]+)',
+                        r'[\1](\1)',
+                        line
+                    )
 
-        # Create content
-        self._create_content()
+            # Convert 2-space nested lists to 4-space (standard markdown)
+            # This ensures proper nesting in rendered HTML
+            match = re.match(r'^(\s*)[*-] ', line)
+            if match:
+                indent = match.group(1)
+                if len(indent) == 2:
+                    # Convert 2-space to 4-space
+                    line = '    ' + line[2:]
+                elif len(indent) == 4:
+                    # Convert 4-space to 8-space (second level)
+                    line = '        ' + line[4:]
 
-        # Center and show window
-        self._center_and_show()
+            processed_lines.append(line)
 
-    def update_theme(self):
-        """Update the window colors when theme changes."""
-        # Force theme manager to reload current theme
-        try:
-            self.theme_manager.reload()
-        except:
-            pass
+        markdown_content = '\n'.join(processed_lines)
 
-        # Small delay to ensure theme is fully loaded
-        self.after(50, self._apply_theme_updates)
+        # Convert markdown to HTML
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=[
+                'tables',
+                'fenced_code',
+                'toc'
+            ]
+        )
 
-    def _apply_theme_updates(self):
-        """Apply theme updates after a small delay."""
-        # Get new theme colors after reload
-        palette = self.theme_manager.palette
-        is_dark = self.settings.theme.lower() == 'dark'
+        # Get colors from theme palette
+        palette = theme_manager.palette
+        bg_color = palette.get("bg", "#1e1e1e")
+        text_color = palette.get("fg", "#d4d4d4")
+        heading_color = palette.get("heading_color", "#4ec9b0")
+        link_color = palette.get("link_color", "#569CD6")
+        link_hover = palette.get("link_hover", "#77B4E8")
+        border_color = palette.get("border", "#404040")
 
-        # Update CustomTkinter appearance mode
-        try:
-            ctk.set_appearance_mode("Dark" if is_dark else "Light")
-        except:
-            pass
-
-        # Update color variables with explicit fallbacks
-        self.bg_color = palette.get("bg", "#1E1E1E" if is_dark else "#FAFAFA")
-        self.fg_color = palette.get("fg", "#FFFFFF" if is_dark else "#000000")
-        self.accent_color = palette.get("accent", "#0078d4")
-        self.btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
-        self.btn_fg_color = palette.get("button_fg_color", "#FFFFFF" if is_dark else "#000000")
-
-        # Update window background
-        self.configure(fg_color=self.bg_color)
-
-        # Clear existing content properly
-        if self.scrollable_frame:
-            # Destroy all widgets in the scrollable frame
-            for widget in self.scrollable_frame.winfo_children():
-                widget.destroy()
-
-        # Recreate content with new theme
-        self._create_content()
-
-    def _create_content(self):
-        """Create the documentation content."""
-        # Create scrollable frame only if it doesn't exist
-        if not self.scrollable_frame:
-            self.scrollable_frame = ctk.CTkScrollableFrame(self, fg_color=self.bg_color)
-            self.scrollable_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        # Determine if dark theme for code backgrounds
+        is_dark = theme_manager.settings.theme.lower() == 'dark'
+        if is_dark:
+            code_bg = palette.get("tree_bg", "#2d2d2d")
+            table_header_bg = palette.get("tree_header", "#2d2d2d")
         else:
-            # Update existing scrollable frame background
-            self.scrollable_frame.configure(fg_color=self.bg_color)
+            code_bg = palette.get("striped_bg", "#f5f5f5")
+            table_header_bg = palette.get("tree_header", "#f0f0f0")
 
-        # Calculate dynamic wraplength based on window width
-        try:
-            window_width = self.winfo_width()
-            if window_width > 100:  # Valid window width
-                wraplength = window_width - 80  # Account for padding
-            else:
-                wraplength = 600  # Default fallback
-        except:
-            wraplength = 600  # Default fallback
+        full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{doc_filename.replace('.md', '').replace('_', ' ').title()}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background-color: {bg_color};
+            color: {text_color};
+        }}
+        h1 {{
+            font-size: 2.5em;
+            color: {heading_color};
+            border-bottom: 2px solid {heading_color};
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }}
+        h2 {{
+            font-size: 2em;
+            color: {heading_color};
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }}
+        h3 {{
+            font-size: 1.5em;
+            color: {heading_color};
+            margin-top: 25px;
+            margin-bottom: 12px;
+        }}
+        h4 {{
+            font-size: 1.2em;
+            color: {heading_color};
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }}
+        p {{
+            margin: 12px 0;
+        }}
+        a {{
+            color: {link_color};
+            text-decoration: none;
+        }}
+        a:hover {{
+            text-decoration: underline;
+            color: {link_hover};
+        }}
+        code {{
+            background-color: {code_bg};
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }}
+        pre {{
+            background-color: {code_bg};
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid {border_color};
+        }}
+        pre code {{
+            background-color: transparent;
+            padding: 0;
+        }}
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+            border: 1px solid {border_color};
+        }}
+        th {{
+            background-color: {table_header_bg};
+            padding: 12px;
+            text-align: left;
+            border: 1px solid {border_color};
+            font-weight: bold;
+        }}
+        td {{
+            padding: 10px 12px;
+            border: 1px solid {border_color};
+        }}
+        tr:nth-child(even) {{
+            background-color: {code_bg};
+        }}
+        ul, ol {{
+            margin: 15px 0;
+            padding-left: 30px;
+        }}
+        li {{
+            margin: 8px 0;
+        }}
+        ul ul, ol ol, ul ol, ol ul {{
+            margin: 5px 0;
+            padding-left: 25px;
+        }}
+        ul ul li, ol ol li {{
+            margin: 5px 0;
+        }}
+        hr {{
+            border: none;
+            border-top: 1px solid {border_color};
+            margin: 30px 0;
+        }}
+        blockquote {{
+            border-left: 4px solid {heading_color};
+            margin: 20px 0;
+            padding-left: 20px;
+            color: {text_color};
+            opacity: 0.9;
+        }}
+    </style>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
 
-        # Title
-        title_label = ctk.CTkLabel(
-            self.scrollable_frame,
-            text="🎧 Automatic BPM (Tempo) Analysis",
-            font=("Segoe UI", 20, "bold"),
-            text_color=self.accent_color,
-            fg_color="transparent"
+        # Create temporary HTML file
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w',
+            delete=False,
+            suffix='.html',
+            encoding='utf-8'
         )
-        title_label.pack(pady=(0, 15), anchor="w")
+        temp_file.write(full_html)
+        temp_file.close()
 
-        # Introduction
-        intro_text = """Tango Studio can automatically analyze and store the BPM (Beats Per Minute) of your music files. This enables DJ-style features such as tempo sorting, smart playlists, and smooth beat-matched transitions."""
+        # Open in default browser
+        webbrowser.open('file://' + temp_file.name)
 
-        intro_label = ctk.CTkLabel(
-            self.scrollable_frame,
-            text=intro_text,
-            font=("Segoe UI", 12),
-            text_color=self.fg_color,
-            fg_color="transparent",
-            wraplength=wraplength,
-            justify="left"
-        )
-        intro_label.pack(pady=(0, 15), anchor="w")
-
-        # What is BPM section
-        self._create_section(self.scrollable_frame, "What is BPM?",
-                            """BPM represents the musical tempo of a track — how fast the beat moves — and is different from audio quality metrics such as kbps. BPM is a musical property and must be computed from the audio signal itself.""", wraplength)
-
-        # How BPM is Calculated section
-        self._create_section(self.scrollable_frame, "How BPM is Calculated",
-                           """Tango Studio uses the librosa audio analysis library to estimate BPM directly from the sound waveform.""", wraplength)
-
-        # Steps
-        steps_title = ctk.CTkLabel(
-            self.scrollable_frame,
-            text="Analysis Process",
-            font=("Segoe UI", 16, "bold"),
-            text_color=self.accent_color,
-            fg_color="transparent"
-        )
-        steps_title.pack(pady=(15, 8), anchor="w")
-
-        steps = [
-            "Audio Decoding - The audio file is decoded into a mono waveform at a fixed sample rate. For MP3 files, a short segment is first decoded using FFmpeg to ensure reliable analysis.",
-            "Onset Strength Detection - librosa computes an onset strength envelope. This highlights moments where musical energy suddenly increases (such as drum hits, kicks, and claps). These peaks represent the rhythmic pulse of the track.",
-            "Tempogram Analysis - A tempogram is generated from the onset envelope. The tempogram measures repeating rhythmic patterns over time and reveals the dominant beat periodicities in the song.",
-            "Global Tempo Estimation - The strongest rhythmic periodicity is selected from the tempogram. This value is converted into BPM.",
-            "Optional Tempo Normalization - Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range. This resolves common half-tempo and double-tempo ambiguities and allows BPM values to match professional DJ software. Normalization is controlled by user preference and can be disabled to expose the raw tempo.",
-            "Metadata Storage - The resulting BPM value can be written back into the audio file's metadata using Mutagen. BPM is always stored in its raw form, i.e. not normalized. Once analyzed, BPM is cached inside the file and does not need to be recomputed again."
-        ]
-
-        for i, step in enumerate(steps, 1):
-            step_label = ctk.CTkLabel(
-                self.scrollable_frame,
-                text=f"{i}. {step}",
-                font=("Segoe UI", 11),
-                text_color=self.fg_color,
-                fg_color="transparent",
-                wraplength=wraplength,
-                justify="left"
-            )
-            step_label.pack(pady=(0, 8), anchor="w", padx=(20, 0))
-
-        # Close button
-        close_button = ctk.CTkButton(
-            self.scrollable_frame,
-            text="Close",
-            font=("Segoe UI", 12),
-            fg_color=self.btn_bg,
-            hover_color=self.theme_manager.palette.get("accent_hover", "#106ebe"),
-            text_color=self.btn_fg_color,
-            width=80,
-            height=32,
-            command=self.destroy
-        )
-        close_button.pack(pady=20)
-
-    def _create_section(self, parent, title, text, wraplength=600):
-        """Create a documentation section with title and content."""
-        # Section title
-        section_title = ctk.CTkLabel(
-            parent,
-            text=title,
-            font=("Segoe UI", 16, "bold"),
-            text_color=self.accent_color,
-            fg_color="transparent"
-        )
-        section_title.pack(pady=(15, 8), anchor="w")
-
-        # Section content
-        section_label = ctk.CTkLabel(
-            parent,
-            text=text,
-            font=("Segoe UI", 12),
-            text_color=self.fg_color,
-            fg_color="transparent",
-            wraplength=wraplength,
-            justify="left"
-        )
-        section_label.pack(pady=(0, 15), anchor="w")
-
-    def _center_and_show(self):
-        """Center the window and show it."""
-        self.update_idletasks()
-        # Get current geometry to use the size set in __init__
-        current_geom = self.geometry()
-        # Extract width and height (format is "widthxheight+x+y" or "widthxheight")
-        if '+' in current_geom:
-            size_part = current_geom.split('+')[0]
-        else:
-            size_part = current_geom
-
-        if 'x' in size_part:
-            width, height = map(int, size_part.split('x'))
-        else:
-            width, height = 700, 700  # fallback to current defaults
-
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
-        self.deiconify()
+    except FileNotFoundError:
+        logger.error(f"Documentation file not found: {doc_filename}")
+    except ImportError:
+        logger.error("Markdown library not installed. Please run: pip install markdown")
+    except Exception as e:
+        logger.error(f"Error opening documentation: {e}", exc_info=True)

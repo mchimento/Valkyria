@@ -7,14 +7,173 @@ Provides a simple, stable API to play/pause/stop and emits callbacks when a trac
 import logging
 import threading
 import json
+import time
+import os
+import sys
 from pathlib import Path
+from contextlib import contextmanager
 
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
-import scipy.signal
+
+from audio.audio_effects import AudioEffects
 
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def suppress_c_stderr():
+    """
+    Context manager to suppress C-level stderr output.
+    Useful for silencing libmpg123 warnings.
+    """
+    try:
+        # Open a null file
+        with open(os.devnull, 'w') as fnull:
+            # Save the original stderr file descriptor
+            original_stderr_fd = sys.stderr.fileno()
+            saved_stderr_fd = os.dup(original_stderr_fd)
+
+            try:
+                # Redirect stderr to null
+                os.dup2(fnull.fileno(), original_stderr_fd)
+                yield
+            finally:
+                # Restore stderr
+                os.dup2(saved_stderr_fd, original_stderr_fd)
+                os.close(saved_stderr_fd)
+    except Exception:
+        # If anything goes wrong (e.g. no fileno), just execute code
+        yield
+
+class AudioBuffer:
+    """
+    Thread-safe ring buffer for audio streaming.
+    Decouples file I/O from the audio callback to prevent underruns.
+    """
+    def __init__(self, file_path, capacity_frames=176400): # ~4 seconds at 44.1k
+        # Suppress libmpg123 warnings during file opening
+        with suppress_c_stderr():
+            self.file = sf.SoundFile(file_path)
+        self.samplerate = self.file.samplerate
+        self.channels = self.file.channels
+        self.capacity = capacity_frames
+
+        # Ring buffer
+        self.buffer = np.zeros((self.capacity, self.channels), dtype='float32')
+        self.write_pos = 0
+        self.read_pos = 0
+        self.count = 0 # Frames available to read
+        self.absolute_read_pos = 0
+
+        self.lock = threading.Lock()
+        self.running = True
+        self.eof = False
+
+        # Start producer thread
+        self.thread = threading.Thread(target=self._producer_loop, daemon=True)
+        self.thread.start()
+
+    def _producer_loop(self):
+        while self.running:
+            # Determine how much space is available
+            with self.lock:
+                space = self.capacity - self.count
+
+            # If buffer is nearly full, sleep a bit
+            if space < 4096:
+                time.sleep(0.01)
+                continue
+
+            # Read a chunk (without holding lock)
+            read_size = min(space, 8192)
+
+            try:
+                # Suppress libmpg123 warnings during read
+                with suppress_c_stderr():
+                    data = self.file.read(read_size, dtype='float32')
+            except Exception as e:
+                logger.error(f"Error reading audio file: {e}")
+                self.eof = True
+                break
+
+            if len(data) == 0:
+                self.eof = True
+                time.sleep(0.05)
+                continue
+
+            # Ensure 2D
+            if data.ndim == 1:
+                data = data[:, np.newaxis]
+
+            n = len(data)
+
+            # Write to buffer (holding lock)
+            with self.lock:
+                if not self.running:
+                    break
+
+                end = self.write_pos + n
+                if end <= self.capacity:
+                    self.buffer[self.write_pos:end] = data
+                else:
+                    split = self.capacity - self.write_pos
+                    self.buffer[self.write_pos:] = data[:split]
+                    self.buffer[:n-split] = data[split:]
+
+                self.write_pos = (self.write_pos + n) % self.capacity
+                self.count += n
+
+    def read(self, frames):
+        """Read frames from the buffer. Returns None if EOF and empty."""
+        with self.lock:
+            if self.count == 0:
+                if self.eof:
+                    return None # Real EOF
+                return np.zeros((frames, self.channels), dtype='float32') # Underrun
+
+            n = min(frames, self.count)
+
+            end = self.read_pos + n
+            if end <= self.capacity:
+                data = self.buffer[self.read_pos:end].copy()
+            else:
+                split = self.capacity - self.read_pos
+                p1 = self.buffer[self.read_pos:]
+                p2 = self.buffer[:n-split]
+                data = np.concatenate((p1, p2))
+
+            self.read_pos = (self.read_pos + n) % self.capacity
+            self.count -= n
+            self.absolute_read_pos += n
+
+            # If we requested more than available, pad with zeros (underrun)
+            if n < frames:
+                padding = np.zeros((frames - n, self.channels), dtype='float32')
+                data = np.concatenate((data, padding))
+
+            return data
+
+    def seek(self, frame_pos):
+        with self.lock:
+            try:
+                self.file.seek(frame_pos)
+                self.read_pos = 0
+                self.write_pos = 0
+                self.count = 0
+                self.absolute_read_pos = frame_pos
+                self.eof = False
+            except Exception as e:
+                logger.error(f"Error seeking: {e}")
+
+    def close(self):
+        self.running = False
+        if self.thread.is_alive():
+            self.thread.join(timeout=0.5)
+        try:
+            self.file.close()
+        except:
+            pass
 
 # Load audio effects configuration
 config_path = Path(__file__).parent / 'audio_effects_config.json'
@@ -38,7 +197,7 @@ class AudioPlayer:
         self._lock = threading.RLock()
 
         self._stream = None
-        self._file = None
+        self._buffer = None
         self._volume = 100  # 0-100
         self._muted = False
         self._paused = False
@@ -46,60 +205,77 @@ class AudioPlayer:
         self._device_id = None
         self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
+        # Stateful resampler buffer (keeps continuity between callbacks)
+        self._resample_buffer = None
+        self._resample_pos = 0.0
 
-        # Equalizer
-        eq_config = AUDIO_CONFIG['equalizer']
-        eq_defaults = AUDIO_DEFAULTS['equalizer']
-        self.equalizer_enabled = eq_config['enabled']
-        self._eq_bands = eq_defaults['bands']
-        self._eq_gains = eq_config['gains'].copy()
-        self._eq_preamp = eq_config['preamp']
-        self._eq_sos = None
-        self._eq_zi = None
+        # Audio metrics calculation (LUFS, Peak dBFS, Energy)
+        self._audio_metrics_callback = None
+        self._audio_metrics_accumulator = []
+        self._overall_lufs = -60.0  # Pre-computed overall track LUFS
+        self._metrics_last_update = 0
+        self._metrics_update_interval = 0.05  # Update every 50ms
 
-        # Compressor
-        comp_config = AUDIO_CONFIG['compressor']
-        self._compressor_enabled = comp_config['enabled']
-        self._compressor_threshold = comp_config['threshold']
-        self._compressor_ratio = comp_config['ratio']
-        self._compressor_attack = comp_config['attack']
-        self._compressor_release = comp_config['release']
-        self._compressor_makeup = comp_config['makeup_gain']
-        self._compressor_knee = comp_config['knee']
-        self._compressor_use_rms = comp_config['use_rms']
-        self._compressor_envelope = 0.0
-        self._compressor_rms_buffer = np.zeros(comp_config['rms_buffer_size'])
-        self._compressor_rms_index = 0
-
-        # Spatializer
-        spat_config = AUDIO_CONFIG.get('spatializer', {})
-        self._spatializer_enabled = spat_config.get('enabled', False)
-        self._spat_size = spat_config.get('size', 0.85)
-        self._spat_width = spat_config.get('width', 0.5)
-        self._spat_wet = spat_config.get('wet', 0.4)
-        self._spat_dry = spat_config.get('dry', 0.5)
-        self._spat_damp = spat_config.get('damp', 0.5)
-
-        # Reverb state
-        self._spat_initialized = False
-        self._spat_comb_buffers = []
-        self._spat_comb_indices = []
-        self._spat_comb_filters = [] # Store lowpass state
-        self._spat_allpass_buffers = []
-        self._spat_allpass_indices = []
+        # Initialize Audio Effects Processor
+        self.effects = AudioEffects(AUDIO_CONFIG, AUDIO_DEFAULTS)
 
         logger.info("AudioPlayer initialized (sounddevice)")
+
+    def __del__(self):
+        """Ensure cleanup when AudioPlayer is destroyed."""
+        try:
+            # Stop any active playback
+            if hasattr(self, '_stream') and self._stream:
+                try:
+                    self._stream.stop()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+
+            # Close buffer
+            if hasattr(self, '_buffer') and self._buffer:
+                try:
+                    self._buffer.close()
+                except Exception:
+                    pass
+                self._buffer = None
+
+            # Reset audio metrics for UI as part of cleanup (ensure UI is reset)
+            try:
+                if self._audio_metrics_callback:
+                    threading.Thread(
+                        target=lambda: self._audio_metrics_callback(-60.0, -60.0, -60.0, 0.0, 0.0),
+                        daemon=True
+                    ).start()
+            except Exception:
+                pass
+
+            # Stop all sounddevice operations
+            import sounddevice as sd
+            try:
+                sd.stop()
+            except Exception:
+                pass
+
+        except Exception:
+            # Ensure cleanup doesn't raise exceptions
+            logger.error("Error cleaning up audio player")
+            pass
 
     def _stream_callback(self, outdata, frames, time, status):
         """Callback for sounddevice OutputStream."""
         if status:
             logger.warning(f"Audio callback status: {status}")
 
+        # Clear output buffer first to prevent residual audio
+        outdata.fill(0)
+
         data = []
         frames_to_read = frames
 
         with self._lock:
-            if not self._file:
+            if not self._buffer:
                 outdata[:] = 0
                 raise sd.CallbackStop
 
@@ -113,57 +289,61 @@ class AudioPlayer:
                 frames_to_read = int(target_read)
                 self._rate_remainder = target_read - frames_to_read
 
-            # Read data from file
-            data = self._file.read(frames_to_read)
-            # Ensure data is 2D for consistent processing (N, C)
-            if data.ndim == 1:
-                data = data[:, np.newaxis]
+            # Read data from buffer
+            data = self._buffer.read(frames_to_read)
 
-        # Handle End of File
-        if len(data) < frames_to_read:
-            # End of file reached, handle partial data
-            if abs(self._playback_rate - 1.0) < 0.01:
-                outdata[:len(data)] = data
-                outdata[len(data):] = 0
+            if data is None:
+                # EOF
+                outdata[:] = 0
+                raise sd.CallbackStop
+
+        # Resample if needed (stateful resampler for smoother speed changes)
+        rate = self._playback_rate
+        if abs(rate - 1.0) < 0.01:
+            # Direct copy with padding/truncation to match frames
+            n = data.shape[0]
+            if n >= frames:
+                outdata[:] = data[:frames]
             else:
-                # Resample partial data
-                valid_frames = int(len(data) / self._playback_rate)
-                valid_frames = min(valid_frames, frames)
-                if valid_frames > 0:
-                    x_old = np.linspace(0, 1, len(data))
-                    x_new = np.linspace(0, 1, valid_frames)
-                    for ch in range(data.shape[1]):
-                        outdata[:valid_frames, ch] = np.interp(x_new, x_old, data[:, ch])
-                outdata[valid_frames:] = 0
-            raise sd.CallbackStop
+                if n > 0:
+                    outdata[:n] = data
+                if frames > n:
+                    outdata[n:frames] = 0
         else:
-            if abs(self._playback_rate - 1.0) < 0.01:
-                outdata[:] = data
-            else:
-                # Resample full block: stretch read data to fit output frames
-                x_old = np.linspace(0, 1, len(data))
-                x_new = np.linspace(0, 1, frames)
-                for ch in range(data.shape[1]):
-                    outdata[:, ch] = np.interp(x_new, x_old, data[:, ch])
+            # Initialize resample state if missing
+            if not hasattr(self, '_resample_buffer') or self._resample_buffer is None:
+                # Create empty buffer with proper channels
+                self._resample_buffer = np.zeros((0, data.shape[1]), dtype='float32')
+                self._resample_pos = 0.0
 
-        # Apply Equalizer
-        if self.equalizer_enabled and self._eq_sos is not None:
-            # Apply Preamp
-            if self._eq_preamp != 0.0:
-                outdata[:] *= (10 ** (self._eq_preamp / 20.0))
+            # Append new samples to the resample buffer
+            if data.shape[0] > 0:
+                self._resample_buffer = np.concatenate((self._resample_buffer, data), axis=0)
 
-            # Apply SOS filters
-            # Check if ZI shape matches current channels (file channels)
-            if self._eq_zi is not None and self._eq_zi.shape[1] == outdata.shape[1]:
-                outdata[:], self._eq_zi = scipy.signal.sosfilt(self._eq_sos, outdata, axis=0, zi=self._eq_zi)
+            # Use a high-quality sinc (windowed) resampler
+            out, consumed = self._sinc_resample(frames, rate)
+            outdata[:] = out
 
-        # Apply Compressor
-        if self._compressor_enabled:
-            outdata[:] = self._apply_compressor(outdata)
+            # Drop consumed frames from buffer and update position
+            if consumed > 0:
+                buf_len = self._resample_buffer.shape[0]
+                channels = self._resample_buffer.shape[1] if buf_len > 0 else data.shape[1]
+                if consumed >= buf_len:
+                    self._resample_buffer = np.zeros((0, channels), dtype='float32')
+                else:
+                    self._resample_buffer = self._resample_buffer[consumed:]
 
-        # Apply Spatializer
-        if self._spatializer_enabled:
-            outdata[:] = self._apply_spatializer(outdata)
+                self._resample_pos = (self._resample_pos + frames * rate) - consumed
+
+            # Trim buffer if it grows too large
+            max_buf = 44100 * 5  # 5 seconds guard
+            if self._resample_buffer.shape[0] > max_buf:
+                drop = self._resample_buffer.shape[0] - max_buf
+                self._resample_buffer = self._resample_buffer[drop:]
+                self._resample_pos = max(0.0, self._resample_pos - drop)
+
+        # Apply Audio Effects (use outdata as the source for processing)
+        outdata[:] = self.effects.process(outdata)
 
         # Apply Volume
         if self._muted:
@@ -172,6 +352,9 @@ class AudioPlayer:
             # Normalize 0-100 to 0.0-1.0
             vol = self._volume / 100.0
             outdata[:] *= vol
+
+        # Calculate audio metrics if callback is registered
+        self._update_audio_metrics(outdata)
 
     def _on_stream_finished(self):
         """Called when stream finishes (stops or ends)."""
@@ -183,6 +366,212 @@ class AudioPlayer:
                 except Exception:
                     logger.error("Error in track end callback", exc_info=True)
 
+    def _sinc_resample(self, frames, rate, kernel_size=64):
+        """High-quality stateful sinc resampler.
+
+        Uses a windowed sinc kernel (Hann window) and linear convolution across a
+        kernel of size `kernel_size` to interpolate arbitrary fractional positions.
+        This keeps state in `self._resample_buffer` and `self._resample_pos`.
+        Returns (out, consumed_frames) where `out` is (frames, channels).
+        """
+        buf = self._resample_buffer
+        if buf is None or buf.shape[0] == 0:
+            # Nothing available; return silence
+            channels = self._buffer.channels if self._buffer else 2
+            return np.zeros((frames, channels), dtype='float32'), 0
+
+        buf_len = buf.shape[0]
+        channels = buf.shape[1]
+
+        # Kernel parameters
+        if kernel_size % 2 != 0:
+            kernel_size += 1
+        half = kernel_size // 2
+
+        # Positions in source frames for each output frame
+        positions = self._resample_pos + np.arange(frames) * rate
+        centers = np.floor(positions).astype(np.int64)
+
+        # Prepare index grid and offsets
+        n_range = np.arange(-half + 1, half + 1)  # length kernel_size
+        indices = centers[:, None] + n_range[None, :]
+
+        # Clip indices to buffer range for safe gathering and mark validity
+        valid_mask = (indices >= 0) & (indices < buf_len)
+        clipped = np.clip(indices, 0, buf_len - 1)
+
+        # Gather samples: shape (frames, kernel_size, channels)
+        samples = buf[clipped]
+
+        # Offsets for sinc: how far each tap is from the source position
+        offsets = positions[:, None] - indices  # shape (frames, kernel_size)
+
+        # Hann window applied to the sinc kernel
+        win = 0.5 * (1.0 + np.cos(np.pi * offsets / half))
+        win[np.abs(offsets) > half] = 0.0
+
+        # Sinc function: np.sinc uses sin(pi x)/(pi x)
+        kernel = np.sinc(offsets) * win
+        kernel *= valid_mask.astype('float32')
+
+        # Perform convolution for each channel using einsum for clarity
+        out = np.einsum('ij,ijk->ik', kernel, samples)
+
+        # Compute how many source frames we can drop: max floor index used + 1
+        row_valid = valid_mask.any(axis=1)
+        if np.any(row_valid):
+            consumed = int(np.max(centers[row_valid])) + 1
+        else:
+            consumed = 0
+
+        return out.astype('float32'), consumed
+
+    def set_audio_metrics_callback(self, callback):
+        """Set callback for audio metrics updates. Callback receives (lufs_value, overall_lufs, peak_dbfs, limiter_activity, energy_level)."""
+        with self._lock:
+            self._audio_metrics_callback = callback
+            logger.info("Audio metrics callback registered")
+
+    def _compute_and_notify_overall_lufs(self, path):
+        """Background worker to compute overall LUFS without blocking playback start.
+
+        Once computed, updates internal state and notifies any audio metrics callback so UI can refresh.
+        """
+        try:
+            val = self._calculate_overall_lufs(path)
+            with self._lock:
+                self._overall_lufs = val
+            logger.info(f"Overall LUFS for track (async): {self._overall_lufs:.1f}")
+
+            # If a UI callback is registered, send an update with conservative realtime metrics
+            try:
+                if self._audio_metrics_callback:
+                    # Provide placeholder current metrics (they will be updated by the regular audio metrics path)
+                    self._audio_metrics_callback(-60.0, self._overall_lufs, -60.0, 0.0, 0.0)
+            except Exception:
+                pass
+        except Exception as e:
+            logger.debug(f"Async LUFS calculation failed for {path}: {e}")
+            # Leave overall LUFS as default (-60.0) on failure
+
+    def _update_audio_metrics(self, audio_data):
+        """Calculate and update LUFS, Peak dBFS, limiter activity, and energy from audio data without affecting playback."""
+        try:
+            if self._audio_metrics_callback is None:
+                return
+
+            # Calculate RMS of the audio block
+            rms = np.sqrt(np.mean(audio_data ** 2))
+
+            # Calculate peak level (maximum absolute sample value)
+            peak = np.max(np.abs(audio_data))
+            if peak > 0:
+                peak_dbfs = 20 * np.log10(peak)
+            else:
+                peak_dbfs = -60.0
+            peak_dbfs = max(-60.0, min(0.0, peak_dbfs))
+
+            # Accumulate samples for averaging (current LUFS)
+            self._audio_metrics_accumulator.append(rms)
+            # Store peak values for periodic update
+            if not hasattr(self, '_peak_accumulator'):
+                self._peak_accumulator = []
+            self._peak_accumulator.append(peak_dbfs)
+
+            # Calculate metrics periodically
+            current_time = time.time()
+            if current_time - self._metrics_last_update >= self._metrics_update_interval:
+                if self._audio_metrics_accumulator:
+                    # Average RMS over accumulated samples (current LUFS)
+                    avg_rms = np.mean(self._audio_metrics_accumulator)
+
+                    # Convert to dBFS (approximate LUFS)
+                    if avg_rms > 0:
+                        lufs = 20 * np.log10(avg_rms)
+                    else:
+                        lufs = -60.0
+
+                    # Clamp to reasonable range
+                    lufs = max(-60.0, min(0.0, lufs))
+
+                    # Get maximum peak from accumulated values
+                    if self._peak_accumulator:
+                        max_peak_dbfs = max(self._peak_accumulator)
+                    else:
+                        max_peak_dbfs = -60.0
+
+                    # Calculate limiter activity based on how close the peak is to clipping
+                    # -12 dBFS = 0.0 activity (safe)
+                    # 0 dBFS = 1.0 activity (clipping risk)
+                    # This represents how "hot" the signal is
+                    limiter_activity = 0.0
+                    if max_peak_dbfs > -12.0:
+                        # Normalize from -12..0 to 0..1
+                        limiter_activity = (max_peak_dbfs + 12.0) / 12.0
+                        limiter_activity = max(0.0, min(1.0, limiter_activity))
+
+                    # Calculate energy level (normalized 0.0 to 1.0)
+                    # Map RMS to energy: 0.0 = silence, 1.0 = maximum
+                    # Use exponential scaling for better visual representation
+                    energy = min(1.0, avg_rms * 3.0)  # Scale factor to make typical music reach good levels
+                    energy = max(0.0, energy)
+
+                    # Call the callback asynchronously to avoid blocking audio thread
+                    # Use threading to prevent UI blocking from affecting audio
+                    if self._audio_metrics_callback:
+                        callback = self._audio_metrics_callback
+                        threading.Thread(
+                            target=lambda: callback(lufs, self._overall_lufs, max_peak_dbfs, limiter_activity, energy),
+                            daemon=True
+                        ).start()
+
+                    # Reset accumulators
+                    self._audio_metrics_accumulator = []
+                    self._peak_accumulator = []
+                    self._metrics_last_update = current_time
+        except Exception as e:
+            logger.error(f"Error calculating audio metrics: {e}")
+
+    def _calculate_overall_lufs(self, path):
+        """Pre-calculate overall LUFS for entire track."""
+        try:
+            # Open file separately for analysis
+            with suppress_c_stderr():
+                with sf.SoundFile(path) as audio_file:
+                    samplerate = audio_file.samplerate
+                    channels = audio_file.channels
+
+                    # Read and analyze in chunks to avoid memory issues
+                    chunk_size = 44100  # 1 second at 44.1kHz
+                    rms_values = []
+
+                    while True:
+                        data = audio_file.read(chunk_size, dtype='float32')
+                        if len(data) == 0:
+                            break
+
+                        # Ensure 2D
+                        if data.ndim == 1:
+                            data = data[:, np.newaxis]
+
+                        # Calculate RMS for this chunk
+                        rms = np.sqrt(np.mean(data ** 2))
+                        rms_values.append(rms)
+
+                    # Calculate overall LUFS from all chunks
+                    if rms_values:
+                        overall_rms = np.mean(rms_values)
+                        if overall_rms > 0:
+                            overall_lufs = 20 * np.log10(overall_rms)
+                        else:
+                            overall_lufs = -60.0
+                        return max(-60.0, min(0.0, overall_lufs))
+
+            return -60.0
+        except Exception as e:
+            logger.error(f"Error calculating overall LUFS: {e}")
+            return -60.0
+
     def play(self, path):
         """
         Play an audio file.
@@ -192,11 +581,26 @@ class AudioPlayer:
         """
         self.stop()
 
+        # Delay to ensure stop() completes and hardware buffers are fully cleared
+        # This prevents ghost sounds from previous track
+        time.sleep(0.06)
+
         with self._lock:
             try:
-                self._file = sf.SoundFile(path)
+                # Reset audio metrics tracking for new track
+                self._audio_metrics_accumulator = []
+                self._metrics_last_update = 0
+                self._rate_remainder = 0.0
+
+                # Start playback immediately; calculate overall LUFS in background to avoid blocking
+                self._buffer = AudioBuffer(path)
                 self._paused = False
                 self._stopped_manually = False
+
+                # Compute overall LUFS asynchronously and notify listeners/UI when ready
+                # Only compute if an audio metrics callback is registered (i.e., UI is listening)
+                if self._audio_metrics_callback:
+                    threading.Thread(target=self._compute_and_notify_overall_lufs, args=(path,), daemon=True).start()
 
                 # Determine device index if set
                 device = None
@@ -206,24 +610,34 @@ class AudioPlayer:
                     except (ValueError, TypeError):
                         device = None
 
+                # Prepare effects for this file BEFORE creating stream
+                self.effects.prepare(self._buffer.samplerate, self._buffer.channels)
+
+                # Reset effects state to prevent ghost sounds from previous tracks
+                self.effects.reset_state()
+
+                # Reset resampler state for new track
+                self._resample_buffer = None
+                self._resample_pos = 0.0
+
                 self._stream = sd.OutputStream(
-                    samplerate=self._file.samplerate,
-                    channels=self._file.channels,
+                    samplerate=self._buffer.samplerate,
+                    channels=self._buffer.channels,
                     device=device,
                     callback=self._stream_callback,
                     finished_callback=self._on_stream_finished
                 )
+
                 self._stream.start()
-                self._update_equalizer()
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
                 # Cleanup manually since we can't call stop() safely inside lock if it blocks
                 if self._stream:
                     self._stream.close()
                     self._stream = None
-                if self._file:
-                    self._file.close()
-                    self._file = None
+                if self._buffer:
+                    self._buffer.close()
+                    self._buffer = None
 
     def pause(self):
         """Pause or resume playback."""
@@ -252,32 +666,55 @@ class AudioPlayer:
     def stop(self):
         """Stop playback."""
         stream_to_close = None
-        file_to_close = None
+        buffer_to_close = None
 
         with self._lock:
             self._stopped_manually = True
             if self._stream:
                 stream_to_close = self._stream
                 self._stream = None
-            if self._file:
-                file_to_close = self._file
-                self._file = None
+            if self._buffer:
+                buffer_to_close = self._buffer
+                self._buffer = None
             self._paused = False
+
+            # Clear resampler state to prevent ghost sounds
+            self._resample_buffer = None
+            self._resample_pos = 0.0
+
+            # Reset effects state on stop to ensure no residual audio in buffers
+            if hasattr(self, 'effects'):
+                self.effects.reset_state()
 
         # Perform cleanup outside lock to avoid deadlock with callback
         if stream_to_close:
             try:
-                stream_to_close.stop()
+                # Use abort() instead of stop() to immediately discard buffered audio
+                # This prevents "ghost sounds" from previous track when changing songs
+                stream_to_close.abort()
+                # Delay to ensure hardware buffer is completely flushed
+                time.sleep(0.07)
                 stream_to_close.close()
             except Exception:
                 logger.error("Failed to stop stream", exc_info=True)
 
-        if file_to_close:
+        if buffer_to_close:
             try:
-                file_to_close.close()
+                buffer_to_close.close()
             except Exception:
-                logger.error("Failed to close file", exc_info=True)
+                logger.error("Failed to close buffer", exc_info=True)
 
+        # Reset audio metrics for UI (ensure overall LUFS resets when playback stops)
+        try:
+            if self._audio_metrics_callback:
+                # Use a thread to avoid blocking
+                threading.Thread(
+                    target=lambda: self._audio_metrics_callback(-60.0, -60.0, -60.0, 0.0, 0.0),
+                    daemon=True
+                ).start()
+        except Exception:
+            # Don't let metrics reset failures interrupt stop
+            pass
     def set_volume(self, val):
         """
         Set the playback volume.
@@ -335,9 +772,8 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                if self._file:
-                    # tell() returns frames, convert to ms
-                    return int((self._file.tell() / self._file.samplerate) * 1000)
+                if self._buffer:
+                    return int((self._buffer.absolute_read_pos / self._buffer.samplerate) * 1000)
                 return 0
             except Exception:
                 logger.error("Failed to get playback time", exc_info=True)
@@ -352,8 +788,8 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                if self._file:
-                    return int((len(self._file) / self._file.samplerate) * 1000)
+                if self._buffer:
+                    return int((len(self._buffer.file) / self._buffer.samplerate) * 1000)
                 return 0
             except Exception:
                 logger.error("Failed to get track length", exc_info=True)
@@ -368,13 +804,12 @@ class AudioPlayer:
         """
         with self._lock:
             try:
-                if self._file:
+                if self._buffer:
                     # Convert ms to frames
-                    frame_pos = int((time_ms / 1000.0) * self._file.samplerate)
-                    self._file.seek(frame_pos)
+                    frame_pos = int((time_ms / 1000.0) * self._buffer.samplerate)
+                    self._buffer.seek(frame_pos)
                     # Reset filter state on seek to prevent artifacts
-                    if self._eq_zi is not None:
-                        self._eq_zi.fill(0)
+                    self.effects.reset_state()
             except Exception:
                 logger.error(f"Failed to set time to {time_ms}", exc_info=True)
 
@@ -449,10 +884,10 @@ class AudioPlayer:
                 logger.info(f"Audio device set to: {device_id}")
 
                 # If currently playing or paused, restart stream to apply new device
-                if self._stream and self._file:
+                if self._stream and self._buffer:
                     restart_needed = True
-                    restart_path = self._file.name
-                    restart_pos = int((self._file.tell() / self._file.samplerate) * 1000)
+                    restart_path = self._buffer.file.name
+                    restart_pos = int((self._buffer.absolute_read_pos / self._buffer.samplerate) * 1000)
                     restart_paused = self._paused
             except Exception as e:
                 logger.error(f"Failed to set audio device to {device_id}: {e}")
@@ -464,104 +899,26 @@ class AudioPlayer:
             if restart_paused:
                 self.pause()
 
-    def _design_peaking_filter(self, f0, gain_db, Q, fs):
-        """Design coefficients for a peaking EQ filter."""
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * f0 / fs
-        alpha = np.sin(w0) / (2 * Q)
-
-        b0 = 1 + alpha * A
-        b1 = -2 * np.cos(w0)
-        b2 = 1 - alpha * A
-        a0 = 1 + alpha / A
-        a1 = -2 * np.cos(w0)
-        a2 = 1 - alpha / A
-
-        return np.array([b0, b1, b2, a0, a1, a2]) / a0
-
-    def _design_low_shelf(self, f0, gain_db, Q, fs):
-        """Design coefficients for a low shelf filter."""
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * f0 / fs
-        alpha = np.sin(w0) / (2 * Q)
-
-        b0 = A * ((A + 1) - (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha)
-        b1 = 2 * A * ((A - 1) - (A + 1) * np.cos(w0))
-        b2 = A * ((A + 1) - (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha)
-        a0 = (A + 1) + (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha
-        a1 = -2 * ((A - 1) + (A + 1) * np.cos(w0))
-        a2 = (A + 1) + (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha
-
-        return np.array([b0, b1, b2, a0, a1, a2]) / a0
-
-    def _design_high_shelf(self, f0, gain_db, Q, fs):
-        """Design coefficients for a high shelf filter."""
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * f0 / fs
-        alpha = np.sin(w0) / (2 * Q)
-
-        b0 = A * ((A + 1) + (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha)
-        b1 = -2 * A * ((A - 1) + (A + 1) * np.cos(w0))
-        b2 = A * ((A + 1) + (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha)
-        a0 = (A + 1) - (A - 1) * np.cos(w0) + 2 * np.sqrt(A) * alpha
-        a1 = 2 * ((A - 1) - (A + 1) * np.cos(w0))
-        a2 = (A + 1) - (A - 1) * np.cos(w0) - 2 * np.sqrt(A) * alpha
-
-        return np.array([b0, b1, b2, a0, a1, a2]) / a0
-
-    def _update_equalizer(self):
-        """Recalculate equalizer filter coefficients."""
-        with self._lock:
-            if not self._file or not self.equalizer_enabled:
-                self._eq_sos = None
-                self._eq_zi = None
-                return
-
-            fs = self._file.samplerate
-            sos_list = []
-            for i, freq in enumerate(self._eq_bands):
-                if i == 0:
-                    # Low Shelf for the first band (60Hz)
-                    sos = self._design_low_shelf(freq, self._eq_gains[i], 0.707, fs)
-                elif i == len(self._eq_bands) - 1:
-                    # High Shelf for the last band (16kHz)
-                    sos = self._design_high_shelf(freq, self._eq_gains[i], 0.707, fs)
-                else:
-                    # Peaking filter for middle bands
-                    sos = self._design_peaking_filter(freq, self._eq_gains[i], 1.414, fs)
-                sos_list.append(sos)
-
-            self._eq_sos = np.vstack(sos_list)
-
-            # Initialize state if needed
-            if self._eq_zi is None or self._eq_zi.shape != (len(self._eq_bands), self._file.channels, 2):
-                self._eq_zi = np.zeros((len(self._eq_bands), self._file.channels, 2))
-
     def set_equalizer_enabled(self, enabled):
         """Enable or disable the equalizer."""
-        self.equalizer_enabled = enabled
-        self._update_equalizer()
+        self.effects.set_equalizer_enabled(enabled)
 
     def get_equalizer_enabled(self):
-        return self.equalizer_enabled
+        return self.effects.get_equalizer_enabled()
 
     def set_equalizer_preamp(self, preamp):
         """Set preamp level in dB (-20 to 20)."""
-        self._eq_preamp = max(-20.0, min(20.0, float(preamp)))
+        self.effects.set_equalizer_preamp(preamp)
 
     def get_equalizer_preamp(self):
-        return self._eq_preamp
+        return self.effects.get_equalizer_preamp()
 
     def set_equalizer_band(self, band_index, value):
         """Set gain for a specific band in dB (-20 to 20)."""
-        if 0 <= band_index < len(self._eq_bands):
-            self._eq_gains[band_index] = max(-20.0, min(20.0, float(value)))
-            self._update_equalizer()
+        self.effects.set_equalizer_band(band_index, value)
 
     def get_equalizer_band(self, band_index):
-        if 0 <= band_index < len(self._eq_bands):
-            return self._eq_gains[band_index]
-        return 0.0
+        return self.effects.get_equalizer_band(band_index)
 
     def set_playback_rate(self, rate):
         """
@@ -575,82 +932,6 @@ class AudioPlayer:
     def get_playback_rate(self):
         """Get current playback rate."""
         return self._playback_rate
-
-    def _apply_compressor(self, data):
-        """Apply dynamic range compression to audio data."""
-        # Convert parameters
-        threshold_linear = 10 ** (self._compressor_threshold / 20.0)
-        attack_coef = np.exp(-1.0 / (self._compressor_attack * self._file.samplerate / 1000.0))
-        release_coef = np.exp(-1.0 / (self._compressor_release * self._file.samplerate / 1000.0))
-        makeup_linear = 10 ** (self._compressor_makeup / 20.0)
-        knee_db = self._compressor_knee
-
-        # Process each sample
-        compressed = np.zeros_like(data)
-
-        # Pre-calculate RMS alpha if needed (approximate window average)
-        # alpha = 1 - exp(-1 / (window_samples))
-        # Using buffer size as window samples
-        rms_window = len(self._compressor_rms_buffer)
-        rms_alpha = 1.0 - np.exp(-1.0 / rms_window)
-
-        for i in range(len(data)):
-            # Get input level based on detection mode
-            if self._compressor_use_rms:
-                # RMS detection using Exponential Moving Average (EMA)
-                # This is much faster than re-calculating mean of buffer every sample
-                sample_power = np.mean(data[i] ** 2)
-                # Use the first element of buffer to store state (hacky but avoids new variable)
-                # Ideally we should add self._compressor_rms_state
-                current_ms = self._compressor_rms_buffer[0]
-                new_ms = rms_alpha * sample_power + (1 - rms_alpha) * current_ms
-                self._compressor_rms_buffer[0] = new_ms
-                input_level = np.sqrt(new_ms)
-            else:
-                # Peak detection - instantaneous absolute value
-                input_level = np.max(np.abs(data[i]))
-
-            # Envelope follower
-            if input_level > self._compressor_envelope:
-                self._compressor_envelope = attack_coef * self._compressor_envelope + (1 - attack_coef) * input_level
-            else:
-                self._compressor_envelope = release_coef * self._compressor_envelope + (1 - release_coef) * input_level
-
-            # Calculate gain reduction with knee
-            envelope_db = 20 * np.log10(self._compressor_envelope + 1e-10)
-            threshold_db = self._compressor_threshold
-
-            if knee_db > 0:
-                # Soft knee
-                knee_lower = threshold_db - knee_db / 2
-                knee_upper = threshold_db + knee_db / 2
-
-                if envelope_db < knee_lower:
-                    # Below knee - no compression
-                    gain_reduction_db = 0.0
-                elif envelope_db > knee_upper:
-                    # Above knee - full compression
-                    over_db = envelope_db - threshold_db
-                    gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
-                else:
-                    # In knee - smooth transition
-                    over_db = envelope_db - knee_lower
-                    knee_ratio = over_db / knee_db
-                    gain_reduction_db = knee_ratio * knee_ratio * knee_db * (1.0 - 1.0 / self._compressor_ratio) / 2
-            else:
-                # Hard knee
-                if envelope_db > threshold_db:
-                    over_db = envelope_db - threshold_db
-                    gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
-                else:
-                    gain_reduction_db = 0.0
-
-            gain_reduction_linear = 10 ** (-gain_reduction_db / 20.0)
-
-            # Apply gain reduction and makeup gain
-            compressed[i] = data[i] * gain_reduction_linear * makeup_linear
-
-        return compressed
 
     def set_compressor(self, enabled, threshold=-20.0, ratio=3.0, attack=5.0, release=100.0, makeup_gain=0.0, knee=0.0, use_rms=True):
         """
@@ -667,87 +948,46 @@ class AudioPlayer:
             use_rms: Use RMS detection (True) or Peak detection (False)
         """
         with self._lock:
-            self._compressor_enabled = enabled
-            self._compressor_threshold = max(-60.0, min(0.0, float(threshold)))
-            self._compressor_ratio = max(1.0, min(20.0, float(ratio)))
-            self._compressor_attack = max(0.1, min(500.0, float(attack)))
-            self._compressor_release = max(1.0, min(1000.0, float(release)))
-            self._compressor_makeup = max(-20.0, min(30.0, float(makeup_gain)))
-            self._compressor_knee = max(0.0, min(10.0, float(knee)))
-            self._compressor_use_rms = bool(use_rms)
-
-            if enabled:
-                mode = "RMS" if use_rms else "Peak"
-                logger.info(f"Compressor enabled: threshold={threshold}dB, ratio={ratio}:1, attack={attack}ms, release={release}ms, makeup={makeup_gain}dB, knee={knee}dB, mode={mode}")
-            else:
-                logger.info("Compressor disabled")
+            self.effects.set_compressor(enabled, threshold, ratio, attack, release, makeup_gain, knee, use_rms)
 
     def get_compressor_enabled(self):
         """Get compressor enabled state."""
         with self._lock:
-            return self._compressor_enabled
+            return self.effects.get_compressor_enabled()
 
     def set_spatializer(self, enabled, size=0.85, width=0.5, wet=0.4, dry=0.5, damp=0.5):
         """Configure spatializer."""
         with self._lock:
-            self._spatializer_enabled = enabled
-            self._spat_size = max(0.0, min(1.1, float(size)))
-            self._spat_width = max(0.0, min(1.0, float(width)))
-            self._spat_wet = max(0.0, min(1.0, float(wet)))
-            self._spat_dry = max(0.0, min(1.0, float(dry)))
-            self._spat_damp = max(0.0, min(1.0, float(damp)))
-
-            if enabled:
-                logger.info(f"Spatializer enabled: size={size}, width={width}, wet={wet}, dry={dry}, damp={damp}")
-            else:
-                logger.info("Spatializer disabled")
+            self.effects.set_spatializer(enabled, size, width, wet, dry, damp)
 
     def get_spatializer_enabled(self):
-        return self._spatializer_enabled
+        return self.effects.get_spatializer_enabled()
 
-    def _apply_spatializer(self, data):
-        """Apply spatializer effect (Width + Simple Cross-Delay)."""
-        if not self._spat_initialized:
-            # Init simple buffers
-            # 100ms max delay
-            size = int(0.1 * self._file.samplerate)
-            self._spat_buffer = np.zeros((size, 2))
-            self._spat_write_pos = 0
-            self._spat_initialized = True
+    def set_channel_mode(self, mode):
+        """
+        Set the channel processing mode.
 
-        # 1. Width
-        width_factor = self._spat_width * 2.0
-        mid = (data[:, 0] + data[:, 1]) * 0.5
-        side = (data[:, 0] - data[:, 1]) * 0.5
-        side *= width_factor
+        Args:
+            mode: One of 'Stereo', 'Mono', 'Left Channel', 'Right Channel', 'Side (Diff)'.
+        """
+        with self._lock:
+            self.effects.set_channel_mode(mode)
 
-        dry_signal = np.column_stack((mid + side, mid - side))
+    def get_channel_mode(self):
+        return self.effects.get_channel_mode()
 
-        # 2. Simple Reverb/Ambience (Cross-Delay)
-        # Delay time based on 'size' (0-100ms)
-        delay_samples = int(self._spat_size * 0.1 * self._file.samplerate)
-        if delay_samples == 0: delay_samples = 1
+    def set_vocal_remover_enabled(self, enabled):
+        """Enable or disable the vocal remover."""
+        with self._lock:
+            self.effects.set_vocal_remover_enabled(enabled)
 
-        # Read from buffer (circular)
-        num_frames = len(data)
-        buffer_len = len(self._spat_buffer)
+    def get_vocal_remover_enabled(self):
+        return self.effects.get_vocal_remover_enabled()
 
-        # Create indices
-        read_indices = (np.arange(num_frames) + self._spat_write_pos - delay_samples) % buffer_len
-        write_indices = (np.arange(num_frames) + self._spat_write_pos) % buffer_len
+    def set_vocal_remover_intensity(self, intensity):
+        """Set the intensity of the vocal remover (0.0 to 1.0)."""
+        with self._lock:
+            self.effects.set_vocal_remover_intensity(intensity)
 
-        # Read delayed signal
-        delayed = self._spat_buffer[read_indices]
-
-        # Cross-feed: L gets delayed R, R gets delayed L
-        reverb_signal = np.column_stack((delayed[:, 1], delayed[:, 0]))
-
-        # Write current input to buffer (with some feedback for tail)
-        # Use damp as feedback control
-        feedback = self._spat_damp * 0.6
-        self._spat_buffer[write_indices] = data + reverb_signal * feedback
-
-        self._spat_write_pos = (self._spat_write_pos + num_frames) % buffer_len
-
-        # Mix
-        return dry_signal * self._spat_dry + reverb_signal * self._spat_wet
+    def get_vocal_remover_intensity(self):
+        return self.effects.get_vocal_remover_intensity()

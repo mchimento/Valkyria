@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import customtkinter as ctk
 import os
 
 from audio.metadata import get_display_title
@@ -23,9 +24,46 @@ class BrowserView(ttk.Frame):
         )
         self.header_label.pack(fill="x", padx=10, pady=(5, 15))
 
-        # Main container
-        tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill="both", expand=True, padx=(10, 0), pady=(0, 10))
+        # Content container (holds buttons and tree)
+        content_frame = ttk.Frame(self)
+        content_frame.pack(fill="both", expand=True, padx=(10, 0), pady=(0, 10))
+
+        # Buttons frame (Left side)
+        self.button_frame = ttk.Frame(content_frame)
+        self.button_frame.pack(side="left", fill="y", padx=(0, 10))
+
+        # Create a container to center buttons vertically
+        button_container = ttk.Frame(self.button_frame)
+        button_container.pack(expand=True, fill="both")
+
+        # Create another frame to center buttons horizontally within the container
+        center_frame = ttk.Frame(button_container)
+        center_frame.pack(expand=True)
+
+        # Get button colors from theme palette
+        btn_bg = self.theme.palette.get("button_bg_color", self.theme.palette.get("accent", "#0078d4"))
+        btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
+
+        self.btn_folder = ctk.CTkButton(center_frame, text="📂 Folder", command=self.browse_folder, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_folder.pack(pady=6)
+
+        self.btn_file = ctk.CTkButton(center_frame, text="🎵 File", command=self.browse_files, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_file.pack(pady=6)
+
+        self.btn_add = ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_add.pack(pady=8)
+
+        self.btn_add_below = ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
+                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_add_below.pack(pady=8)
+
+        # Tree frame (Right side)
+        tree_frame = ttk.Frame(content_frame)
+        tree_frame.pack(side="left", fill="both", expand=True)
 
         # Custom scrollbar (styled to be modern)
         self.scrollbar_canvas = tk.Canvas(
@@ -135,6 +173,18 @@ class BrowserView(ttk.Frame):
             fg=self.theme.palette.get("fg", "#FFFFFF"),
             bg=self.theme.palette.get("bg", "#121212")
         )
+
+        # Update buttons
+        btn_bg = self.theme.palette.get("button_bg_color", self.theme.palette.get("accent", "#0078d4"))
+        btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
+        btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
+        frame_bg = self.theme.palette.get("bg", "#121212")
+
+        for btn in [self.btn_folder, self.btn_file, self.btn_add, self.btn_add_below]:
+            try:
+                btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+            except Exception:
+                pass
 
         # Update hover tag color last to ensure it takes precedence
         hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
