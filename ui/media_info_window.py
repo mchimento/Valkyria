@@ -340,7 +340,142 @@ class MediaInfoWindow:
             return
         try:
             if self.window.winfo_exists():
-                self.window.after(50, self._refresh_bpm)
+                self.window.after(50, self._refresh_general_tab)
+        except Exception:
+            pass
+
+    def _refresh_general_tab(self):
+        """Refresh the general tab with updated file information including Camelot notation."""
+        try:
+            self.file_info = self._get_file_info()
+            if self.general_text:
+                try:
+                    self.general_text.configure(state=tk.NORMAL)
+                    self.general_text.delete('1.0', tk.END)
+
+                    info = self.file_info
+                    accent = self.theme_manager.palette.get('accent', '#0078d4') if self.theme_manager else '#0078d4'
+                    fg = self.theme_manager.palette.get('fg', '#000000') if self.theme_manager else '#000000'
+                    highlight = self.theme_manager.palette.get('highlight', '#EB5B00') if self.theme_manager else '#EB5B00'
+
+                    self.general_text.insert(tk.END, "File Information\n\n", "header")
+                    self.general_text.insert(tk.END, "Filename\n", "label")
+                    self.general_text.insert(tk.END, f"{info['filename']}\n\n", "value")
+                    self.general_text.insert(tk.END, "Path\n", "label")
+                    self.general_text.insert(tk.END, f"{info['path']}\n\n", "value")
+
+                    # Size
+                    size_mb = info['size'] / (1024 * 1024)
+                    size_kb = info['size'] / 1024
+                    self.general_text.insert(tk.END, "Size\n", "label")
+                    if size_mb >= 1:
+                        self.general_text.insert(tk.END, f"{size_mb:.2f} MB", "value_highlight")
+                        self.general_text.insert(tk.END, f" ({info['size']:,} bytes)\n\n", "value")
+                    else:
+                        self.general_text.insert(tk.END, f"{size_kb:.2f} KB", "value_highlight")
+                        self.general_text.insert(tk.END, f" ({info['size']:,} bytes)\n\n", "value")
+
+                    # Duration
+                    if info['duration'] > 0:
+                        minutes = info['duration'] // 60
+                        seconds = info['duration'] % 60
+                        self.general_text.insert(tk.END, "Duration\n", "label")
+                        self.general_text.insert(tk.END, f"{minutes}:{seconds:02d}", "value_highlight")
+                        self.general_text.insert(tk.END, f" ({info['duration']} seconds)\n\n", "value")
+
+                    bpm_val = None
+                    try:
+                        bpm_val = info.get('metadata', {}).get('bpm')
+                    except Exception:
+                        bpm_val = None
+
+                    # Only show BPM if it's a valid number
+                    if bpm_val is not None and bpm_val != "":
+                        self.general_text.insert(tk.END, "BPM\n", "label")
+                        try:
+                            raw_bpm = int(round(float(bpm_val)))
+                            self.general_text.insert(tk.END, f"{raw_bpm}\n\n", "value_highlight")
+                        except (ValueError, TypeError):
+                            self.general_text.insert(tk.END, "\n\n", "value_highlight")
+
+                    # Key with Camelot notation
+                    key_val = None
+                    try:
+                        key_val = info.get('metadata', {}).get('key')
+                    except Exception:
+                        key_val = None
+
+                    if key_val is not None and key_val != "":
+                         self.general_text.insert(tk.END, "Key\n", "label")
+                         self.general_text.insert(tk.END, f"{key_val}\n", "value_highlight")
+
+                         # Camelot notation if available; compute from raw key if missing
+                         camelot_val = info.get('metadata', {}).get('camelot')
+                         try:
+                             if not camelot_val and key_val:
+                                 # Compute on-the-fly for display if needed
+                                 camelot_val = key_to_camelot(key_val)
+
+                             if camelot_val:
+                                 self.general_text.insert(tk.END, f"{camelot_val} (Camelot)\n\n", "value_highlight")
+                             else:
+                                 self.general_text.insert(tk.END, "\n", "value_highlight")
+                         except Exception:
+                             self.general_text.insert(tk.END, "\n\n", "value_highlight")
+
+                    self.general_text.insert(tk.END, "Format\n", "label")
+                    self.general_text.insert(tk.END, f"{info['format']}\n", "value_highlight")
+
+                    self.general_text.tag_configure("header", font=("Segoe UI", 16, "bold"), foreground=accent)
+                    self.general_text.tag_configure("label", font=("Segoe UI", 9), foreground=fg)
+                    self.general_text.tag_configure("value", font=("Segoe UI", 11))
+                    self.general_text.tag_configure("value_highlight", font=("Segoe UI", 11, "bold"), foreground=highlight)
+
+                    self.general_text.configure(state=tk.DISABLED)
+                except Exception:
+                    pass
+
+            # Also update metadata tab entries if they exist
+            try:
+                if hasattr(self, 'entries') and 'key' in self.entries:
+                    val = self.file_info.get('metadata', {}).get('key')
+                    entry = self.entries.get('key')
+                    if entry is not None:
+                        entry.delete(0, tk.END)
+                        if val is not None and val != "":
+                            # If raw key exists, compute Camelot and show only the Camelot code in the entry
+                            try:
+                                camelot_val = key_to_camelot(str(val))
+                            except Exception:
+                                camelot_val = None
+
+                            if camelot_val:
+                                # Display camelot (e.g., '8A') but remember raw key for saving
+                                entry.insert(0, f"{camelot_val}")
+                                try:
+                                    entry.raw_value = str(val)
+                                except Exception:
+                                    pass
+                            else:
+                                # No Camelot mapping: show raw key and record as raw
+                                entry.insert(0, str(val))
+                                try:
+                                    entry.raw_value = str(val)
+                                except Exception:
+                                    pass
+                        else:
+                            entry.insert(0, "")
+                            try:
+                                entry.raw_value = None
+                            except Exception:
+                                pass
+                            try:
+                                if getattr(self, 'key_camelot_label', None) is not None:
+                                    self.key_camelot_label.configure(text="")
+                            except Exception:
+                                pass
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -664,6 +799,18 @@ class MediaInfoWindow:
                 except (ValueError, TypeError):
                     entry.insert(0, "")
                     entry.raw_value = str(val)
+            elif key == 'key' and val:
+                try:
+                    camelot_val = key_to_camelot(str(val))
+                except Exception:
+                    camelot_val = None
+
+                if camelot_val:
+                    entry.insert(0, f"{camelot_val}")
+                    entry.raw_value = str(val)
+                else:
+                    entry.insert(0, str(val))
+                    entry.raw_value = str(val)
             else:
                 if val is None or val == "":
                     entry.insert(0, "")
@@ -671,6 +818,8 @@ class MediaInfoWindow:
                     entry.insert(0, str(val))
                 if key == 'bpm':
                     entry.raw_value = None
+                elif key == 'key':
+                    entry.raw_value = str(val) if val else None
 
             self.entries[key] = entry
 
@@ -679,7 +828,6 @@ class MediaInfoWindow:
         if 'key' in self.entries:
             self.entries['key'].bind('<KeyRelease>', lambda e: self._on_key_entry_edit())
 
-        # Save Button with modern styling
         if self.theme_manager:
             palette = self.theme_manager.palette
             btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
@@ -706,7 +854,6 @@ class MediaInfoWindow:
         )
         save_btn.grid(row=len(tags), column=1, sticky="e", pady=20)
 
-        # Store reference for theme updates
         self.save_btn = save_btn
 
     def _save_metadata(self):

@@ -287,7 +287,7 @@ class DJFrameView(ctk.CTkFrame):
             text_color_disabled=btn_fg,
             hover_color=btn_hover,
         )
-        self.save_btn.pack_forget()
+        self.save_btn.place_forget()
         # Button starts hidden - only shown after BPM estimation
 
         self.save_key_btn = ctk.CTkButton(
@@ -302,7 +302,7 @@ class DJFrameView(ctk.CTkFrame):
             text_color_disabled=btn_fg,
             hover_color=btn_hover,
         )
-        self.save_key_btn.pack_forget()
+        self.save_key_btn.place_forget()
 
     def _draw_limiter_meter(self, border_color, bg_color):
         """Draw the horizontal limiter activity meter"""
@@ -430,14 +430,14 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set(display_bpm)
             self._estimating_file = None
             self.current_temp_bpm = None
-            self.save_btn.pack_forget()
+            self.save_btn.place_forget()
         else:
             # Only estimate BPM if visible to save CPU
             if not self.is_visible():
                 self.bpm_var.set("--")
                 self._estimating_file = None
                 self.current_temp_bpm = None
-                self.save_btn.pack_forget()
+                self.save_btn.place_forget()
             elif self._estimating_file == filepath:
                 return
             elif filepath in getattr(self, 'temporary_bpm_values', {}):
@@ -447,7 +447,7 @@ class DJFrameView(ctk.CTkFrame):
                     self.current_temp_bpm = bpm_val
                     self.bpm_var.set(get_display_bpm(bpm_val))
                     self.save_btn.configure(text="Save BPM", state="normal")
-                    self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
+                    self.save_btn.place(x=0, y=0)
                 except Exception:
                     pass
                 self._estimating_file = None
@@ -455,7 +455,7 @@ class DJFrameView(ctk.CTkFrame):
                 self.bpm_var.set("Estimating...")
                 self._estimating_file = filepath
                 self.current_temp_bpm = None
-                self.save_btn.pack_forget()
+                self.save_btn.place_forget()
 
                 def estimate_bpm():
                     try:
@@ -486,14 +486,14 @@ class DJFrameView(ctk.CTkFrame):
 
             self._estimating_key_file = None
             self.current_temp_key = None
-            self.save_key_btn.pack_forget()
+            self.save_key_btn.place_forget()
         else:
             # Only estimate Key if visible to save CPU
             if not self.is_visible():
                 self.key_var.set("--")
                 self._estimating_key_file = None
                 self.current_temp_key = None
-                self.save_key_btn.pack_forget()
+                self.save_key_btn.place_forget()
             elif self._estimating_key_file == filepath:
                 return
             elif filepath in getattr(self, 'temporary_key_values', {}):
@@ -513,7 +513,7 @@ class DJFrameView(ctk.CTkFrame):
 
                     self.current_temp_key = key_val
                     self.save_key_btn.configure(text="Save Key", state="normal")
-                    self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                    self.save_key_btn.place(x=75, y=0)
                 except Exception:
                     pass
                 self._estimating_key_file = None
@@ -521,7 +521,7 @@ class DJFrameView(ctk.CTkFrame):
                 self.key_var.set("Estimating...")
                 self._estimating_key_file = filepath
                 self.current_temp_key = None
-                self.save_key_btn.pack_forget()
+                self.save_key_btn.place_forget()
 
                 def estimate_key():
                     try:
@@ -542,10 +542,10 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set(display_bpm)
             self.current_temp_bpm = bpm
             self.save_btn.configure(text="Save BPM", state="normal")
-            self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
+            self.save_btn.place(x=0, y=0)
         else:
             self.bpm_var.set("--")
-            self.save_btn.pack_forget()
+            self.save_btn.place_forget()
 
         # Clear estimating marker now that estimation finished (success or failure)
         self._estimating_file = None
@@ -577,19 +577,19 @@ class DJFrameView(ctk.CTkFrame):
 
                     self.current_temp_key = key
                     self.save_key_btn.configure(text="Save Key", state="normal")
-                    self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                    self.save_key_btn.place(x=75, y=0)
                 else:
                     # Keep the cached value for when the track becomes active
                     try:
                         self.save_key_btn.configure(text="Save Key", state="normal")
-                        self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                        self.save_key_btn.place(x=75, y=0)
                     except Exception:
                         pass
             except Exception:
                 pass
         else:
             self.key_var.set("--")
-            self.save_key_btn.pack_forget()
+            self.save_key_btn.place_forget()
 
         self._estimating_key_file = None
 
@@ -654,8 +654,8 @@ class DJFrameView(ctk.CTkFrame):
         self.energy_level = 0.0
         self.lufs_label.configure(text="-60.0")
         # Hide save button when clearing info
-        self.save_btn.pack_forget()
-        self.save_key_btn.pack_forget()
+        self.save_btn.place_forget()
+        self.save_key_btn.place_forget()
         self._estimating_file = None
         self.current_temp_bpm = None
         self._estimating_key_file = None
@@ -713,12 +713,12 @@ class DJFrameView(ctk.CTkFrame):
                         self.current_temp_bpm = bpm_value
                         self.bpm_var.set(get_display_bpm(bpm_value))
                         self.save_btn.configure(text="Save BPM", state="normal")
-                        self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
+                        self.save_btn.place(x=0, y=0)
                     else:
                         # Keep the cached value for when the track becomes active
                         try:
                             self.save_btn.configure(text="Save BPM", state="normal")
-                            self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
+                            self.save_btn.place(x=0, y=0)
                         except Exception:
                             pass
                 except Exception:
@@ -726,13 +726,13 @@ class DJFrameView(ctk.CTkFrame):
             else:
                 # Keep button hidden if analysis failed
                 try:
-                    self.save_btn.pack_forget()
+                    self.save_btn.place_forget()
                 except Exception:
                     pass
         except Exception as exc:
             logger.error("Error handling BPM analysis completion: %s", exc)
             try:
-                self.save_btn.pack_forget()
+                self.save_btn.place_forget()
             except Exception:
                 pass
 
@@ -750,7 +750,7 @@ class DJFrameView(ctk.CTkFrame):
                 # Keep the estimated BPM cached in memory so the value can be
                 # re-saved later if the on-disk metadata is removed.
                 # Hide button after successful save
-                self.save_btn.pack_forget()
+                self.save_btn.place_forget()
                 # Mark that this file now has a saved BPM on disk
                 self._last_saved_bpm = True
             else:
@@ -780,7 +780,7 @@ class DJFrameView(ctk.CTkFrame):
                 if filepath in getattr(self, 'temporary_bpm_values', {}):
                     try:
                         self.save_btn.configure(state='normal', text='Save BPM')
-                        self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
+                        self.save_btn.place(x=0, y=0)
                     except Exception:
                         pass
                 else:
@@ -789,7 +789,7 @@ class DJFrameView(ctk.CTkFrame):
                         self._estimating_file = filepath
                         self.bpm_var.set("Estimating...")
                         try:
-                            self.save_btn.pack_forget()
+                            self.save_btn.place_forget()
                         except Exception:
                             pass
                         # Start analyzer in background
@@ -798,7 +798,7 @@ class DJFrameView(ctk.CTkFrame):
                         logger.error(f"Failed to re-run BPM estimation: {exc}")
             else:
                 try:
-                    self.save_btn.pack_forget()
+                    self.save_btn.place_forget()
                 except Exception:
                     pass
         except Exception as exc:
@@ -824,7 +824,7 @@ class DJFrameView(ctk.CTkFrame):
                 if filepath in getattr(self, 'temporary_key_values', {}):
                     try:
                         self.save_key_btn.configure(state='normal', text='Save Key')
-                        self.save_key_btn.pack(side=tk.LEFT, padx=(3, 0))
+                        self.save_key_btn.place(x=75, y=0)
                     except Exception:
                         pass
                 else:
@@ -832,7 +832,7 @@ class DJFrameView(ctk.CTkFrame):
                     try:
                         self._estimating_key_file = filepath
                         self.key_var.set("Estimating...")
-                        self.save_key_btn.pack_forget()
+                        self.save_key_btn.place_forget()
 
                         def estimate_key():
                             try:
@@ -845,7 +845,7 @@ class DJFrameView(ctk.CTkFrame):
                         logger.error(f"Failed to re-run Key estimation: {exc}")
             else:
                 # Key present, hide button
-                self.save_key_btn.pack_forget()
+                self.save_key_btn.place_forget()
         except Exception as exc:
             logger.error(f"Error handling Key metadata change for {filepath}: {exc}")
 
@@ -870,7 +870,7 @@ class DJFrameView(ctk.CTkFrame):
             if success:
                 # Remove cached estimate now that value is persisted
                 self.temporary_key_values.pop(filepath, None)
-                self.save_key_btn.pack_forget()
+                self.save_key_btn.place_forget()
             else:
                 self._reset_key_button()
         except Exception as exc:
