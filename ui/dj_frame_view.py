@@ -279,7 +279,7 @@ class DJFrameView(ctk.CTkFrame):
             save_button_row,
             text="Save BPM",
             command=self._on_bpm_button_click,
-            width=90,
+            width=70,
             height=25,
             font=ctk.CTkFont(size=11),
             fg_color=btn_bg,
@@ -294,7 +294,7 @@ class DJFrameView(ctk.CTkFrame):
             save_button_row,
             text="Save Key",
             command=self._on_key_button_click,
-            width=120,
+            width=70,
             height=25,
             font=ctk.CTkFont(size=11),
             fg_color=btn_bg,
@@ -447,7 +447,7 @@ class DJFrameView(ctk.CTkFrame):
                     self.current_temp_bpm = bpm_val
                     self.bpm_var.set(get_display_bpm(bpm_val))
                     self.save_btn.configure(text="Save BPM", state="normal")
-                    self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                    self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
                 except Exception:
                     pass
                 self._estimating_file = None
@@ -542,7 +542,7 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set(display_bpm)
             self.current_temp_bpm = bpm
             self.save_btn.configure(text="Save BPM", state="normal")
-            self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+            self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
         else:
             self.bpm_var.set("--")
             self.save_btn.pack_forget()
@@ -713,12 +713,12 @@ class DJFrameView(ctk.CTkFrame):
                         self.current_temp_bpm = bpm_value
                         self.bpm_var.set(get_display_bpm(bpm_value))
                         self.save_btn.configure(text="Save BPM", state="normal")
-                        self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                        self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
                     else:
                         # Keep the cached value for when the track becomes active
                         try:
                             self.save_btn.configure(text="Save BPM", state="normal")
-                            self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                            self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
                         except Exception:
                             pass
                 except Exception:
@@ -780,7 +780,7 @@ class DJFrameView(ctk.CTkFrame):
                 if filepath in getattr(self, 'temporary_bpm_values', {}):
                     try:
                         self.save_btn.configure(state='normal', text='Save BPM')
-                        self.save_btn.pack(side=tk.LEFT, padx=(0, 3))
+                        self.save_btn.pack(side=tk.LEFT, padx=(3, 3))
                     except Exception:
                         pass
                 else:
