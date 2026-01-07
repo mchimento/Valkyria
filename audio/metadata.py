@@ -74,15 +74,12 @@ class MetadataExtractor:
                     metadata["album"] = "Unknown Album"
 
                     if hasattr(audio, 'tags') and audio.tags:
-                        try:
-                            if 'TIT2' in audio.tags:
-                                metadata["title"] = str(audio.tags['TIT2'])
-                            if 'TPE1' in audio.tags:
-                                metadata["artist"] = str(audio.tags['TPE1'])
-                            if 'TALB' in audio.tags:
-                                metadata["album"] = str(audio.tags['TALB'])
-                        except Exception:
-                            pass
+                        if 'TIT2' in audio.tags:
+                            metadata["title"] = str(audio.tags['TIT2'])
+                        if 'TPE1' in audio.tags:
+                            metadata["artist"] = str(audio.tags['TPE1'])
+                        if 'TALB' in audio.tags:
+                            metadata["album"] = str(audio.tags['TALB'])
 
                 # Format duration
                 duration = audio.info.length if hasattr(audio.info, 'length') else 0
@@ -376,18 +373,12 @@ class MetadataExtractor:
 
             # Special handling for Key cleanup: ensure INITIAL_KEY is also removed for FLAC/Vorbis
             if 'key' in metadata_dict and not str(metadata_dict['key']).strip():
-                try:
-                    # Access underlying tags if available
-                    if hasattr(audio, 'tags') and audio.tags:
-                        # For Ogg/FLAC, keys are case-sensitive but usually uppercase
-                        for variant in ['INITIAL_KEY', 'initial_key']:
-                            if variant in audio.tags:
-                                del audio.tags[variant]
-                except Exception:
-                    pass
-
-            audio.save()
-
+                # Access underlying tags if available
+                if hasattr(audio, 'tags') and audio.tags:
+                    # For Ogg/FLAC, keys are case-sensitive but usually uppercase
+                    for variant in ['INITIAL_KEY', 'initial_key']:
+                        if variant in audio.tags:
+                            del audio.tags[variant]
             audio.save()
             # Clear cache for this file to force refresh
             if file_path in self._cache:
@@ -566,36 +557,32 @@ class MetadataExtractor:
 
             # Handle MP4/M4A files
             elif isinstance(audio, MP4):
-                try:
-                    if audio.tags and 'covr' in audio.tags:
-                        cover_list = audio.tags['covr']
-                        # MP4Cover objects need to be converted to bytes
-                        for i, cover in enumerate(cover_list):
+                if audio.tags and 'covr' in audio.tags:
+                    cover_list = audio.tags['covr']
+                    # MP4Cover objects need to be converted to bytes
+                    for i, cover in enumerate(cover_list):
+                        try:
+                            # Convert MP4Cover to bytes if needed
+                            if isinstance(cover, MP4Cover):
+                                image_data = bytes(cover)
+                            else:
+                                image_data = cover
+
+                            # Skip empty images
+                            if not image_data or len(image_data) == 0:
+                                continue
+
+                            # Verify the image is valid
                             try:
-                                # Convert MP4Cover to bytes if needed
-                                if isinstance(cover, MP4Cover):
-                                    image_data = bytes(cover)
-                                else:
-                                    image_data = cover
-
-                                # Skip empty images
-                                if not image_data or len(image_data) == 0:
-                                    continue
-
-                                # Verify the image is valid
-                                try:
-                                    img = Image.open(io.BytesIO(image_data))
-                                    img.verify()
-                                except Exception:
-                                    continue
-
-                                # Include all covers
-                                booklet_images.append((image_data, f"Cover Art {i+1}", "MP4 Cover"))
+                                img = Image.open(io.BytesIO(image_data))
+                                img.verify()
                             except Exception:
                                 continue
-                except Exception:
-                    pass
 
+                            # Include all covers
+                            booklet_images.append((image_data, f"Cover Art {i+1}", "MP4 Cover"))
+                        except Exception:
+                            continue
         except Exception:
             pass
 
@@ -646,7 +633,6 @@ class MetadataExtractor:
                                         pass
                             except Exception:
                                 continue
-
             except Exception:
                 pass
 
@@ -721,7 +707,6 @@ def get_display_bpm(bpm):
     """
     if bpm is None:
         return ""
-
     try:
         bpm_float = float(bpm)
     except (ValueError, TypeError):
@@ -1080,12 +1065,10 @@ def analyze_key(filepath, duration=60):
                         os.unlink(tmpname)
                     except Exception:
                         pass
-
             # Last resort
             return librosa.load(filepath, sr=22050, mono=True, offset=offset, duration=duration)
 
         y, sr = load_audio()
-
         if y is None or len(y) == 0:
             return None
 
@@ -1210,23 +1193,19 @@ def write_bpm(filepath, bpm):
             pass
 
         # Generic easy tag fallback
-        try:
-            easy = MutagenFile(filepath, easy=True)
-            if easy is not None:
-                easy['bpm'] = [str(bpm_val)]
-                easy.save()
+        easy = MutagenFile(filepath, easy=True)
+        if easy is not None:
+            easy['bpm'] = [str(bpm_val)]
+            easy.save()
+            try:
                 try:
-                    try:
-                        metadata_extractor.update_cache(filepath)
-                    except Exception:
-                        pass
-                    metadata_extractor._notify_bpm_listeners(filepath)
+                    metadata_extractor.update_cache(filepath)
                 except Exception:
                     pass
-                return True
-        except Exception:
-            pass
-
+                metadata_extractor._notify_bpm_listeners(filepath)
+            except Exception:
+                pass
+            return True
     except Exception:
         pass
     return False
@@ -1260,13 +1239,10 @@ def write_key(filepath, key):
                 id3.add(TKEY(encoding=3, text=str(key_val)))
                 id3.save(filepath)
                 try:
-                    try:
-                        metadata_extractor.update_cache(filepath)
-                    except Exception:
-                        pass
-                    metadata_extractor._notify_key_listeners(filepath)
+                    metadata_extractor.update_cache(filepath)
                 except Exception:
                     pass
+                metadata_extractor._notify_key_listeners(filepath)
                 return True
         except Exception:
             pass
@@ -1283,10 +1259,7 @@ def write_key(filepath, key):
                 mp4.tags = tags
                 mp4.save()
                 try:
-                    try:
-                        metadata_extractor.update_cache(filepath)
-                    except Exception:
-                        pass
+                    metadata_extractor.update_cache(filepath)
                     metadata_extractor._notify_key_listeners(filepath)
                 except Exception:
                     pass
@@ -1302,10 +1275,7 @@ def write_key(filepath, key):
                 fl['INITIAL_KEY'] = str(key_val)
                 fl.save()
                 try:
-                    try:
-                        metadata_extractor.update_cache(filepath)
-                    except Exception:
-                        pass
+                    metadata_extractor.update_cache(filepath)
                     metadata_extractor._notify_key_listeners(filepath)
                 except Exception:
                     pass
@@ -1327,10 +1297,7 @@ def write_key(filepath, key):
                         pass
                 easy.save()
                 try:
-                    try:
-                        metadata_extractor.update_cache(filepath)
-                    except Exception:
-                        pass
+                    metadata_extractor.update_cache(filepath)
                     metadata_extractor._notify_key_listeners(filepath)
                 except Exception:
                     pass

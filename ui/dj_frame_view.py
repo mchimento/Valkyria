@@ -486,10 +486,7 @@ class DJFrameView(ctk.CTkFrame):
 
             self._estimating_key_file = None
             self.current_temp_key = None
-            try:
-                self.save_key_btn.pack_forget()
-            except Exception:
-                pass
+            self.save_key_btn.pack_forget()
         else:
             # Only estimate Key if visible to save CPU
             if not self.is_visible():
@@ -835,10 +832,7 @@ class DJFrameView(ctk.CTkFrame):
                     try:
                         self._estimating_key_file = filepath
                         self.key_var.set("Estimating...")
-                        try:
-                            self.save_key_btn.pack_forget()
-                        except Exception:
-                            pass
+                        self.save_key_btn.pack_forget()
 
                         def estimate_key():
                             try:
@@ -851,10 +845,7 @@ class DJFrameView(ctk.CTkFrame):
                         logger.error(f"Failed to re-run Key estimation: {exc}")
             else:
                 # Key present, hide button
-                try:
-                    self.save_key_btn.pack_forget()
-                except Exception:
-                    pass
+                self.save_key_btn.pack_forget()
         except Exception as exc:
             logger.error(f"Error handling Key metadata change for {filepath}: {exc}")
 

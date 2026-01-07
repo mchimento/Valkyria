@@ -130,20 +130,14 @@ class AnalysisManager:
                                 def _notify():
                                     try:
                                         if metadata_extractor:
-                                            try:
-                                                metadata_extractor.update_cache(filepath)
-                                            except Exception:
-                                                pass
-                                            try:
-                                                if task_type == 'save_bpm':
-                                                    metadata_extractor._notify_bpm_listeners(filepath)
-                                                else:
-                                                    metadata_extractor._notify_key_listeners(filepath)
-                                            except Exception:
-                                                pass
+                                            metadata_extractor.update_cache(filepath)
+
+                                            if task_type == 'save_bpm':
+                                                metadata_extractor._notify_bpm_listeners(filepath)
+                                            else:
+                                                metadata_extractor._notify_key_listeners(filepath)
                                     except Exception:
                                         pass
-
                                 try:
                                     root_widget.after(0, _notify)
                                 except Exception:
@@ -152,17 +146,11 @@ class AnalysisManager:
                             else:
                                 # No root widget provided - attempt direct update/notify
                                 if metadata_extractor:
-                                    try:
-                                        metadata_extractor.update_cache(filepath)
-                                    except Exception:
-                                        pass
-                                    try:
-                                        if task_type == 'save_bpm':
-                                            metadata_extractor._notify_bpm_listeners(filepath)
-                                        else:
-                                            metadata_extractor._notify_key_listeners(filepath)
-                                    except Exception:
-                                        pass
+                                    metadata_extractor.update_cache(filepath)
+                                    if task_type == 'save_bpm':
+                                        metadata_extractor._notify_bpm_listeners(filepath)
+                                    else:
+                                        metadata_extractor._notify_key_listeners(filepath)
                         except Exception:
                             pass
 

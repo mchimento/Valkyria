@@ -224,14 +224,6 @@ class AudioPlayer:
     def __del__(self):
         """Ensure cleanup when AudioPlayer is destroyed."""
         try:
-            self._cleanup()
-        except Exception:
-            # Ignore errors during destruction
-            pass
-
-    def _cleanup(self):
-        """Comprehensive cleanup of audio resources."""
-        try:
             # Stop any active playback
             if hasattr(self, '_stream') and self._stream:
                 try:
@@ -268,6 +260,7 @@ class AudioPlayer:
 
         except Exception:
             # Ensure cleanup doesn't raise exceptions
+            logger.error("Error cleaning up audio player")
             pass
 
     def _stream_callback(self, outdata, frames, time, status):
@@ -454,10 +447,7 @@ class AudioPlayer:
             try:
                 if self._audio_metrics_callback:
                     # Provide placeholder current metrics (they will be updated by the regular audio metrics path)
-                    try:
-                        self._audio_metrics_callback(-60.0, self._overall_lufs, -60.0, 0.0, 0.0)
-                    except Exception:
-                        pass
+                    self._audio_metrics_callback(-60.0, self._overall_lufs, -60.0, 0.0, 0.0)
             except Exception:
                 pass
         except Exception as e:

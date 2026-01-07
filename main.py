@@ -18,7 +18,7 @@ def signal_handler(signum, frame):
     logger.info(f"Received signal {signum}, shutting down gracefully...")
     if app_instance and hasattr(app_instance, 'player'):
         try:
-            app_instance.player._cleanup()
+            app_instance.player.__del__()
             logger.info("Audio cleanup completed")
         except Exception as e:
             logger.error(f"Error during audio cleanup: {e}")

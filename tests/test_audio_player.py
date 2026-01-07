@@ -90,7 +90,7 @@ class TestAudioPlayer(unittest.TestCase):
             player._buffer = mock_buffer
 
             # Call cleanup
-            player._cleanup()
+            player.__del__()
 
             # Verify stream was stopped and closed
             mock_stream.stop.assert_called_once()
@@ -128,7 +128,7 @@ class TestAudioPlayer(unittest.TestCase):
             player._buffer = mock_buffer
 
             # Call cleanup - should not raise exceptions
-            player._cleanup()
+            player.__del__()
 
             # Verify methods were attempted despite exceptions
             mock_stream.stop.assert_called_once()
