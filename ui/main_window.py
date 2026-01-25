@@ -1327,9 +1327,10 @@ class MainWindow:
         self.root.bind_all("<F11>", lambda e: self._toggle_dj_visibility())
 
         # Tools menu accelerators
-        self.root.bind("<Control-p>", lambda e: self.open_preferences())
-        self.root.bind("<F7>", lambda e: self.open_audio_effects())
-        self.root.bind("<F8>", lambda e: self.open_playback_features())
+        self.root.bind_all("<Control-p>", lambda e: self.open_preferences())
+        # Use bind_all for function keys so accelerators work regardless of focus
+        self.root.bind_all("<F7>", lambda e: self.open_audio_effects())
+        self.root.bind_all("<F8>", lambda e: self.open_playback_features())
 
         # Help menu accelerators
         self.root.bind("<F1>", lambda e: self.open_about())

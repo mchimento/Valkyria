@@ -43,7 +43,9 @@ class PlaybackFeaturesView(tk.Toplevel):
             self.settings.crossfade_duration = crossfade_duration_default
 
         self.title("Playback Features")
-        self.geometry("350x350")
+        # Increase default geometry to fit controls and allow vertical resizing
+        self.geometry("420x540")
+        # Allow vertical resizing so users can expand if content doesn't fit
         self.resizable(False, False)
         self.transient(master)
 
@@ -54,32 +56,45 @@ class PlaybackFeaturesView(tk.Toplevel):
 
         self.configure(bg=self.palette.get("bg", "#ffffff"))
 
-        # Main container
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        # Main container: use CTkFrame for consistent theming and padding
+        self.main_frame = ctk.CTkFrame(self, fg_color=self.palette.get("bg", "#ffffff"))
+        self.main_frame.pack(fill='both', expand=True, padx=18, pady=18)
+        self.main_frame.pack_propagate(False)
 
-        # Play on double click switch with status label
-        switch_frame = ttk.Frame(main_frame)
-        switch_frame.pack(anchor='w', pady=10, fill='x')
+        header_font = ("Segoe UI", 15, "bold")
+        section_font = ("Segoe UI", 14, "bold")
+
+        # --- General section ---
+        self.general_section = ctk.CTkFrame(self.main_frame, fg_color=self.palette.get("section_bg", self.palette.get("bg", "#ffffff")), corner_radius=6, border_width=1, border_color=self.palette.get("section_border", "#e0e0e0"))
+        self.general_section.pack(fill='x', pady=(0, 10))
+        self.general_section.pack_propagate(False)
+
+        self.gen_title = ctk.CTkLabel(self.general_section, text="General", font=section_font, text_color=self.palette.get("header_fg", self.palette.get("fg", "#000000")))
+        self.gen_title.pack(anchor='w', padx=12, pady=(8, 4))
+
+        # Play on double click row
+        self.play_row = ctk.CTkFrame(self.general_section, fg_color="transparent")
+        self.play_row.pack(fill='x', padx=12, pady=(0, 12))
 
         self.play_on_double_var = tk.BooleanVar(value=play_on_double_default)
 
         self.switch = ctk.CTkSwitch(
-            switch_frame,
+            self.play_row,
             text="Play on double-click:",
             variable=self.play_on_double_var,
             command=self._on_play_on_double_change,
             progress_color=self.palette.get("accent", "#0078d4"),
             text_color=self.palette.get("fg", "#000000"),
             bg_color=self.palette.get("bg", "#ffffff"),
+            fg_color=self.palette.get("switch_bg", "#939393"),
             button_color=self.palette.get("accent", "#ffffff"),
-            button_hover_color=self.palette.get("button_hover", "#106ebe"),
-            width=90
+            button_hover_color=self.palette.get("accent_hover", "#106ebe"),
+            width=80
         )
         self.switch.pack(side='left')
 
         self.switch_status_label = ctk.CTkLabel(
-            switch_frame,
+            self.play_row,
             text="Enabled" if self.app_state.play_on_double else "Disabled",
             text_color=self.palette.get("accent", "#0078d4") if self.app_state.play_on_double else self.palette.get("fg", "#808080"),
             font=("Segoe UI", 11, "bold"),
@@ -87,31 +102,33 @@ class PlaybackFeaturesView(tk.Toplevel):
         )
         self.switch_status_label.pack(side='left', padx=(10, 0))
 
-        # Crossfade section
-        crossfade_frame = ttk.Frame(main_frame)
-        crossfade_frame.pack(anchor='w', pady=10, fill='x')
+        # --- Crossfade section ---
+        self.crossfade_section = ctk.CTkFrame(self.main_frame, fg_color=self.palette.get("section_bg", self.palette.get("bg", "#ffffff")), corner_radius=6, border_width=1, border_color=self.palette.get("section_border", "#e0e0e0"))
+        self.crossfade_section.pack(fill='x', pady=(0, 10))
+        self.crossfade_section.pack_propagate(False)
+
+        self.cf_row = ctk.CTkFrame(self.crossfade_section, fg_color="transparent")
+        self.cf_row.pack(fill='x', padx=12, pady=(8, 4))
 
         self.crossfade_enabled_var = tk.BooleanVar(value=crossfade_enabled_default)
 
-        cf_switch_frame = ttk.Frame(crossfade_frame)
-        cf_switch_frame.pack(anchor='w', pady=(0, 10), fill='x')
-
         self.crossfade_switch = ctk.CTkSwitch(
-            cf_switch_frame,
+            self.cf_row,
             text="Crossfade:",
             variable=self.crossfade_enabled_var,
             command=self._toggle_crossfade_slider,
             progress_color=self.palette.get("accent", "#0078d4"),
             text_color=self.palette.get("fg", "#000000"),
             bg_color=self.palette.get("bg", "#ffffff"),
+            font=section_font,
             button_color=self.palette.get("accent", "#ffffff"),
             button_hover_color=self.palette.get("button_hover", "#106ebe"),
-            width=90
+            width=80
         )
         self.crossfade_switch.pack(side='left')
 
         self.crossfade_status_label = ctk.CTkLabel(
-            cf_switch_frame,
+            self.cf_row,
             text="Enabled" if self.crossfade_enabled_var.get() else "Disabled",
             text_color=self.palette.get("accent", "#0078d4") if self.crossfade_enabled_var.get() else self.palette.get("fg", "#808080"),
             font=("Segoe UI", 11, "bold"),
@@ -120,19 +137,17 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.crossfade_status_label.pack(side='left', padx=(10, 0))
 
         self.crossfade_duration_var = tk.DoubleVar(value=float(crossfade_duration_default))
+        self.cf_slider_frame = ctk.CTkFrame(self.crossfade_section, fg_color="transparent")
+        self.cf_slider_frame.pack(fill='x', padx=12, pady=(6, 12))
 
-        self.cf_slider_frame = ttk.Frame(crossfade_frame)
-        self.cf_slider_frame.pack(fill='x', pady=(0, 10))
+        duration_label = ctk.CTkLabel(self.cf_slider_frame, text="Duration", text_color=self.palette.get("fg", "#000000"))
+        duration_label.pack(side='left')
 
-        ttk.Label(self.cf_slider_frame, text="Duration:",
-                foreground=self.palette.get("fg", "#FFFFFF")).pack(anchor='w')
-
-        slider_container = ttk.Frame(self.cf_slider_frame)
-        slider_container.pack(fill='x', pady=(5, 0))
-
-        self.lbl_duration = ttk.Label(slider_container, text=f"{int(self.crossfade_duration_var.get())}s", width=4,
-                                foreground=self.palette.get("fg", "#FFFFFF"))
+        self.lbl_duration = ctk.CTkLabel(self.cf_slider_frame, text=f"{int(self.crossfade_duration_var.get())}s", width=4, text_color=self.palette.get("fg", "#000000"))
         self.lbl_duration.pack(side='right')
+
+        slider_container = ctk.CTkFrame(self.cf_slider_frame, fg_color="transparent")
+        slider_container.pack(fill='x', expand=True, padx=(8, 8))
 
         slider_bg = self.palette.get("slider_bg", "#4a4a4a")
         slider_fg = self.palette.get("slider_progress", self.palette.get("accent", "#0078d4"))
@@ -153,35 +168,37 @@ class PlaybackFeaturesView(tk.Toplevel):
             bg_color=bg,
             border_color="transparent"
         )
-        self.slider_duration.pack(side='left', fill='x', expand=True, padx=(0, 10))
+        self.slider_duration.pack(fill='x', expand=True)
 
         self._toggle_crossfade_slider()
 
-        # Action buttons
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(side='bottom', fill='x', pady=(20, 0))
+        # Action buttons (fixed in an Actions section)
+        self.actions_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.actions_frame.pack(fill='x', pady=(8, 0))
 
         self.close_btn = ctk.CTkButton(
-            btn_frame,
+            self.actions_frame,
             text="Close",
             command=self.destroy,
-            width=80,
-            height=32,
+            width=88,
+            height=36,
             fg_color=self.palette.get("button_bg_color", "#0078d4"),
             text_color=self.palette.get("button_fg_color", "#ffffff"),
-            hover_color=self.palette.get("button_hover", "#106ebe")
+            hover_color=self.palette.get("button_hover", "#106ebe"),
+            corner_radius=6
         )
-        self.close_btn.pack(side='right')
+        self.close_btn.pack(side='right', padx=(0, 8))
 
         self.save_btn = ctk.CTkButton(
-            btn_frame,
+            self.actions_frame,
             text="Save",
             command=self._save_features_config,
-            width=80,
-            height=32,
+            width=88,
+            height=36,
             fg_color=self.palette.get("button_bg_color", "#0078d4"),
             text_color=self.palette.get("button_fg_color", "#ffffff"),
-            hover_color=self.palette.get("button_hover", "#106ebe")
+            hover_color=self.palette.get("button_hover", "#106ebe"),
+            corner_radius=6
         )
         self.save_btn.pack(side='right', padx=(0, 10))
 
@@ -230,21 +247,32 @@ class PlaybackFeaturesView(tk.Toplevel):
         if hasattr(self, 'slider_duration'):
             self.slider_duration.configure(state=state)
 
-        for child in self.cf_slider_frame.winfo_children():
-            if isinstance(child, ttk.Label):
+        # Update labels in slider frame (supports both ttk.Label & ctk.CTkLabel)
+        if hasattr(self, 'cf_slider_frame'):
+            for child in self.cf_slider_frame.winfo_children():
                 try:
-                    child.configure(foreground=label_color)
-                except:
+                    # ctk labels use 'text_color'
+                    if isinstance(child, ctk.CTkLabel):
+                        child.configure(text_color=label_color)
+                    elif isinstance(child, ttk.Label):
+                        child.configure(foreground=label_color)
+                except Exception:
                     pass
 
-            for subchild in child.winfo_children():
-                try:
-                    if isinstance(subchild, ttk.Label):
-                        subchild.configure(foreground=label_color)
-                    elif not isinstance(subchild, ctk.CTkSlider):
-                        subchild.configure(state=state)
-                except:
-                    pass
+                # Descend and update nested children
+                for subchild in getattr(child, 'winfo_children', lambda: [])():
+                    try:
+                        if isinstance(subchild, ctk.CTkLabel):
+                            subchild.configure(text_color=label_color)
+                        elif isinstance(subchild, ttk.Label):
+                            subchild.configure(foreground=label_color)
+                        elif not isinstance(subchild, ctk.CTkSlider):
+                            try:
+                                subchild.configure(state=state)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
 
 
     def _update_duration_label(self, val):
@@ -330,10 +358,11 @@ class PlaybackFeaturesView(tk.Toplevel):
         bg = self.palette.get("bg", "#ffffff")
         fg = self.palette.get("fg", "#000000")
 
-        style = ttk.Style(self)
-        style.configure("TFrame", background=bg)
-
         self.configure(bg=bg)
+
+        # Apply background color to main frame so the main panel follows the palette
+        if hasattr(self, 'main_frame'):
+            self.main_frame.configure(fg_color=self.palette.get('panel_bg', self.palette.get('bg', bg)))
 
         # Update switch colors
         if hasattr(self, 'switch'):
@@ -341,8 +370,9 @@ class PlaybackFeaturesView(tk.Toplevel):
                 progress_color=self.palette.get("accent", "#0078d4"),
                 text_color=fg,
                 bg_color=bg,
+                fg_color=self.palette.get("switch_bg", "#939393"),
                 button_color=self.palette.get("accent", "#ffffff"),
-                button_hover_color=self.palette.get("button_hover", "#106ebe")
+                button_hover_color=self.palette.get("accent_hover", "#106ebe")
             )
 
         # Update switch status label colors
@@ -403,13 +433,51 @@ class PlaybackFeaturesView(tk.Toplevel):
                 hover_color=self.palette.get("button_hover", "#106ebe")
             )
 
+        # Update header/title colors and section frames
+        if hasattr(self, 'header'):
+            try:
+                self.header.configure(text_color=self.palette.get('accent', '#0078d4'))
+                # Keep header font bold and slightly larger
+                try:
+                    self.header.configure(font=("Segoe UI", 15, "bold"))
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        for name in ('gen_title', 'cf_title'):
+            if hasattr(self, name):
+                try:
+                    getattr(self, name).configure(text_color=self.palette.get('header_fg', self.palette.get('fg', '#000000')))
+                    try:
+                        getattr(self, name).configure(font=("Segoe UI", 12, "bold"))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+        for sec in ('general_section', 'crossfade_section'):
+            if hasattr(self, sec):
+                try:
+                    getattr(self, sec).configure(fg_color=self.palette.get('section_bg', self.palette.get('bg', '#ffffff')), border_color=self.palette.get('section_border', '#e0e0e0'))
+                except Exception:
+                    pass
+
+        # Style duration label and actions frame
+        try:
+            if hasattr(self, 'lbl_duration'):
+                self.lbl_duration.configure(text_color=self.palette.get('fg', '#000000'))
+        except Exception:
+            pass
+
+        if hasattr(self, 'actions_frame'):
+            try:
+                self.actions_frame.configure(fg_color='transparent')
+            except Exception:
+                pass
+
         # Recursive restyle
         def restyle(widget):
-            if isinstance(widget, ttk.Frame):
-                widget.configure(style="TFrame")
-            elif isinstance(widget, tk.Frame):
-                widget.configure(bg=bg)
-
             for child in widget.winfo_children():
                 if not isinstance(child, (ctk.CTkButton, ctk.CTkLabel, ctk.CTkSwitch)):
                     restyle(child)
