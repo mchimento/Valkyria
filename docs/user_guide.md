@@ -35,6 +35,7 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
   * [Silence Detection](#silence-detection)
   * [Play After Current Song](#play-after-current-song)
   * [Play on Double-Click](#play-on-double-click)
+  * [Play For Time](#play-for-time)
 * [Themes](#themes)
 * [Keyboard Shortcuts](#keyboard-shortcuts)
 * [Audio Devices](#audio-devices)
@@ -683,6 +684,44 @@ Controls the behavior when double-clicking a song in the playlist.
 
 * **Enable**: For quick access and immediate playback (traditional media player behavior)
 * **Disable**: When you frequently select tracks for metadata viewing or batch operations and don't want accidental playback changes
+
+### Play For Time
+
+Set a specific playback duration for any track in the playlist. When the playback reaches the specified time limit, it will automatically skip to the next track, regardless of the song's actual duration.
+
+#### Setting a Time Limit
+
+**From the Main Menu:**
+1. Select a song in the playlist
+2. Go to **Playback → Operations → Play for time...**
+3. Choose a preset (10s, 30s, 1m, 2m) or enter a custom value in seconds
+4. Click "Set Limit"
+
+**From the Context Menu:**
+1. Right-click on any song in the playlist
+2. Select **⏱ Play for time...**
+3. Choose a preset or enter a custom value
+4. Click "Set Limit"
+
+#### Clearing a Time Limit
+
+**From the Main Menu:**
+1. Select a song with a time limit
+2. Go to **Playback → Operations → Clear time limit**
+
+**From the Context Menu:**
+1. Right-click on a song with a time limit
+2. Select **✖ Clear time limit**
+
+#### Visual Indicators
+
+**Playlist Duration Column:**
+When a time limit is set, the Duration column displays the limit with a clock icon:
+* `⏱ 30s` (instead of the normal duration like `3:45`)
+
+**Status Bar:**
+When playing a song with a time limit, the status bar shows the limit next to the duration:
+* `3:45 [⏱ 30s] • 320 kbps`
 
 ## Track Information
 
