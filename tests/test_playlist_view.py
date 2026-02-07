@@ -812,6 +812,293 @@ class TestPlaylistViewSearchBar(unittest.TestCase):
         actual_index_1 = view._get_actual_index_from_tree_item(children[1])
         self.assertEqual(actual_index_1, 3)
 
+    def test_time_limit_display_in_duration_column(self):
+        """Test that time limit is displayed with clock icon in duration column."""
+        self.mock_state.playlist = ["/path/song1.mp3"]
+        self.mock_state.play_limits = {"/path/song1.mp3": 30.0}  # 30 second limit
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "artist": "Test Artist",
+            "duration": 180  # 3 minutes
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Check that duration column includes time limit indicator
+        children = view.tree.get_children()
+        self.assertEqual(len(children), 1)
+
+        item = view.tree.item(children[0])
+        duration_value = item['values'][3]  # Duration is fourth column (0=title, 1=artist, 2=album, 3=duration)
+
+        # Should show "⏱ 30s" format
+        self.assertIn("⏱", duration_value)
+        self.assertIn("30s", duration_value)
+
+    def test_time_limit_display_without_limit(self):
+        """Test that duration is displayed normally when no time limit is set."""
+        self.mock_state.playlist = ["/path/song1.mp3"]
+        self.mock_state.play_limits = {}  # No limits
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "artist": "Test Artist",
+            "duration": "3:00"  # String format
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        duration_value = item['values'][3]  # Duration column
+
+        # Should show normal duration format, no clock icon
+        self.assertNotIn("⏱", duration_value)
+
+    def test_refresh_metadata_for_file_updates_time_limit(self):
+        """Test that refresh_metadata_for_file updates time limit display."""
+        filepath = "/path/song1.mp3"
+        self.mock_state.playlist = [filepath]
+        self.mock_state.play_limits = {}
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "artist": "Test Artist",
+            "duration": "3:00"  # String format
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Initially no time limit
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        duration_value = item['values'][3]  # Duration column
+        # Convert to string for comparison
+        self.assertNotIn("⏱", str(duration_value))
+
+        # Add time limit and refresh that file
+        self.mock_state.play_limits[filepath] = 45.0
+        view.refresh_metadata_for_file(filepath)
+
+        # Now should show time limit
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        duration_value = item['values'][3]  # Duration column
+        self.assertIn("⏱", duration_value)
+        self.assertIn("45s", duration_value)
+
+    def test_context_menu_set_time_limit_callback(self):
+        """Test that context menu set time limit triggers callback."""
+        self.mock_state.playlist = ["/path/song1.mp3", "/path/song2.mp3"]
+        mock_set_callback = Mock()
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme,
+            set_time_limit_callback=mock_set_callback
+        )
+        view.refresh()
+
+        # Set context menu index and trigger callback
+        view.context_menu_index = 1
+        view._on_context_set_time_limit()
+
+        # Verify callback was called with correct index
+        mock_set_callback.assert_called_once_with(1)
+
+    def test_context_menu_clear_time_limit_callback(self):
+        """Test that context menu clear time limit triggers callback."""
+        self.mock_state.playlist = ["/path/song1.mp3", "/path/song2.mp3"]
+        self.mock_state.play_limits = {"/path/song1.mp3": 30.0}
+        mock_clear_callback = Mock()
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme,
+            clear_time_limit_callback=mock_clear_callback
+        )
+        view.refresh()
+
+        # Set context menu index and trigger callback
+        view.context_menu_index = 0
+        view._on_context_clear_time_limit()
+
+        # Verify callback was called with correct index
+        mock_clear_callback.assert_called_once_with(0)
+
+    def test_time_limit_persists_across_refreshes(self):
+        """Test that time limit remains displayed after multiple refreshes."""
+        filepath = "/path/song1.mp3"
+        self.mock_state.playlist = [filepath]
+        self.mock_state.play_limits = {filepath: 60.0}
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "duration": 180
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        # Multiple refreshes
+        for _ in range(3):
+            view.refresh()
+
+            children = view.tree.get_children()
+            item = view.tree.item(children[0])
+            duration_value = item['values'][3]  # Duration column
+
+            # Time limit should persist
+            self.assertIn("⏱", duration_value)
+            self.assertIn("60s", duration_value)  # Time limits are shown in seconds
+
+    def test_multiple_tracks_with_different_time_limits(self):
+        """Test multiple tracks with different time limits display correctly."""
+        self.mock_state.playlist = [
+            "/path/song1.mp3",
+            "/path/song2.mp3",
+            "/path/song3.mp3"
+        ]
+        self.mock_state.play_limits = {
+            "/path/song1.mp3": 30.0,   # 30 seconds
+            "/path/song3.mp3": 120.0   # 2 minutes
+        }
+
+        def mock_metadata_func(filepath):
+            return {
+                "title": os.path.basename(filepath),
+                "duration": "3:20"  # String format
+            }
+
+        self.mock_metadata.side_effect = mock_metadata_func
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        children = view.tree.get_children()
+        self.assertEqual(len(children), 3)
+
+        # First track: has 30s limit
+        item1 = view.tree.item(children[0])
+        self.assertIn("⏱", item1['values'][3])  # Duration column
+        self.assertIn("30s", item1['values'][3])
+
+        # Second track: no limit
+        item2 = view.tree.item(children[1])
+        duration2 = str(item2['values'][3])  # Convert to string
+        self.assertNotIn("⏱", duration2)  # Duration column
+
+        # Third track: has 120s limit
+        item3 = view.tree.item(children[2])
+        self.assertIn("⏱", item3['values'][3])  # Duration column
+        self.assertIn("120s", item3['values'][3])  # Time limits shown in seconds
+
+    def test_time_limit_removed_updates_display(self):
+        """Test that removing time limit updates the display correctly."""
+        filepath = "/path/song1.mp3"
+        self.mock_state.playlist = [filepath]
+        self.mock_state.play_limits = {filepath: 45.0}
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "duration": "3:00"  # String format
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Initially has time limit
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        self.assertIn("⏱", item['values'][3])  # Duration column
+
+        # Remove time limit
+        del self.mock_state.play_limits[filepath]
+        view.refresh_metadata_for_file(filepath)
+
+        # Should no longer show time limit
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        duration_value = str(item['values'][3])  # Convert to string
+        self.assertNotIn("⏱", duration_value)  # Duration column
+
+    def test_time_limit_formatting_seconds(self):
+        """Test time limit formatting for values under 60 seconds."""
+        self.mock_state.playlist = ["/path/song1.mp3"]
+        self.mock_state.play_limits = {"/path/song1.mp3": 45.0}
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "duration": 180
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        duration_value = item['values'][3]  # Duration column
+
+        # Should format as seconds
+        self.assertIn("45s", duration_value)
+
+    def test_time_limit_formatting_minutes(self):
+        """Test time limit formatting for values 60 seconds and above."""
+        self.mock_state.playlist = ["/path/song1.mp3"]
+        self.mock_state.play_limits = {"/path/song1.mp3": 120.0}
+
+        self.mock_metadata.return_value = {
+            "title": "Test Song",
+            "duration": 300
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        children = view.tree.get_children()
+        item = view.tree.item(children[0])
+        duration_value = item['values'][3]  # Duration column
+
+        # Should format as seconds (all time limits in seconds)
+        self.assertIn("120s", duration_value)
+
 
 if __name__ == '__main__':
     unittest.main()
