@@ -215,6 +215,9 @@ class PlaylistView(ttk.Frame):
         self.tree.bind("<Motion>", self._on_tree_motion)
         self.tree.bind("<Leave>", self._on_tree_leave)
 
+        # Remove focus from search bar when clicking anywhere in the application
+        self.bind_all("<Button-1>", self._on_global_click, add="+")
+
     def _apply_modern_style(self):
         """Apply modern, theme-aware styling."""
         style = ttk.Style()
@@ -1180,6 +1183,27 @@ class PlaylistView(ttk.Frame):
                 if "hover" in tags:
                     tags.remove("hover")
                     self.tree.item(child, tags=tuple(tags))
+
+    def _on_global_click(self, event):
+        """Remove focus from search bar when clicking anywhere outside of it."""
+        # Get the widget that was clicked
+        clicked_widget = event.widget
+
+        # Check if the click was on the search entry or any of its children
+        # Walk up the widget hierarchy to see if search_entry is an ancestor
+        widget = clicked_widget
+        while widget:
+            if widget == self.search_entry:
+                # Click was on search entry, do nothing
+                return
+            try:
+                widget = widget.master
+            except:
+                break
+
+        # Click was outside search entry, remove focus if search entry has it
+        if self.search_entry == self.focus_get():
+            self.tree.focus_set()
 
     def _on_search_focus_in(self, event):
         """Handle search entry gaining focus - remove placeholder."""
