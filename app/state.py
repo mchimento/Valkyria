@@ -14,6 +14,10 @@ class AppState:
     current_playlist_path: Optional[str] = None
     repeat_mode: str = 'none'
     selected_indices: List[int] = field(default_factory=list)
+    
+    # Playback features runtime state
+    crossfade_enabled: bool = False
+    crossfade_duration: int = 5
 
     _current_theme: str = 'light'
     exts = (".mp3", ".wav", ".flac", ".ogg", ".m4a")

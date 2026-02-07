@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
 import threading
+import time
 from ui.waveform_seekbar import WaveformSeekbar
 
 logger = logging.getLogger(__name__)
@@ -308,16 +309,29 @@ class ControlsBar(ttk.Frame):
                 self._send_status("pause")
 
     def _on_stop(self):
-        self.stop()
-        self._send_status("stop")
+        def _stop_sequence():
+            wait = self.player.trigger_fade_out()
+            if wait > 0:
+                time.sleep(wait)
+            self.after(0, lambda: [self.stop(), self._send_status("stop")])
+        threading.Thread(target=_stop_sequence, daemon=True).start()
 
     def _on_prev(self):
-        self.prev()
-        self._send_status("prev")
+        def _prev_sequence():
+            wait = self.player.trigger_fade_out()
+            if wait > 0:
+                time.sleep(wait)
+            self.after(0, lambda: [self.prev(), self._send_status("prev")])
+        threading.Thread(target=_prev_sequence, daemon=True).start()
 
     def _on_next(self):
-        self.next()
-        self._send_status("next")
+        def _next_sequence():
+            wait = self.player.trigger_fade_out()
+            if wait > 0:
+                time.sleep(wait)
+            self.after(0, lambda: [self.next(), self._send_status("next")])
+        threading.Thread(target=_next_sequence, daemon=True).start()
+
 
     def play(self):
         self.player.stop()
@@ -496,8 +510,8 @@ class ControlsBar(ttk.Frame):
 
                 # Check for crossfade trigger
                 if self.is_playing and not self.is_paused and not self.crossfade_triggered:
-                    if self.settings and getattr(self.settings, "crossfade_enabled", False):
-                        duration = getattr(self.settings, "crossfade_duration", 5) * 1000 # ms
+                    if self.state and getattr(self.state, "crossfade_enabled", False):
+                        duration = getattr(self.state, "crossfade_duration", 5) * 1000 # ms
                         remaining = length_ms - pos_ms
                         if 0 < remaining <= duration:
                             self.crossfade_triggered = True

@@ -21,6 +21,13 @@ class Settings:
         self.show_dj: bool = True
         # BPM preference: 'perceived' maps tempo into 50-100, 'raw' returns detected tempo
         self.bpm_mode: str = 'raw'
+
+        # Fade settings
+        self.fade_in_enabled: bool = False
+        self.fade_in_duration: int = 2
+        self.fade_out_enabled: bool = False
+        self.fade_out_duration: int = 2
+
         self.load()
 
     @property
@@ -42,6 +49,12 @@ class Settings:
                 self.show_browser = data.get("show_browser", self.show_browser)
                 self.show_dj = data.get("show_dj", self.show_dj)
                 self.bpm_mode = data.get("bpm_mode", self.bpm_mode)
+
+                self.fade_in_enabled = data.get("fade_in_enabled", self.fade_in_enabled)
+                self.fade_in_duration = data.get("fade_in_duration", self.fade_in_duration)
+                self.fade_out_enabled = data.get("fade_out_enabled", self.fade_out_enabled)
+                self.fade_out_duration = data.get("fade_out_duration", self.fade_out_duration)
+
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
 
@@ -56,7 +69,11 @@ class Settings:
                 "show_playlist": self.show_playlist,
                 "show_browser": self.show_browser,
                 "show_dj": self.show_dj,
-                "bpm_mode": self.bpm_mode
+                "bpm_mode": self.bpm_mode,
+                "fade_in_enabled": self.fade_in_enabled,
+                "fade_in_duration": self.fade_in_duration,
+                "fade_out_enabled": self.fade_out_enabled,
+                "fade_out_duration": self.fade_out_duration
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)

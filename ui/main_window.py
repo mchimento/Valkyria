@@ -8,6 +8,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 import os
+import threading
+import time
 from audio.metadata import metadata_extractor
 
 from audio import m3u as m3u_module, playback
@@ -99,6 +101,10 @@ class MainWindow:
         self.play_on_double_var = tk.BooleanVar(value=bool(getattr(self.settings, "play_on_double", False)))
         self.repeat_mode_var = tk.StringVar(value="none")
         self.audio_device_var = tk.StringVar()
+
+        # Track playback requests to prevent overlapping play commands
+        self._play_request_id = 0
+        self._play_request_lock = threading.Lock()
 
         # Store menu item references for state management
         self.menu_item_refs = {}
@@ -639,7 +645,7 @@ class MainWindow:
     def open_playback_features(self):
         """Open the Playback Features window."""
         try:
-            PlaybackFeaturesView(self.root, self.state, self.settings, self.theme)
+            PlaybackFeaturesView(self.root, self.state, self.settings, self.theme, self.player)
         except Exception as e:
             logger.error(f"Failed to open playback features: {e}", exc_info=True)
 
@@ -1126,11 +1132,38 @@ class MainWindow:
             idx = self.playlist_view.tree.index(sels[0])
 
         if 0 <= idx < len(self.state.playlist):
-            self.state.current_index = idx
-            self.refresh_all()
-            # fade_out behavior not implemented; just play
-            self.controls._on_play()
-            self._restore_status()
+            # Increment request tracking
+            with self._play_request_lock:
+                self._play_request_id += 1
+                my_id = self._play_request_id
+
+            def _transition():
+                # Trigger fade out if needed
+                if self.player.is_playing() and self.settings.fade_out_enabled:
+                    wait = self.player.trigger_fade_out()
+                    if wait > 0:
+                        time.sleep(wait)
+
+                # Check if a newer request has come in
+                with self._play_request_lock:
+                    if self._play_request_id != my_id:
+                        return
+
+                # Switch track on main thread
+                def _force_play():
+                    # Double check ID on main thread before execution
+                    with self._play_request_lock:
+                        if self._play_request_id != my_id:
+                            return
+
+                    self.state.current_index = idx
+                    self.refresh_all()
+                    self.controls._on_play()
+                    self._restore_status()
+
+                self.root.after(0, _force_play)
+
+            threading.Thread(target=_transition, daemon=True).start()
 
     def _on_playlist_select(self, index):
         """

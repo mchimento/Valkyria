@@ -9,47 +9,47 @@ from ui.utils import center_window
 logger = logging.getLogger(__name__)
 
 class PlaybackFeaturesView(tk.Toplevel):
-    def __init__(self, master, state, settings, theme_manager):
+    def __init__(self, master, state, settings, theme_manager, player=None):
         super().__init__(master)
         self.app_state = state
         self.settings = settings
+        self.player = player
         self.theme_manager = theme_manager
         self.palette = theme_manager.palette
         self.config_path = get_user_data_path() / "playback_features_config.json"
 
         config_values = self._load_config()
-        play_on_double_default = self._get_bool_config_value(
-            config_values,
-            "play_on_double",
-            self.app_state.play_on_double
+        play_on_double_default = getattr(self.app_state, "play_on_double", False)
+        crossfade_enabled_default = getattr(self.app_state, "crossfade_enabled", False)
+        crossfade_duration_default = int(getattr(self.app_state, "crossfade_duration", 5))
+
+        # Load Fade Defaults
+        fade_in_enabled_default = self._get_bool_config_value(
+            config_values, "fade_in_enabled", getattr(self.settings, "fade_in_enabled", False)
         )
-        crossfade_enabled_default = self._get_bool_config_value(
-            config_values,
-            "crossfade_enabled",
-            getattr(self.settings, "crossfade_enabled", False)
+        fade_in_duration_default = self._get_int_config_value(
+            config_values, "fade_in_duration", int(getattr(self.settings, "fade_in_duration", 2)), minimum=0, maximum=10
         )
-        crossfade_duration_default = self._get_int_config_value(
-            config_values,
-            "crossfade_duration",
-            int(getattr(self.settings, "crossfade_duration", 5)),
-            minimum=1,
-            maximum=12
+        fade_out_enabled_default = self._get_bool_config_value(
+            config_values, "fade_out_enabled", getattr(self.settings, "fade_out_enabled", False)
         )
+        fade_out_duration_default = self._get_int_config_value(
+            config_values, "fade_out_duration", int(getattr(self.settings, "fade_out_duration", 2)), minimum=0, maximum=10
+        )
+
+        # Sync with active player state (Session Cache)
+        if self.player:
+            fade_in_enabled_default = self.player.fade_in_enabled
+            fade_in_duration_default = self.player.fade_in_duration
+            fade_out_enabled_default = self.player.fade_out_enabled
+            fade_out_duration_default = self.player.fade_out_duration
 
         self.app_state.play_on_double = play_on_double_default
-        if self.settings:
-            self.settings.play_on_double = play_on_double_default
-            self.settings.crossfade_enabled = crossfade_enabled_default
-            self.settings.crossfade_duration = crossfade_duration_default
 
         self.title("Playback Features")
-        # Increase default geometry to fit controls and allow vertical resizing
-        self.geometry("420x540")
-        # Allow vertical resizing so users can expand if content doesn't fit
+        self.geometry("400x420")
         self.resizable(False, False)
         self.transient(master)
-
-        # Hide window initially to prevent flickering during positioning
         self.withdraw()
 
         center_window(self, master)
@@ -59,15 +59,12 @@ class PlaybackFeaturesView(tk.Toplevel):
         # Main container: use CTkFrame for consistent theming and padding
         self.main_frame = ctk.CTkFrame(self, fg_color=self.palette.get("bg", "#ffffff"))
         self.main_frame.pack(fill='both', expand=True, padx=18, pady=18)
-        self.main_frame.pack_propagate(False)
 
-        header_font = ("Segoe UI", 15, "bold")
         section_font = ("Segoe UI", 14, "bold")
 
         # --- General section ---
         self.general_section = ctk.CTkFrame(self.main_frame, fg_color=self.palette.get("section_bg", self.palette.get("bg", "#ffffff")), corner_radius=6, border_width=1, border_color=self.palette.get("section_border", "#e0e0e0"))
         self.general_section.pack(fill='x', pady=(0, 10))
-        self.general_section.pack_propagate(False)
 
         self.gen_title = ctk.CTkLabel(self.general_section, text="General", font=section_font, text_color=self.palette.get("header_fg", self.palette.get("fg", "#000000")))
         self.gen_title.pack(anchor='w', padx=12, pady=(8, 4))
@@ -102,10 +99,109 @@ class PlaybackFeaturesView(tk.Toplevel):
         )
         self.switch_status_label.pack(side='left', padx=(10, 0))
 
+        # --- Fade In ---
+        self.fade_in_row = ctk.CTkFrame(self.general_section, fg_color="transparent")
+        self.fade_in_row.pack(fill='x', padx=12, pady=(6, 4))
+
+        self.fade_in_enabled_var = tk.BooleanVar(value=fade_in_enabled_default)
+        self.fade_in_switch = ctk.CTkSwitch(
+            self.fade_in_row, text="Fade In:", variable=self.fade_in_enabled_var,
+            command=self._on_fade_in_toggle,
+            progress_color=self.palette.get("accent", "#0078d4"),
+            text_color=self.palette.get("fg", "#000000"),
+            bg_color=self.palette.get("bg", "#ffffff"),
+            button_color=self.palette.get("accent", "#ffffff"),
+            button_hover_color=self.palette.get("accent_hover", "#106ebe"),
+            width=80
+        )
+        self.fade_in_switch.pack(side='left')
+
+        self.fade_in_status = ctk.CTkLabel(
+            self.fade_in_row, text="Enabled" if self.fade_in_enabled_var.get() else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if self.fade_in_enabled_var.get() else self.palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"), bg_color=self.palette.get("bg", "#ffffff")
+        )
+        self.fade_in_status.pack(side='left', padx=(10, 0))
+
+        self.fade_in_slider_frame = ctk.CTkFrame(self.general_section, fg_color="transparent")
+        self.fade_in_slider_frame.pack(fill='x', padx=12, pady=(0, 6))
+
+        lb_fi_dur = ctk.CTkLabel(self.fade_in_slider_frame, text="Duration", text_color=self.palette.get("fg", "#000000"))
+        lb_fi_dur.pack(side='left')
+
+        self.fade_in_duration_var = tk.DoubleVar(value=float(fade_in_duration_default))
+        self.lbl_fade_in_val = ctk.CTkLabel(self.fade_in_slider_frame, text=f"{int(self.fade_in_duration_var.get())}s", width=25, text_color=self.palette.get("fg", "#000000"))
+        self.lbl_fade_in_val.pack(side='right')
+
+        slider_bg = self.palette.get("slider_bg", "#4a4a4a")
+        slider_fg = self.palette.get("slider_progress", self.palette.get("accent", "#0078d4"))
+        slider_button = self.palette.get("slider_button", "#ffffff")
+        accent_hover = self.palette.get("button_hover", "#106ebe")
+        bg = self.palette.get("bg", "#ffffff")
+
+        fi_container = ctk.CTkFrame(self.fade_in_slider_frame, fg_color="transparent")
+        fi_container.pack(fill='x', expand=True, padx=(8, 8))
+        self.slider_fade_in = ctk.CTkSlider(
+            fi_container, from_=0, to=10, number_of_steps=10,
+            variable=self.fade_in_duration_var, command=self._on_fade_in_change,
+            fg_color=slider_bg, progress_color=slider_fg,
+            button_color=slider_button, button_hover_color=accent_hover,
+            bg_color=bg, border_color="transparent"
+        )
+        self.slider_fade_in.pack(fill='x', expand=True)
+
+        # --- Fade Out ---
+        self.fade_out_row = ctk.CTkFrame(self.general_section, fg_color="transparent")
+        self.fade_out_row.pack(fill='x', padx=12, pady=(6, 4))
+
+        self.fade_out_enabled_var = tk.BooleanVar(value=fade_out_enabled_default)
+        self.fade_out_switch = ctk.CTkSwitch(
+            self.fade_out_row, text="Fade Out:", variable=self.fade_out_enabled_var,
+            command=self._on_fade_out_toggle,
+            progress_color=self.palette.get("accent", "#0078d4"),
+            text_color=self.palette.get("fg", "#000000"),
+            bg_color=self.palette.get("bg", "#ffffff"),
+            button_color=self.palette.get("accent", "#ffffff"),
+            button_hover_color=self.palette.get("accent_hover", "#106ebe"),
+            width=80
+        )
+        self.fade_out_switch.pack(side='left')
+
+        self.fade_out_status = ctk.CTkLabel(
+            self.fade_out_row, text="Enabled" if self.fade_out_enabled_var.get() else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if self.fade_out_enabled_var.get() else self.palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"), bg_color=self.palette.get("bg", "#ffffff")
+        )
+        self.fade_out_status.pack(side='left', padx=(10, 0))
+
+        self.fade_out_slider_frame = ctk.CTkFrame(self.general_section, fg_color="transparent")
+        self.fade_out_slider_frame.pack(fill='x', padx=12, pady=(0, 12))
+
+        lb_fo_dur = ctk.CTkLabel(self.fade_out_slider_frame, text="Duration", text_color=self.palette.get("fg", "#000000"))
+        lb_fo_dur.pack(side='left')
+
+        self.fade_out_duration_var = tk.DoubleVar(value=float(fade_out_duration_default))
+        self.lbl_fade_out_val = ctk.CTkLabel(self.fade_out_slider_frame, text=f"{int(self.fade_out_duration_var.get())}s", width=25, text_color=self.palette.get("fg", "#000000"))
+        self.lbl_fade_out_val.pack(side='right')
+
+        fo_container = ctk.CTkFrame(self.fade_out_slider_frame, fg_color="transparent")
+        fo_container.pack(fill='x', expand=True, padx=(8, 8))
+        self.slider_fade_out = ctk.CTkSlider(
+            fo_container, from_=0, to=10, number_of_steps=10,
+            variable=self.fade_out_duration_var, command=self._on_fade_out_change,
+            fg_color=slider_bg, progress_color=slider_fg,
+            button_color=slider_button, button_hover_color=accent_hover,
+            bg_color=bg, border_color="transparent"
+        )
+        self.slider_fade_out.pack(fill='x', expand=True)
+
+        # Init states
+        self._on_fade_in_toggle()
+        self._on_fade_out_toggle()
+
         # --- Crossfade section ---
         self.crossfade_section = ctk.CTkFrame(self.main_frame, fg_color=self.palette.get("section_bg", self.palette.get("bg", "#ffffff")), corner_radius=6, border_width=1, border_color=self.palette.get("section_border", "#e0e0e0"))
         self.crossfade_section.pack(fill='x', pady=(0, 10))
-        self.crossfade_section.pack_propagate(False)
 
         self.cf_row = ctk.CTkFrame(self.crossfade_section, fg_color="transparent")
         self.cf_row.pack(fill='x', padx=12, pady=(8, 4))
@@ -209,10 +305,6 @@ class PlaybackFeaturesView(tk.Toplevel):
         """Handle play on double-click setting change."""
         new_value = self.play_on_double_var.get()
 
-        # Update both settings and state
-        if self.settings:
-            self.settings.play_on_double = new_value
-
         # Update state as well since playlist view checks state.play_on_double
         self.app_state.play_on_double = new_value
 
@@ -226,11 +318,11 @@ class PlaybackFeaturesView(tk.Toplevel):
     def _toggle_crossfade_slider(self):
         """Toggle crossfade slider enabled state."""
         enabled = self.crossfade_enabled_var.get()
-        state = 'normal' if enabled else 'disabled'
+        # Update session state immediately
+        if self.app_state:
+            self.app_state.crossfade_enabled = enabled
 
-        # Update settings
-        if self.settings:
-            self.settings.crossfade_enabled = enabled
+        state = 'normal' if enabled else 'disabled'
 
         # Update status label
         self.crossfade_status_label.configure(
@@ -279,18 +371,59 @@ class PlaybackFeaturesView(tk.Toplevel):
         """Update crossfade duration label."""
         duration = int(float(val))
         self.lbl_duration.configure(text=f"{duration}s")
+        # Update session state immediately
+        if self.app_state:
+            self.app_state.crossfade_duration = duration
 
-        # Update settings
-        if self.settings:
-            self.settings.crossfade_duration = duration
 
+    def _on_fade_in_toggle(self):
+        enabled = self.fade_in_enabled_var.get()
+        state = 'normal' if enabled else 'disabled'
+
+        if self.player:
+            self.player.set_fade_in_enabled(enabled)
+
+        self.fade_in_status.configure(
+            text="Enabled" if enabled else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+        )
+        self.slider_fade_in.configure(state=state)
+
+    def _on_fade_in_change(self, value):
+        val_int = int(float(value))
+        self.lbl_fade_in_val.configure(text=f"{val_int}s")
+        if self.player:
+            self.player.set_fade_in_duration(val_int)
+
+    def _on_fade_out_toggle(self):
+        enabled = self.fade_out_enabled_var.get()
+        state = 'normal' if enabled else 'disabled'
+
+        if self.player:
+            self.player.set_fade_out_enabled(enabled)
+
+        self.fade_out_status.configure(
+            text="Enabled" if enabled else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+        )
+        self.slider_fade_out.configure(state=state)
+
+    def _on_fade_out_change(self, value):
+        val_int = int(float(value))
+        self.lbl_fade_out_val.configure(text=f"{val_int}s")
+        if self.player:
+            self.player.set_fade_out_duration(val_int)
 
     def _save_features_config(self):
         """Persist playback feature settings to user config file."""
         data = {
             "play_on_double": self.play_on_double_var.get(),
             "crossfade_enabled": self.crossfade_enabled_var.get(),
-            "crossfade_duration": int(self.crossfade_duration_var.get())
+            "crossfade_duration": int(self.crossfade_duration_var.get()),
+            "fade_in_enabled": self.fade_in_enabled_var.get(),
+            "fade_in_duration": int(self.fade_in_duration_var.get()),
+            "fade_out_enabled": self.fade_out_enabled_var.get(),
+            "fade_out_duration": int(self.fade_out_duration_var.get())
         }
 
         self.app_state.play_on_double = data["play_on_double"]
@@ -298,6 +431,10 @@ class PlaybackFeaturesView(tk.Toplevel):
             self.settings.play_on_double = data["play_on_double"]
             self.settings.crossfade_enabled = data["crossfade_enabled"]
             self.settings.crossfade_duration = data["crossfade_duration"]
+            self.settings.fade_in_enabled = data["fade_in_enabled"]
+            self.settings.fade_in_duration = data["fade_in_duration"]
+            self.settings.fade_out_enabled = data["fade_out_enabled"]
+            self.settings.fade_out_duration = data["fade_out_duration"]
             try:
                 self.settings.save()
             except Exception:
