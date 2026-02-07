@@ -7,7 +7,7 @@ from ui.booklet_viewer import BookletViewer
 
 
 class PlaylistContextMenu:
-    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None, play_after_current_callback=None):
+    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None, play_after_current_callback=None, set_time_limit_callback=None, clear_time_limit_callback=None):
         """
         Initialize the playlist context menu.
 
@@ -18,6 +18,8 @@ class PlaylistContextMenu:
             remove_callback: Function to call when "Remove from Playlist" is selected
             get_current_file_callback: Function to get the current selected file path
             play_after_current_callback: Function to call when "Play After Current Song" is selected
+            set_time_limit_callback: Function to call when "Play for time..." is selected
+            clear_time_limit_callback: Function to call when "Clear time limit" is selected
         """
         self.parent = parent
         self.play_callback = play_callback
@@ -25,11 +27,16 @@ class PlaylistContextMenu:
         self.remove_callback = remove_callback
         self.get_current_file_callback = get_current_file_callback
         self.play_after_current_callback = play_after_current_callback
+        self.set_time_limit_callback = set_time_limit_callback
+        self.clear_time_limit_callback = clear_time_limit_callback
 
         # Create the menu
         self.menu = tk.Menu(parent, tearoff=0)
-        self.menu.add_command(label="Play Song", command=self._on_play)
+        self.menu.add_command(label="▶ Play", command=self._on_play)
         self.menu.add_command(label="Play After Current Song", command=self._on_play_after_current)
+        self.menu.add_separator()
+        self.menu.add_command(label="⏱ Play for time...", command=self._on_set_time_limit)
+        self.menu.add_command(label="✖ Clear time limit", command=self._on_clear_time_limit)
         self.menu.add_separator()
         self.menu.add_command(label="Show Metadata", command=self._on_metadata)
         self.menu.add_command(label="Show Album Booklet", command=self._on_booklet)
@@ -45,6 +52,16 @@ class PlaylistContextMenu:
         """Handle Play After Current Song menu item."""
         if callable(self.play_after_current_callback):
             self.play_after_current_callback()
+    
+    def _on_set_time_limit(self):
+        """Handle Play for time... menu item."""
+        if callable(self.set_time_limit_callback):
+            self.set_time_limit_callback()
+    
+    def _on_clear_time_limit(self):
+        """Handle Clear time limit menu item."""
+        if callable(self.clear_time_limit_callback):
+            self.clear_time_limit_callback()
 
     def _on_metadata(self):
         """Handle Show Metadata menu item."""

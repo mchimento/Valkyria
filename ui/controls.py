@@ -108,6 +108,7 @@ class ControlsBar(ttk.Frame):
         self.is_playing = False
         self.is_muted = False
         self.crossfade_triggered = False
+        self.time_limit_triggered = False
 
         self.repeat_var = repeat_var
         self.on_toggle_repeat = on_toggle_repeat
@@ -263,10 +264,15 @@ class ControlsBar(ttk.Frame):
         if self.state.current_index is not None:
             path = self.state.playlist[self.state.current_index]
 
+            # Reset time display for new track
+            self.current_time_var.set("00:00")
+            self.total_time_var.set("--:--")
+
             # Run player.play in a thread to prevent UI blocking
             threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
 
             self.crossfade_triggered = False
+            self.time_limit_triggered = False
             # Load waveform for the new track
             self.waveform_seekbar.load_waveform(path)
 
@@ -352,6 +358,9 @@ class ControlsBar(ttk.Frame):
         self.is_playing = False
         # Clear current index to remove playing highlight
         self.state.current_index = None
+        # Reset time display
+        self.current_time_var.set("--:--")
+        self.total_time_var.set("--:--")
         # Clear waveform when stopped
         self.waveform_seekbar.clear()
         # Update playlist highlight if available
@@ -507,6 +516,17 @@ class ControlsBar(ttk.Frame):
                 len_s = int(length_ms // 1000)
                 self.current_time_var.set(f"{cur_s//60:02d}:{cur_s%60:02d}")
                 self.total_time_var.set(f"{len_s//60:02d}:{len_s%60:02d}")
+
+                # Check for time limit enforcement
+                if self.is_playing and not self.is_paused and self.state and not self.time_limit_triggered:
+                    if self.state.current_index is not None and self.state.current_index < len(self.state.playlist):
+                        current_filepath = self.state.playlist[self.state.current_index]
+                        if current_filepath in self.state.play_limits:
+                            limit_seconds = self.state.play_limits[current_filepath]
+                            if cur_s >= limit_seconds:
+                                # Time limit reached, play next track
+                                self.time_limit_triggered = True
+                                self._on_next()
 
                 # Check for crossfade trigger
                 if self.is_playing and not self.is_paused and not self.crossfade_triggered:

@@ -9,7 +9,8 @@ class PlaylistView(ttk.Frame):
     def __init__(self, master, state, theme, tooltip_manager=None,
                  select_callback=None, change_callback=None,
                  play_callback=None, metadata_callback=None,
-                 remove_callback=None, play_after_current_callback=None):
+                 remove_callback=None, play_after_current_callback=None,
+                 set_time_limit_callback=None, clear_time_limit_callback=None):
         super().__init__(master)
 
         self.state = state
@@ -21,6 +22,8 @@ class PlaylistView(ttk.Frame):
         self.metadata_callback = metadata_callback
         self.remove_callback = remove_callback
         self.play_after_current_callback = play_after_current_callback
+        self.set_time_limit_callback = set_time_limit_callback
+        self.clear_time_limit_callback = clear_time_limit_callback
 
         # Search filter
         self._search_text = ""
@@ -163,7 +166,9 @@ class PlaylistView(ttk.Frame):
             metadata_callback=self._on_context_metadata,
             remove_callback=self._on_context_remove,
             get_current_file_callback=self._get_current_file_path,
-            play_after_current_callback=self._on_context_play_after_current
+            play_after_current_callback=self._on_context_play_after_current,
+            set_time_limit_callback=self._on_context_set_time_limit,
+            clear_time_limit_callback=self._on_context_clear_time_limit
         )
 
     def _setup_bindings(self):
@@ -334,6 +339,11 @@ class PlaylistView(ttk.Frame):
                     album = metadata.get("album", "")
                     duration = metadata.get("duration", "")
 
+                    # Check if there's a time limit for this track
+                    if filepath in self.state.play_limits:
+                        limit_seconds = self.state.play_limits[filepath]
+                        duration = f"⏱ {int(limit_seconds)}s"
+
                     children = self.tree.get_children()
                     if i < len(children):
                         item_id = children[i]
@@ -389,6 +399,11 @@ class PlaylistView(ttk.Frame):
             artist = metadata.get("artist", "")
             album = metadata.get("album", "")
             duration = metadata.get("duration", "")
+
+            # Check if there's a time limit for this track
+            if filepath in self.state.play_limits:
+                limit_seconds = self.state.play_limits[filepath]
+                duration = f"⏱ {int(limit_seconds)}s"
 
             # Determine tags based on state
             tags = ["odd" if display_index % 2 == 1 else "even"]
@@ -611,6 +626,16 @@ class PlaylistView(ttk.Frame):
         """Play track after current song from context menu."""
         if callable(self.play_after_current_callback):
             self.play_after_current_callback(self.context_menu_index)
+
+    def _on_context_set_time_limit(self):
+        """Set time limit for track from context menu."""
+        if callable(self.set_time_limit_callback):
+            self.set_time_limit_callback(self.context_menu_index)
+
+    def _on_context_clear_time_limit(self):
+        """Clear time limit for track from context menu."""
+        if callable(self.clear_time_limit_callback):
+            self.clear_time_limit_callback(self.context_menu_index)
 
     def _get_current_file_path(self):
         """Get the file path of the currently selected track."""

@@ -27,6 +27,7 @@ from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
+from ui.time_limit_dialog import TimeLimitDialog
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ class MainWindow:
             {"label": "Move Down", "command": self.move_selected_down, "accelerator": "Ctrl+Down"},
             {"separator": True},
             {"label": "Play After Current Song", "command": self.play_selected_after_current, "ref": "play_after_current", "accelerator": "Ctrl+N"},
+            {"label": "Play for time...", "command": self.set_play_time_limit, "ref": "play_for_time"},
             {"separator": True},
             {"label": "Remove Selected", "command": self.remove_selected_from_playlist, "accelerator": "Delete"},
             {"label": "Clear", "command": self.clear_playlist, "accelerator": "Ctrl+C"},
@@ -145,8 +147,9 @@ class MainWindow:
             {"label": "Show Album booklet", "command": self.show_booklet, "ref": "track_booklet", "accelerator": "Ctrl+B"}
         ]
         self.menu_item_refs["play_after_current"] = operations_submenu[3]
-        self.menu_item_refs["track_info"] = operations_submenu[8]
-        self.menu_item_refs["track_booklet"] = operations_submenu[9]
+        self.menu_item_refs["play_for_time"] = operations_submenu[4]
+        self.menu_item_refs["track_info"] = operations_submenu[9]
+        self.menu_item_refs["track_booklet"] = operations_submenu[10]
 
         repeat_submenu = [
             {"label": "No Repeat", "radiobutton": True, "variable": self.repeat_mode_var,
@@ -232,7 +235,9 @@ class MainWindow:
             play_callback=self._on_context_play_song,
             metadata_callback=self._on_context_show_metadata,
             remove_callback=self._on_context_remove_song,
-            play_after_current_callback=self._on_context_play_after_current
+            play_after_current_callback=self._on_context_play_after_current,
+            set_time_limit_callback=self.set_play_time_limit,
+            clear_time_limit_callback=self.clear_play_time_limit
         )
         self.playlist_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -636,6 +641,13 @@ class MainWindow:
             self.browser_view.update_theme()
             # Update controls theme
             self.controls.update_theme()
+            # Update any open TimeLimitDialog windows
+            for window in self.root.winfo_children():
+                if hasattr(window, 'update_theme') and window.__class__.__name__ == 'TimeLimitDialog':
+                    try:
+                        window.update_theme()
+                    except Exception:
+                        pass
 
         def on_bpm_preference_change():
             # Refresh only BPM display to avoid interfering with playback
@@ -987,6 +999,57 @@ class MainWindow:
             count -= 1  # Don't count current track
         if count > 0:
             self._set_temporary_status(f"Moved {count} track(s) to play after current song")
+
+    def set_play_time_limit(self, index=None):
+        """Set a playback time limit for the selected track."""
+        if index is None:
+            selected_indices = self.playlist_view.get_selected_indices()
+            if not selected_indices:
+                messagebox.showinfo("No Selection", "Please select a track first.", parent=self.root)
+                return
+            # Use the first selected track
+            index = selected_indices[0]
+        if index >= len(self.state.playlist):
+            return
+
+        filepath = self.state.playlist[index]
+        current_limit = self.state.play_limits.get(filepath)
+
+        # Open dialog
+        dialog = TimeLimitDialog(self.root, self.theme, current_limit)
+        result = dialog.get_result()
+
+        if result == "CANCEL":
+            return
+        elif result is None:
+            # Clear the limit
+            if filepath in self.state.play_limits:
+                del self.state.play_limits[filepath]
+            self._set_temporary_status("Playback time limit cleared")
+        else:
+            # Set the limit
+            self.state.play_limits[filepath] = result
+            self._set_temporary_status(f"Playback time limit set to {int(result)}s")
+
+        # Refresh displays
+        self.refresh_all()
+
+    def clear_play_time_limit(self, index=None):
+        """Clear the playback time limit for a track."""
+        if index is None:
+            selected_indices = self.playlist_view.get_selected_indices()
+            if not selected_indices:
+                return
+            index = selected_indices[0]
+
+        if index >= len(self.state.playlist):
+            return
+
+        filepath = self.state.playlist[index]
+        if filepath in self.state.play_limits:
+            del self.state.play_limits[filepath]
+            self._set_temporary_status("Playback time limit cleared")
+            self.refresh_all()
 
     # ---------- View Menu ----------
     def toggle_playlist_visibility(self):

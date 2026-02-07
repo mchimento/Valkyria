@@ -51,5 +51,6 @@
   "waveform_border": "#1E1E1E",
   "disabled_fg": "#999999",
   "entry_bg": "#2A2A2A",
+  "frame_bg": "#252525",
   "fg_dim": "#888888"
 }
