@@ -383,5 +383,446 @@ class TestPlayAfterCurrent(unittest.TestCase):
         self.assertEqual(new_current_index, 1)
 
 
+class TestPlaylistViewSearchBar(unittest.TestCase):
+    """Unit tests for PlaylistView search bar functionality."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Suppress logging for all tests in this class."""
+        pass
+
+    @unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
+    def setUp(self):
+        """Set up test fixtures."""
+        self.root = tk.Tk()
+
+        # Mock State
+        self.mock_state = MagicMock()
+        self.mock_state.playlist = []
+        self.mock_state.current_index = None
+        self.mock_state.dragged_index = None
+        self.mock_state.play_on_double = True
+
+        # Mock Theme with all required palette entries
+        self.mock_theme = MagicMock()
+        self.mock_theme.palette = {
+            "bg": "#121212",
+            "fg": "#FFFFFF",
+            "fg_dim": "#888888",
+            "entry_bg": "#2A2A2A",
+            "accent": "#BB86FC",
+            "scrollbar_track": "#282828",
+            "scrollbar_thumb": "#535353",
+            "ui_font": "Segoe UI"
+        }
+
+        # Patch functions in ui.playlist_view namespace
+        self.patcher_title = patch('ui.playlist_view.get_display_title')
+        self.mock_title = self.patcher_title.start()
+
+        self.patcher_bpm = patch('ui.playlist_view.get_display_bpm')
+        self.mock_bpm = self.patcher_bpm.start()
+
+        self.patcher_metadata = patch('ui.playlist_view.get_metadata')
+        self.mock_metadata = self.patcher_metadata.start()
+
+        self.patcher_extractor = patch('ui.playlist_view.metadata_extractor')
+        self.mock_extractor = self.patcher_extractor.start()
+
+        # Default return values
+        self.mock_metadata.return_value = {}
+        self.mock_title.return_value = "Unknown Title"
+        self.mock_bpm.return_value = ""
+
+        from ui.playlist_view import PlaylistView
+        self.PlaylistView = PlaylistView
+
+    def tearDown(self):
+        """Clean up after tests."""
+        self.patcher_title.stop()
+        self.patcher_bpm.stop()
+        self.patcher_metadata.stop()
+        self.patcher_extractor.stop()
+
+        if hasattr(self, 'root'):
+            self.root.destroy()
+
+    def test_search_bar_initialization(self):
+        """Test that search bar components are initialized correctly."""
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        self.assertTrue(hasattr(view, 'search_frame'))
+        self.assertTrue(hasattr(view, 'search_entry'))
+        self.assertTrue(hasattr(view, 'search_var'))
+        self.assertTrue(hasattr(view, 'search_label'))
+        self.assertTrue(hasattr(view, 'clear_button'))
+        self.assertTrue(hasattr(view, '_search_text'))
+        self.assertTrue(hasattr(view, '_filtered_indices'))
+        self.assertTrue(hasattr(view, '_placeholder_active'))
+
+    def test_search_bar_placeholder_active_on_init(self):
+        """Test that placeholder is active on initialization."""
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        self.assertTrue(view._placeholder_active)
+        self.assertEqual(view.search_var.get(), "Search")
+
+    def test_search_bar_hidden_when_playlist_empty(self):
+        """Test that search bar is hidden when playlist is empty."""
+        self.mock_state.playlist = []
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        view.refresh()
+        self.assertFalse(view.search_frame.winfo_ismapped())
+
+    def test_search_bar_visible_when_playlist_has_songs(self):
+        """Test that search bar becomes visible after adding songs to playlist."""
+        # Start with empty playlist
+        self.mock_state.playlist = []
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Search bar should be hidden with empty playlist
+        self.assertFalse(view.search_frame.winfo_ismapped())
+
+        # Add songs to playlist
+        self.mock_state.playlist = ["song1.mp3", "song2.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        # Refresh to show songs
+        view.refresh()
+
+        # Check that search_frame is in the packing list (has been packed)
+        # winfo_ismapped might not work reliably in tests, check if widget is managed
+        pack_info = view.search_frame.pack_info()
+        self.assertIsNotNone(pack_info)
+        self.assertIn('anchor', pack_info)
+
+    def test_search_filter_by_title(self):
+        """Test filtering playlist by song title."""
+        self.mock_state.playlist = ["rock_song.mp3", "jazz_song.mp3", "blues_song.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path).replace(".mp3", "").replace("_", " "),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Simulate search for "rock"
+        view._placeholder_active = False
+        view.search_var.set("rock")
+        view._on_search_changed()
+
+        # Should only show 1 matching track
+        self.assertEqual(len(view._filtered_indices), 1)
+        self.assertIn(0, view._filtered_indices)  # rock_song.mp3
+        self.assertEqual(len(view.tree.get_children()), 1)
+
+    def test_search_filter_by_artist(self):
+        """Test filtering playlist by artist name."""
+        self.mock_state.playlist = ["song1.mp3", "song2.mp3", "song3.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path),
+            "artist": "Beatles" if "song1" in path else "Rolling Stones",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Simulate search for "beatles"
+        view._placeholder_active = False
+        view.search_var.set("beatles")
+        view._on_search_changed()
+
+        # Should only show 1 matching track
+        self.assertEqual(len(view._filtered_indices), 1)
+        self.assertIn(0, view._filtered_indices)
+
+    def test_search_filter_by_album(self):
+        """Test filtering playlist by album name."""
+        self.mock_state.playlist = ["song1.mp3", "song2.mp3", "song3.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path),
+            "artist": "Artist",
+            "album": "Greatest Hits" if "song2" in path else "Other Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Simulate search for "greatest"
+        view._placeholder_active = False
+        view.search_var.set("greatest")
+        view._on_search_changed()
+
+        # Should only show 1 matching track
+        self.assertEqual(len(view._filtered_indices), 1)
+        self.assertIn(1, view._filtered_indices)
+
+    def test_search_case_insensitive(self):
+        """Test that search is case-insensitive."""
+        self.mock_state.playlist = ["ROCK_SONG.mp3", "jazz_song.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path).replace(".mp3", "").replace("_", " "),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Search with lowercase
+        view._placeholder_active = False
+        view.search_var.set("rock")
+        view._on_search_changed()
+
+        self.assertEqual(len(view._filtered_indices), 1)
+        self.assertIn(0, view._filtered_indices)
+
+    def test_search_multiple_matches(self):
+        """Test search returning multiple matches."""
+        self.mock_state.playlist = ["rock1.mp3", "rock2.mp3", "jazz.mp3", "rock3.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path).replace(".mp3", ""),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Search for "rock"
+        view._placeholder_active = False
+        view.search_var.set("rock")
+        view._on_search_changed()
+
+        # Should show 3 matching tracks
+        self.assertEqual(len(view._filtered_indices), 3)
+        self.assertEqual(view._filtered_indices, [0, 1, 3])
+        self.assertEqual(len(view.tree.get_children()), 3)
+
+    def test_search_clear_shows_all(self):
+        """Test that clearing search shows all tracks."""
+        self.mock_state.playlist = ["song1.mp3", "song2.mp3", "song3.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Apply search filter
+        view._placeholder_active = False
+        view.search_var.set("song1")
+        view._on_search_changed()
+        self.assertEqual(len(view.tree.get_children()), 1)
+
+        # Clear search
+        view.search_var.set("")
+        view._on_search_changed()
+
+        # Should show all tracks
+        self.assertEqual(len(view._filtered_indices), 0)
+        self.assertEqual(len(view.tree.get_children()), 3)
+
+    def test_search_focus_in_removes_placeholder(self):
+        """Test that focusing on search entry removes placeholder."""
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        self.assertTrue(view._placeholder_active)
+        self.assertEqual(view.search_var.get(), "Search")
+
+        # Simulate focus in
+        event = MagicMock()
+        view._on_search_focus_in(event)
+
+        self.assertFalse(view._placeholder_active)
+        self.assertEqual(view.search_var.get(), "")
+
+    def test_search_focus_out_restores_placeholder_if_empty(self):
+        """Test that losing focus restores placeholder if search is empty."""
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        # Remove placeholder
+        view._placeholder_active = False
+        view.search_var.set("")
+
+        # Simulate focus out with empty search
+        event = MagicMock()
+        view._on_search_focus_out(event)
+
+        self.assertTrue(view._placeholder_active)
+        self.assertEqual(view.search_var.get(), "Search")
+
+    def test_search_focus_out_keeps_text_if_not_empty(self):
+        """Test that losing focus keeps search text if not empty."""
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+
+        # Set search text
+        view._placeholder_active = False
+        view.search_var.set("rock")
+
+        # Simulate focus out with search text
+        event = MagicMock()
+        view._on_search_focus_out(event)
+
+        self.assertFalse(view._placeholder_active)
+        self.assertEqual(view.search_var.get(), "rock")
+
+    def test_search_no_filter_when_placeholder_active(self):
+        """Test that search doesn't filter when placeholder is active."""
+        self.mock_state.playlist = ["song1.mp3", "song2.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Placeholder is active, set search text (shouldn't trigger filter)
+        view._placeholder_active = True
+        view.search_var.set("Search")
+        view._on_search_changed()
+
+        # Should show all tracks (no filtering)
+        self.assertEqual(len(view._filtered_indices), 0)
+        self.assertEqual(len(view.tree.get_children()), 2)
+
+    def test_search_recalculates_after_playlist_modification(self):
+        """Test that search filter is recalculated when playlist is modified."""
+        self.mock_state.playlist = ["rock1.mp3", "jazz.mp3", "rock2.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path).replace(".mp3", ""),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Apply search filter
+        view._placeholder_active = False
+        view.search_var.set("rock")
+        view._on_search_changed()
+
+        # Initial filter: 2 matches
+        self.assertEqual(len(view._filtered_indices), 2)
+
+        # Modify playlist (remove middle item)
+        self.mock_state.playlist = ["rock1.mp3", "rock2.mp3"]
+
+        # Refresh should recalculate filter
+        view.refresh()
+
+        # Should still find 2 rock songs, but indices updated
+        self.assertEqual(len(view._filtered_indices), 2)
+        self.assertEqual(view._filtered_indices, [0, 1])
+
+    def test_get_actual_index_from_filtered_tree_item(self):
+        """Test getting actual playlist index from filtered tree view."""
+        self.mock_state.playlist = ["song1.mp3", "rock.mp3", "song3.mp3", "rock2.mp3"]
+        self.mock_metadata.side_effect = lambda path: {
+            "title": os.path.basename(path).replace(".mp3", ""),
+            "artist": "Artist",
+            "album": "Album"
+        }
+
+        view = self.PlaylistView(
+            self.root,
+            self.mock_state,
+            self.mock_theme
+        )
+        view.refresh()
+
+        # Apply filter for "rock"
+        view._placeholder_active = False
+        view.search_var.set("rock")
+        view._on_search_changed()
+
+        # Tree should have 2 items, but they map to playlist indices 1 and 3
+        children = view.tree.get_children()
+        self.assertEqual(len(children), 2)
+
+        # First tree item should map to playlist index 1
+        actual_index_0 = view._get_actual_index_from_tree_item(children[0])
+        self.assertEqual(actual_index_0, 1)
+
+        # Second tree item should map to playlist index 3
+        actual_index_1 = view._get_actual_index_from_tree_item(children[1])
+        self.assertEqual(actual_index_1, 3)
+
+
 if __name__ == '__main__':
     unittest.main()
