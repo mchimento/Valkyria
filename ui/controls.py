@@ -524,9 +524,12 @@ class ControlsBar(ttk.Frame):
                         if current_filepath in self.state.play_limits:
                             limit_seconds = self.state.play_limits[current_filepath]
                             if cur_s >= limit_seconds:
-                                # Time limit reached, play next track
+                                # Time limit reached, stop cleanly and play next track
                                 self.time_limit_triggered = True
-                                self._on_next()
+                                # Stop current playback to avoid decoder errors
+                                self.player.stop()
+                                # Small delay to ensure clean shutdown
+                                self.after(100, self._on_next)
 
                 # Check for crossfade trigger
                 if self.is_playing and not self.is_paused and not self.crossfade_triggered:

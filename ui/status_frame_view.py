@@ -163,13 +163,13 @@ class StatusFrameView(ctk.CTkFrame):
 
         parts = []
         if duration_s:
-            parts.append(f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}")
-        
-        # Check if there's a time limit for this track
-        if path in self.state.play_limits:
-            limit_seconds = self.state.play_limits[path]
-            parts.append(f"⏱ {int(limit_seconds)}s")
-        
+            duration_str = f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}"
+            # Check if there's a time limit for this track
+            if path in self.state.play_limits:
+                limit_seconds = self.state.play_limits[path]
+                duration_str += f" [⏱ {int(limit_seconds)}s]"
+            parts.append(duration_str)
+
         if bitrate:
             parts.append(f"{bitrate} kbps")
 
