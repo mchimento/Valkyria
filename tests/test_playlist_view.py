@@ -49,9 +49,6 @@ class TestPlaylistView(unittest.TestCase):
         self.patcher_title = patch('ui.playlist_view.get_display_title')
         self.mock_title = self.patcher_title.start()
 
-        self.patcher_bpm = patch('ui.playlist_view.get_display_bpm')
-        self.mock_bpm = self.patcher_bpm.start()
-
         self.patcher_metadata = patch('ui.playlist_view.get_metadata')
         self.mock_metadata = self.patcher_metadata.start()
 
@@ -61,7 +58,6 @@ class TestPlaylistView(unittest.TestCase):
         # Default return values
         self.mock_metadata.return_value = {}
         self.mock_title.return_value = "Unknown Title"
-        self.mock_bpm.return_value = ""
 
         from ui.playlist_view import PlaylistView
         self.PlaylistView = PlaylistView
@@ -69,7 +65,6 @@ class TestPlaylistView(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests."""
         self.patcher_title.stop()
-        self.patcher_bpm.stop()
         self.patcher_metadata.stop()
         self.patcher_extractor.stop()
 
@@ -100,12 +95,11 @@ class TestPlaylistView(unittest.TestCase):
         # Setup data
         self.mock_state.playlist = ["/path/song1.mp3", "/path/song2.mp3"]
         self.mock_title.side_effect = ["Song 1", "Song 2"]
-        self.mock_bpm.return_value = "120"
 
         # Configure the global mock for this test
         self.mock_metadata.side_effect = [
-            {"title": "Song 1", "bpm": 120},
-            {"title": "Song 2", "bpm": 120}
+            {"title": "Song 1"},
+            {"title": "Song 2"}
         ]
 
         # Call refresh
@@ -420,9 +414,6 @@ class TestPlaylistViewSearchBar(unittest.TestCase):
         self.patcher_title = patch('ui.playlist_view.get_display_title')
         self.mock_title = self.patcher_title.start()
 
-        self.patcher_bpm = patch('ui.playlist_view.get_display_bpm')
-        self.mock_bpm = self.patcher_bpm.start()
-
         self.patcher_metadata = patch('ui.playlist_view.get_metadata')
         self.mock_metadata = self.patcher_metadata.start()
 
@@ -432,7 +423,6 @@ class TestPlaylistViewSearchBar(unittest.TestCase):
         # Default return values
         self.mock_metadata.return_value = {}
         self.mock_title.return_value = "Unknown Title"
-        self.mock_bpm.return_value = ""
 
         from ui.playlist_view import PlaylistView
         self.PlaylistView = PlaylistView
@@ -440,7 +430,6 @@ class TestPlaylistViewSearchBar(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests."""
         self.patcher_title.stop()
-        self.patcher_bpm.stop()
         self.patcher_metadata.stop()
         self.patcher_extractor.stop()
 
