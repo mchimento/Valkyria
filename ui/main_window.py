@@ -136,7 +136,7 @@ class MainWindow:
             {"label": "Move Up", "command": self.move_selected_up, "accelerator": "Ctrl+Up"},
             {"label": "Move Down", "command": self.move_selected_down, "accelerator": "Ctrl+Down"},
             {"separator": True},
-            {"label": "Play After Current Song", "command": self.play_selected_after_current, "ref": "play_after_current", "accelerator": "Ctrl+Shift+A"},
+            {"label": "Play After Current Song", "command": self.play_selected_after_current, "ref": "play_after_current", "accelerator": "Ctrl+N"},
             {"separator": True},
             {"label": "Remove Selected", "command": self.remove_selected_from_playlist, "accelerator": "Delete"},
             {"label": "Clear", "command": self.clear_playlist, "accelerator": "Ctrl+C"},

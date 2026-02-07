@@ -49,5 +49,7 @@
   "waveform_played": "#FF4647",
   "waveform_unplayed": "#CCCCCC",
   "waveform_border": "#FAFAFA",
-  "disabled_fg": "#666666"
+  "disabled_fg": "#666666",
+  "entry_bg": "#FFFFFF",
+  "fg_dim": "#999999"
 }

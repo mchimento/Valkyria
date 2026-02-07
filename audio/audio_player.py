@@ -418,9 +418,6 @@ class AudioPlayer:
             frames_remaining = current_total_frames - current_frames_played
 
             if frames_remaining < fade_out_len + frames and current_total_frames > 0:
-                # We are approaching end of track or past it
-                # Logic: We might be partly into the fade out zone
-
                 # Calculate start frame relative to fade out start
                 # Fade starts at (total - fade_out_len)
                 fade_start_pos = max(0, current_total_frames - fade_out_len)
@@ -439,11 +436,6 @@ class AudioPlayer:
                     # Relative indices in outdata
                     out_start = f_start - chunk_start
                     out_end = f_end - chunk_start
-
-                    # Calculate volume 1..0
-                    # vol = 1.0 - (pos - fade_start_pos) / fade_out_len
-                    # start_vol = 1.0 - (f_start - fade_start_pos) / fade_out_len
-                    # end_vol   = 1.0 - (f_end - fade_start_pos) / fade_out_len
 
                     vol_s = 1.0 - (f_start - fade_start_pos) / fade_out_len
                     vol_e = 1.0 - (f_end - fade_start_pos) / fade_out_len
@@ -466,14 +458,8 @@ class AudioPlayer:
 
                 chunk_start = current_frames_played
                 chunk_end = current_frames_played + frames
-
-                # We are fading out starting from manual_stop_start
-
                 rel_start = chunk_start - manual_stop_start
                 rel_end = chunk_end - manual_stop_start
-
-                # Calculate volume
-                # vol = 1.0 - rel_pos / fade_out_len
 
                 vol_s = 1.0 - rel_start / fade_out_len
                 vol_e = 1.0 - rel_end / fade_out_len
@@ -493,7 +479,6 @@ class AudioPlayer:
                     else:
                         outdata[:] *= ramp
 
-        # Apply Volume
         if self._muted:
             outdata[:] = 0
         else:
@@ -622,7 +607,6 @@ class AudioPlayer:
                 pass
         except Exception as e:
             logger.debug(f"Async LUFS calculation failed for {path}: {e}")
-            # Leave overall LUFS as default (-60.0) on failure
 
     def _update_audio_metrics(self, audio_data):
         """Calculate and update LUFS, Peak dBFS, limiter activity, and energy from audio data without affecting playback."""

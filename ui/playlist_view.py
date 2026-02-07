@@ -22,20 +22,21 @@ class PlaylistView(ttk.Frame):
         self.remove_callback = remove_callback
         self.play_after_current_callback = play_after_current_callback
 
+        # Search filter
+        self._search_text = ""
+        self._filtered_indices = []  # Indices of tracks that match search
+
         # Cache for performance
         self._visible_items = []
         self._scroll_pending = False
 
-        # Track clicked item for distinguishing click vs drag
         self._clicked_item = None
-
-        # Track last highlighted index for efficient updates
         self._last_highlighted_index = None
 
         # Column resize tracking
-        self._resize_indicators = []  # List to hold multiple indicators
+        self._resize_indicators = []
         self._last_hover_region = None
-        self._is_resizing = False  # Track if column is being resized
+        self._is_resizing = False
 
         self._setup_ui()
         self._setup_bindings()
@@ -71,13 +72,61 @@ class PlaylistView(ttk.Frame):
         )
         self.header_label.pack(fill="x", padx=10, pady=(5, 15))
 
+        # Search bar container (right-aligned, fixed width)
+        self.search_frame = tk.Frame(self, bg=self.theme.palette.get("bg", "#121212"))
+        self.search_frame.pack(anchor="e", padx=10, pady=(0, 10))
+
+        # Search icon/label
+        self.search_label = tk.Label(
+            self.search_frame,
+            text="🔍",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 12),
+            fg=self.theme.palette.get("fg", "#FFFFFF"),
+            bg=self.theme.palette.get("bg", "#121212")
+        )
+        self.search_label.pack(side="left", padx=(0, 5))
+
+        # Search entry with placeholder (fixed width)
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", self._on_search_changed)
+        self.search_entry = tk.Entry(
+            self.search_frame,
+            textvariable=self.search_var,
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 11),
+            bg=self.theme.palette.get("entry_bg", "#2A2A2A"),
+            fg=self.theme.palette.get("fg_dim", "#888888"),
+            insertbackground=self.theme.palette.get("fg", "#FFFFFF"),
+            relief="flat",
+            bd=0,
+            width=25
+        )
+        self.search_entry.pack(side="left", ipady=5)
+
+        # Placeholder management
+        self._placeholder_active = True
+        self.search_entry.insert(0, "Search")
+        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
+        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
+
+        # Clear button
+        self.clear_button = tk.Label(
+            self.search_frame,
+            text="✕",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 12),
+            fg=self.theme.palette.get("fg_dim", "#888888"),
+            bg=self.theme.palette.get("bg", "#121212"),
+            cursor="hand2"
+        )
+        self.clear_button.pack(side="left", padx=(5, 0))
+        self.clear_button.bind("<Button-1>", lambda e: self._clear_search())
+
         # Main container
-        tree_frame = ttk.Frame(self)
-        tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.tree_frame = ttk.Frame(self)
+        self.tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         # Custom scrollbar (styled to be modern)
         self.scrollbar_canvas = tk.Canvas(
-            tree_frame,
+            self.tree_frame,
             width=12,
             highlightthickness=0,
             bg=self.theme.palette.get("bg", "#121212")
@@ -100,7 +149,7 @@ class PlaylistView(ttk.Frame):
         )
 
         self.tree = ttk.Treeview(
-            tree_frame,
+            self.tree_frame,
             columns=("Title", "Artist", "Album", "Duration", "BPM"),
             show="headings",  # Show column headings
             selectmode="extended",  # Allow multi-select
@@ -239,6 +288,35 @@ class PlaylistView(ttk.Frame):
             font=(self.theme.palette.get("ui_font", "Segoe UI"), self.header_label_font_size, "bold")
         )
 
+        # Update search bar components
+        if hasattr(self, 'search_frame'):
+            self.search_frame.configure(bg=self.theme.palette.get("bg", "#121212"))
+
+        if hasattr(self, 'search_label'):
+            self.search_label.configure(
+                fg=self.theme.palette.get("fg", "#FFFFFF"),
+                bg=self.theme.palette.get("bg", "#121212")
+            )
+
+        if hasattr(self, 'search_entry'):
+            # Update colors based on placeholder state
+            if self._placeholder_active:
+                fg_color = self.theme.palette.get("fg_dim", "#888888")
+            else:
+                fg_color = self.theme.palette.get("fg", "#FFFFFF")
+
+            self.search_entry.configure(
+                bg=self.theme.palette.get("entry_bg", "#2A2A2A"),
+                fg=fg_color,
+                insertbackground=self.theme.palette.get("fg", "#FFFFFF")
+            )
+
+        if hasattr(self, 'clear_button'):
+            self.clear_button.configure(
+                fg=self.theme.palette.get("fg_dim", "#888888"),
+                bg=self.theme.palette.get("bg", "#121212")
+            )
+
         self.scrollbar_canvas.configure(
             bg=self.theme.palette.get("bg", "#121212")
         )
@@ -328,9 +406,32 @@ class PlaylistView(ttk.Frame):
         # Clear tree
         self.tree.delete(*self.tree.get_children())
 
+        # Recalculate filtered indices if search is active (playlist may have been modified)
+        if self._search_text:
+            self._filtered_indices = []
+            for i, filepath in enumerate(self.state.playlist):
+                metadata = self._get_metadata(filepath)
+                title = metadata.get("title", get_display_title(filepath)).lower()
+                artist = metadata.get("artist", "").lower()
+                album = metadata.get("album", "").lower()
+
+                # Match against title, artist, or album (case-insensitive)
+                if (self._search_text in title or
+                    self._search_text in artist or
+                    self._search_text in album):
+                    self._filtered_indices.append(i)
+
+        # Determine which tracks to display based on search filter
+        if self._search_text:
+            # Apply filter - only show matching tracks
+            display_tracks = [(i, self.state.playlist[i]) for i in self._filtered_indices]
+        else:
+            # No filter - show all tracks
+            display_tracks = list(enumerate(self.state.playlist))
+
         # Batch insert for performance
         items_to_insert = []
-        for i, filepath in enumerate(self.state.playlist):
+        for display_index, (actual_index, filepath) in enumerate(display_tracks):
             # Get metadata for the file
             metadata = self._get_metadata(filepath)
             title = metadata.get("title", get_display_title(filepath))
@@ -343,18 +444,18 @@ class PlaylistView(ttk.Frame):
                 bpm = ""
 
             # Determine tags based on state
-            tags = ["odd" if i % 2 == 1 else "even"]
+            tags = ["odd" if display_index % 2 == 1 else "even"]
 
             # Playing indicator
             icon = ""
-            if self.state.current_index is not None and i == self.state.current_index:
+            if self.state.current_index is not None and actual_index == self.state.current_index:
                 icon = "▶"
                 tags.append("playing")
 
-            items_to_insert.append((i, icon, title, artist, album, duration, bpm, filepath, tags))
+            items_to_insert.append((actual_index, icon, title, artist, album, duration, bpm, filepath, tags))
 
         # Insert all at once
-        for i, icon, title, artist, album, duration, bpm, filepath, tags in items_to_insert:
+        for actual_index, icon, title, artist, album, duration, bpm, filepath, tags in items_to_insert:
             # Add padding to column values
             padded_artist = f"  {artist}"  # Add 2 spaces padding
             padded_album = f"  {album}"   # Add 2 spaces padding
@@ -363,12 +464,14 @@ class PlaylistView(ttk.Frame):
             display_bpm = get_display_bpm(bpm)
             padded_bpm = f"  {display_bpm}" if display_bpm else ""  # Add 2 spaces padding if BPM exists
 
-            self.tree.insert(
+            # Store actual index in item's tags for later retrieval
+            item_tags = tuple(tags) + (f"index_{actual_index}",)
+            item_id = self.tree.insert(
                 '',
                 tk.END,
                 text=icon,
                 values=(title, padded_artist, padded_album, padded_duration, padded_bpm),
-                tags=tuple(tags)
+                tags=item_tags
             )
 
         # Restore selection
@@ -384,8 +487,18 @@ class PlaylistView(ttk.Frame):
         # Update last highlighted index
         self._last_highlighted_index = self.state.current_index
 
-        # Hide/show tree and scrollbar based on playlist content
-        is_empty = len(self.state.playlist) == 0
+        # Hide/show search bar, tree and scrollbar based on playlist content
+        has_songs = len(self.state.playlist) > 0
+        is_empty = len(display_tracks) == 0
+
+        if has_songs:
+            # Show search bar if there are songs in the playlist
+            if not self.search_frame.winfo_ismapped():
+                self.search_frame.pack(before=self.tree_frame, anchor="e", padx=10, pady=(0, 10))
+        else:
+            # Hide search bar if playlist is empty
+            self.search_frame.pack_forget()
+
         if is_empty:
             self.tree.pack_forget()
             self.scrollbar_canvas.pack_forget()
@@ -455,20 +568,24 @@ class PlaylistView(ttk.Frame):
             else:
                 return
 
-        self.state.current_index = self.tree.index(sels[0])
+        # Get actual playlist index (not tree display index)
+        actual_index = self._get_actual_index_from_tree_item(sels[0])
+        self.state.current_index = actual_index
         self.master.event_generate("<<PlaylistDouble>>")
         self._highlight_current()
 
     def _on_selection_change(self, event):
         """Handle selection changes."""
         selections = self.tree.selection()
-        self.state.selected_indices = [self.tree.index(s) for s in selections]
+        # Store actual playlist indices, not tree display indices
+        self.state.selected_indices = [self._get_actual_index_from_tree_item(s) for s in selections]
 
         # Don't let selection change affect the playing state
         # Just update the selection tracking
         if callable(self.select_callback) and selections:
-            # Call with the first selected index for compatibility
-            self.select_callback(self.tree.index(selections[0]))
+            # Call with the first selected actual index for compatibility
+            actual_index = self._get_actual_index_from_tree_item(selections[0])
+            self.select_callback(actual_index)
 
     def _on_key_up(self, event):
         """Navigate up with arrow key."""
@@ -536,7 +653,8 @@ class PlaylistView(ttk.Frame):
             return
 
         self.tree.selection_set(item)
-        self.context_menu_index = self.tree.index(item)
+        # Get actual playlist index, not tree display index
+        self.context_menu_index = self._get_actual_index_from_tree_item(item)
         self.context_menu.show(event)
 
     def _on_context_play(self):
@@ -1063,9 +1181,73 @@ class PlaylistView(ttk.Frame):
                     tags.remove("hover")
                     self.tree.item(child, tags=tuple(tags))
 
+    def _on_search_focus_in(self, event):
+        """Handle search entry gaining focus - remove placeholder."""
+        if self._placeholder_active:
+            self.search_var.set("")
+            self.search_entry.configure(fg=self.theme.palette.get("fg", "#FFFFFF"))
+            self._placeholder_active = False
+
+    def _on_search_focus_out(self, event):
+        """Handle search entry losing focus - restore placeholder if empty."""
+        if not self.search_var.get().strip():
+            self._placeholder_active = True
+            self.search_var.set("Search")
+            self.search_entry.configure(fg=self.theme.palette.get("fg_dim", "#888888"))
+
+    def _on_search_changed(self, *args):
+        """Handle search text changes - instant filtering."""
+        # Don't filter while placeholder is active
+        if self._placeholder_active:
+            return
+
+        search_text = self.search_var.get().strip().lower()
+        self._search_text = search_text
+
+        if search_text:
+            # Filter playlist based on search text
+            self._filtered_indices = []
+            for i, filepath in enumerate(self.state.playlist):
+                metadata = self._get_metadata(filepath)
+                title = metadata.get("title", get_display_title(filepath)).lower()
+                artist = metadata.get("artist", "").lower()
+                album = metadata.get("album", "").lower()
+
+                # Match against title, artist, or album (case-insensitive)
+                if (search_text in title or
+                    search_text in artist or
+                    search_text in album):
+                    self._filtered_indices.append(i)
+        else:
+            # No search text - show all
+            self._filtered_indices = []
+
+        # Refresh display with filtered results
+        self.refresh(preserve_selection=False)
+
+    def _clear_search(self):
+        """Clear the search filter."""
+        self._placeholder_active = False
+        self.search_var.set("")
+        self.search_entry.configure(fg=self.theme.palette.get("fg", "#FFFFFF"))
+        self.search_entry.focus_set()
+
+    def _get_actual_index_from_tree_item(self, item_id):
+        """Get the actual playlist index from a tree item ID."""
+        tags = self.tree.item(item_id, "tags")
+        for tag in tags:
+            if tag.startswith("index_"):
+                return int(tag.split("_")[1])
+        # Fallback: if filtering is not active, tree index = actual index
+        return self.tree.index(item_id)
+
     def get_selected_indices(self):
-        """Return a list of indices of selected items."""
-        return [self.tree.index(item) for item in self.tree.selection()]
+        """Return a list of actual playlist indices of selected items."""
+        actual_indices = []
+        for item in self.tree.selection():
+            actual_index = self._get_actual_index_from_tree_item(item)
+            actual_indices.append(actual_index)
+        return actual_indices
 
     def clear_selection(self):
         self.tree.selection_remove(self.tree.selection())
