@@ -30,6 +30,10 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
   * [Vocal Remover](#vocal-remover)
 * [Playback Features](#playback-features)
   * [Crossfade](#crossfade)
+  * [Fade In](#fade-in)
+  * [Fade Out](#fade-out)
+  * [Silence Detection](#silence-detection)
+  * [Play After Current Song](#play-after-current-song)
   * [Play on Double-Click](#play-on-double-click)
 * [Themes](#themes)
 * [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -554,6 +558,118 @@ When crossfade is enabled:
 
 Crossfade respects repeat mode settings. In "Repeat One" mode, the track will crossfade into itself.
 
+### Fade In
+
+Gradually increase volume from silence at the beginning of each track, creating a smooth entry and reducing jarring starts.
+
+#### Settings
+
+* **Enable/Disable**: Toggle fade in on/off
+* **Duration**: Set fade in length from 0 to 10 seconds (default: 3 seconds)
+
+#### How It Works
+
+When fade in is enabled, each track starts at zero volume and gradually increases to full volume over the specified duration. This creates a gentle, professional-sounding introduction to every track.
+
+#### Usage Tips
+
+* **Typical Settings**: 3-4 seconds provides a smooth start without feeling sluggish
+* **Quick Fade**: 1-2 seconds for minimal fade while still avoiding abrupt starts
+* **Dramatic Entrance**: 5-8 seconds for ambient, classical, or cinematic tracks
+* **Disable for Live Albums**: Fade in may affect the natural flow of live recordings
+* **Session Only**: Fade in settings are cached during your session but not automatically saved to disk. Use the "Save" button in Playback Features to persist changes.
+
+### Fade Out
+
+Gradually decrease volume to silence at the end of each track, creating a smooth exit and preventing abrupt endings.
+
+#### Settings
+
+* **Enable/Disable**: Toggle fade out on/off
+* **Duration**: Set fade out length from 0 to 10 seconds (default: 3 seconds)
+
+#### How It Works
+
+When fade out is enabled, the track begins fading out when it reaches the point where [Duration] seconds remain. The volume gradually decreases to silence, creating a gentle conclusion.
+
+#### Usage Tips
+
+* **Typical Settings**: 3-4 seconds works well for most music
+* **Quick Fade**: 1-2 seconds for subtle endings
+* **Extended Fade**: 5-8 seconds for tracks with long natural outros or ambient music
+* **Combine with Crossfade**: Fade out works independently of crossfade. You can use both together for maximum smoothness
+* **Session Only**: Fade out settings are cached during your session but not automatically saved to disk. Use the "Save" button in Playback Features to persist changes.
+
+#### Fade In/Out vs. Crossfade
+
+| Feature | Fade In | Fade Out | Crossfade |
+|---------|---------|----------|-----------|
+| **Applies To** | Track start | Track end | Track transitions |
+| **Behavior** | Silence → Full volume | Full volume → Silence | Overlapping tracks |
+| **Use Case** | Smooth track entry | Smooth track exit | Seamless transitions |
+| **Can Combine** | Yes | Yes | Yes |
+
+### Silence Detection
+
+Automatically skips to the next track when the current track ends with prolonged silence, preventing dead air in your listening experience.
+
+#### Settings
+
+* **Enable/Disable**: Toggle silence detection on/off
+* **Threshold**: -50 dBFS (fixed)
+* **Duration**: 3 seconds (fixed)
+
+#### How It Works
+
+When silence detection is enabled, Tango Studio continuously monitors the audio level during playback. If the audio level stays below -50 dBFS (essentially silence) for 3 consecutive seconds, the player automatically advances to the next track.
+
+#### Technical Details
+
+* **Detection Method**: RMS-based audio level analysis
+* **Threshold**: -50 dBFS (approximately 0.3% of full scale amplitude)
+* **Duration**: 3 seconds of continuous silence required before triggering
+* **Reset**: Silence counter resets whenever audio rises above the threshold
+* **Thread Safe**: Detection runs in the audio callback without blocking playback
+
+#### Usage Tips
+
+* **Always Active**: Once enabled, silence detection works on all tracks automatically
+* **No False Triggers**: The 3-second duration prevents skipping during musical pauses or quiet passages
+* **Respects Repeat Mode**: Works correctly with "Repeat One" and "Repeat All" modes
+* **Independent of Volume**: Detection measures source audio level, not playback volume
+* **Session Only**: Silence detection setting is cached during your session but not automatically saved to disk. Use the "Save" button in Playback Features to persist changes.
+
+#### Limitations
+
+* **Very Quiet Tracks**: Extremely quiet ambient or noise tracks below -50 dBFS may trigger premature skipping
+* **Intentional Silence**: Tracks with artistic silence (e.g., John Cage's "4'33"") will be skipped
+* **Live Recordings**: Applause or crowd noise usually prevents false triggers, but very quiet venue recordings may be affected
+
+### Play After Current Song
+
+Move selected tracks to play immediately after the currently playing song, allowing you to queue up tracks without disrupting your playlist order.
+
+#### Access Methods
+
+* **Playback Menu**: **Playback → Operations → Play After Current Song** (Ctrl+Shift+A)
+* **Context Menu**: Right-click any track in the playlist and select "Play After Current Song"
+
+#### How It Works
+
+When you select one or more tracks and use "Play After Current Song":
+
+1. The selected tracks are removed from their current positions
+2. They are inserted immediately after the currently playing track
+3. The current track continues playing uninterrupted
+4. The selected tracks will play next, in their original relative order
+5. The remaining playlist order is preserved
+
+#### Behavior Details
+
+* **Multiple Selection**: Select multiple tracks to queue them all in sequence
+* **Order Preservation**: Selected tracks maintain their relative order when moved
+* **Current Track Ignored**: If the currently playing track is in your selection, it's ignored (can't place after itself)
+
 ### Play on Double-Click
 
 Controls the behavior when double-clicking a song in the playlist.
@@ -663,6 +779,7 @@ Master these shortcuts for efficient navigation and control:
 * **Ctrl+R**: Sort by Artist
 * **Ctrl+Up**: Move Selected Up
 * **Ctrl+Down**: Move Selected Down
+* **Ctrl+Shift+A**: Play After Current Song
 * **Delete**: Remove Selected
 * **Ctrl+C**: Clear Playlist
 * **Ctrl+I**: Track Information
@@ -677,6 +794,8 @@ Master these shortcuts for efficient navigation and control:
 ### Other
 
 * **Ctrl+P**: Preferences
+* **F7**: Audio Effects and Filters
+* **F8**: Playback Features
 * **F1**: About
 * **Alt+F4**: Quit
 

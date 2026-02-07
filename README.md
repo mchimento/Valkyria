@@ -5,6 +5,8 @@ local audio files.
 
 ## Features
 
+Tango Studio features include:
+
 -   Play audio files (MP3, WAV, FLAC, OGG, M4A).
 -   Load single files, multiple files, or playlists (M3U / M3U8).
 -   Browse folders to add multiple songs in the playback list.
@@ -13,6 +15,8 @@ local audio files.
 -   Metadata display and editing.
 -   Metadata album images booklet
 -   Save playlists (Save / Save As).
+
+For the full list of the available features please refer to the user guide documentation (link below).
 
 ## Supported Formats
 
