@@ -67,7 +67,8 @@ class MainWindow:
 
         # Initialize mini player (hidden by default)
         self.mini_player = None
-        self._mini_player_enabled = True  # Can be toggled in preferences
+        # Respect persisted preference (default: enabled)
+        self._mini_player_enabled = getattr(self.settings, 'mini_player_enabled', True)
         self._is_minimized = False
         self._last_window_state = None
 
@@ -740,6 +741,8 @@ class MainWindow:
             self.theme.reload()
             # Update main window and all child components
             self.update_theme_colors()
+            # Update mini player enabled flag from settings
+            self._mini_player_enabled = getattr(self.settings, 'mini_player_enabled', True)
             # Update playlist and browser themes
             self.playlist_view.update_theme()
             self.browser_view.update_theme()

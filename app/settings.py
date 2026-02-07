@@ -22,6 +22,9 @@ class Settings:
         # BPM preference: 'perceived' maps tempo into 50-100, 'raw' returns detected tempo
         self.bpm_mode: str = 'raw'
 
+        # Mini player (enabled by default)
+        self.mini_player_enabled: bool = True
+
         # Fade settings
         self.fade_in_enabled: bool = False
         self.fade_in_duration: int = 3
@@ -52,6 +55,7 @@ class Settings:
                 self.show_browser = data.get("show_browser", self.show_browser)
                 self.show_dj = data.get("show_dj", self.show_dj)
                 self.bpm_mode = data.get("bpm_mode", self.bpm_mode)
+                self.mini_player_enabled = data.get("mini_player_enabled", self.mini_player_enabled)
 
                 self.fade_in_enabled = data.get("fade_in_enabled", self.fade_in_enabled)
                 self.fade_in_duration = data.get("fade_in_duration", self.fade_in_duration)
@@ -74,6 +78,7 @@ class Settings:
                 "show_browser": self.show_browser,
                 "show_dj": self.show_dj,
                 "bpm_mode": self.bpm_mode,
+                "mini_player_enabled": self.mini_player_enabled,
                 "fade_in_enabled": self.fade_in_enabled,
                 "fade_in_duration": self.fade_in_duration,
                 "fade_out_enabled": self.fade_out_enabled,

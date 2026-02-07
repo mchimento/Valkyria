@@ -86,6 +86,50 @@ class PreferencesWindow(tk.Toplevel):
                                        variable=self.var, command=self._preview_theme)
         self.rb_dark.pack(anchor='w', pady=2)
 
+        # Mini Player toggle
+        ttk.Label(content_frame, text="Mini Player",
+                font=(self.palette.get("ui_font", "Segoe UI"), 10, "bold")).pack(anchor='w', pady=(10, 10))
+
+        # Use CTkFrame for the row to hold switch and status label
+        self.mini_player_row = ctk.CTkFrame(content_frame, fg_color="transparent")
+        self.mini_player_row.pack(fill='x', pady=(0, 10))
+
+        self.mini_player_var = tk.BooleanVar(value=getattr(self.settings, 'mini_player_enabled', True))
+
+        self.mini_player_switch = ctk.CTkSwitch(
+            self.mini_player_row,
+            text="Mini player view:",
+            variable=self.mini_player_var,
+            command=self._on_mini_player_toggle,
+            progress_color=self.palette.get("accent", "#0078d4"),
+            text_color=self.palette.get("fg", "#000000"),
+            fg_color=self.palette.get("switch_bg", "#939393"),
+            button_color=self.palette.get("accent", "#ffffff"),
+            button_hover_color=self.palette.get("accent_hover", "#106ebe"),
+            bg_color="transparent"
+        )
+        self.mini_player_switch.pack(side='left')
+
+        self.mini_player_status_label = ctk.CTkLabel(
+            self.mini_player_row,
+            text="Enabled" if self.mini_player_var.get() else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if self.mini_player_var.get() else self.palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color="transparent"
+        )
+        self.mini_player_status_label.pack(side='left', padx=(10, 0))
+
+    def _on_mini_player_toggle(self):
+        """Update the mini player status label when toggled."""
+        if not hasattr(self, 'mini_player_status_label'):
+            return
+
+        is_enabled = self.mini_player_var.get()
+        text = "Enabled" if is_enabled else "Disabled"
+        text_color = self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080")
+
+        self.mini_player_status_label.configure(text=text, text_color=text_color)
+
     def _create_audio_section(self):
         audio_frame = ttk.Frame(self.notebook)
         self.notebook.add(audio_frame, text="Audio")
@@ -248,11 +292,32 @@ class PreferencesWindow(tk.Toplevel):
 
         # Recursive restyle for all widgets
         def restyle(widget):
+            # Skip buttons as they are handled separately
             if isinstance(widget, (tk.Button, ctk.CTkButton)):
-                return  # buttons handled separately
+                return
+
+            # Handle CustomTkinter widgets
+            if isinstance(widget, ctk.CTkBaseClass):
+                # Apply background color
+                widget.configure(bg_color=bg)
+
+                # Apply text color to widgets that have text
+                if isinstance(widget, (ctk.CTkLabel, ctk.CTkCheckBox, ctk.CTkSwitch, ctk.CTkRadioButton)):
+                    # Exclude the mini player status label from generic recoloring
+                    if getattr(self, 'mini_player_status_label', None) and widget == self.mini_player_status_label:
+                        pass
+                    else:
+                        widget.configure(text_color=fg)
+
+                # Recurse for children
+                for child in widget.winfo_children():
+                    restyle(child)
+                return
+
+            # Handle Standard Tkinter Widgets
             if isinstance(widget, tk.Frame):
                 widget.configure(bg=bg)
-            if isinstance(widget, ttk.Notebook):
+            elif isinstance(widget, ttk.Notebook):
                 widget.configure(style="Prefs.TNotebook")
             elif isinstance(widget, (ttk.Frame, ttk.LabelFrame)):
                 widget.configure(style="Prefs.TFrame")
@@ -274,9 +339,35 @@ class PreferencesWindow(tk.Toplevel):
 
         restyle(self)
 
+        # Restore component-specific state (like status labels) after restyle cleanup
+        if hasattr(self, 'mini_player_status_label'):
+            self._on_mini_player_toggle()
+
         # Update buttons
         self._apply_button_theme()
+
+        # Update switches
+        self._apply_switch_theme()
+
         self.update_idletasks()
+
+    def _apply_switch_theme(self):
+        """Apply theme colors to switch widgets."""
+        if not hasattr(self, 'mini_player_switch'):
+            return
+
+        palette = self.theme_manager.palette
+        progress_color = palette.get("accent", "#0078d4")
+        fg_color = palette.get("switch_bg", "#939393")
+        button_color = palette.get("accent", "#ffffff")
+        button_hover_color = palette.get("accent_hover", "#106ebe")
+
+        self.mini_player_switch.configure(
+            progress_color=progress_color,
+            fg_color=fg_color,
+            button_color=button_color,
+            button_hover_color=button_hover_color
+        )
 
     def _apply_button_theme(self):
         palette = self.theme_manager.palette
@@ -291,7 +382,6 @@ class PreferencesWindow(tk.Toplevel):
             btn.configure(fg_color=btn_bg, text_color=btn_fg,
                          hover_color=btn_hover, bg_color=bg)
 
-
     def _save(self):
         new_theme = self.var.get()
         new_bpm_mode = self.bpm_var.get()
@@ -301,6 +391,8 @@ class PreferencesWindow(tk.Toplevel):
 
         self.settings.theme = new_theme
         self.settings.bpm_mode = new_bpm_mode
+        # Persist mini player toggle
+        self.settings.mini_player_enabled = getattr(self, 'mini_player_var', tk.BooleanVar(value=True)).get()
         self.settings.save()
 
         # Update global BPM preference
