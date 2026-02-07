@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 import tkinter as tk
 import os
+from pathlib import Path
 import numpy as np
 from audio.audio_effects import AudioEffects
 
@@ -326,6 +327,197 @@ class TestAudioEffectsWindow(unittest.TestCase):
         window._on_channel_mode_change(test_mode)
 
         mock_player.set_channel_mode.assert_called_with(test_mode)
+
+        window.destroy()
+
+
+@unittest.skipUnless(HAS_DISPLAY, "Requires display for Tkinter")
+class TestPlaybackFeaturesView(unittest.TestCase):
+    """Unit tests for PlaybackFeaturesView (Fade In/Out, Crossfade)."""
+
+    def setUp(self):
+        try:
+            self.root = tk.Tk()
+            self.root.withdraw()
+        except Exception:
+            self.skipTest("Tkinter not available in this environment")
+
+    def tearDown(self):
+        try:
+            self.root.destroy()
+        except:
+            pass
+
+    def _create_mock_player(self):
+        mock_player = Mock()
+        # Fade attributes (Runtime state)
+        mock_player.fade_in_enabled = False
+        mock_player.fade_in_duration = 2
+        mock_player.fade_out_enabled = False
+        mock_player.fade_out_duration = 2
+
+        # Fade setters
+        mock_player.set_fade_in_enabled = Mock()
+        mock_player.set_fade_in_duration = Mock()
+        mock_player.set_fade_out_enabled = Mock()
+        mock_player.set_fade_out_duration = Mock()
+        return mock_player
+
+    def _create_mock_theme(self):
+        mock_theme = Mock()
+        mock_theme.palette = {
+            'bg': '#ffffff', 'fg': '#000000',
+            'accent': '#0078d4', 'accent_hover': '#106ebe',
+            'section_bg': '#f0f0f0', 'section_border': '#e0e0e0',
+            'switch_bg': '#939393', 'block_fg': '#ffffff'
+        }
+        return mock_theme
+
+    def _create_mock_state(self):
+        mock_state = Mock()
+        mock_state.play_on_double = False
+        mock_state.crossfade_enabled = False
+        mock_state.crossfade_duration = 5
+        return mock_state
+
+    def _create_mock_settings(self):
+        mock_settings = Mock()
+        # Disk settings
+        mock_settings.fade_in_enabled = False
+        mock_settings.fade_in_duration = 2
+        mock_settings.fade_out_enabled = False
+        mock_settings.fade_out_duration = 2
+        mock_settings.crossfade_enabled = False
+        mock_settings.crossfade_duration = 5
+        mock_settings.save = Mock()
+        return mock_settings
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_fade_in_updates_player_immediately(self, mock_center, mock_path):
+        """Test that toggling fade in updates the player immediately (session cache)."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # Test enabling Fade In
+        window.fade_in_enabled_var.set(True)
+        window._on_fade_in_toggle()
+
+        player.set_fade_in_enabled.assert_called_with(True)
+        # Verify settings were NOT updated (no auto-save)
+        self.assertFalse(settings.fade_in_enabled, "Settings should not be updated before Save")
+
+        # Test duration change
+        window.fade_in_duration_var.set(5.0)
+        window._on_fade_in_change(5.0)
+
+        player.set_fade_in_duration.assert_called_with(5)
+        self.assertEqual(settings.fade_in_duration, 2, "Settings should not be updated before Save")
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_fade_out_updates_player_immediately(self, mock_center, mock_path):
+        """Test that toggling fade out updates the player immediately."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # Test enabling Fade Out
+        window.fade_out_enabled_var.set(True)
+        window._on_fade_out_toggle()
+
+        player.set_fade_out_enabled.assert_called_with(True)
+
+        # Test duration change
+        window.fade_out_duration_var.set(4.0)
+        window._on_fade_out_change(4.0)
+
+        player.set_fade_out_duration.assert_called_with(4)
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_save_persists_settings(self, mock_center, mock_path):
+        """Test that clicking Save persists values to Settings and calls save()."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # Change values in UI
+        window.fade_in_enabled_var.set(True)
+        window.fade_in_duration_var.set(8.0)
+        window.fade_out_enabled_var.set(True)
+        window.fade_out_duration_var.set(7.0)
+
+        # Settings should still be defaults
+        self.assertEqual(settings.fade_in_duration, 2)
+
+        # Trigger Save
+        # Mock _write_config_file to avoid file I/O
+        with patch.object(window, '_write_config_file', return_value=True):
+            window._save_features_config()
+
+        # Verify Settings updated
+        self.assertTrue(settings.fade_in_enabled)
+        self.assertEqual(settings.fade_in_duration, 8)
+        self.assertTrue(settings.fade_out_enabled)
+        self.assertEqual(settings.fade_out_duration, 7)
+
+        # Verify save called
+        settings.save.assert_called_once()
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_initialization_uses_session_cache(self, mock_center, mock_path):
+        """Test that window initializes from Player (session) if available."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        # Setup session state (Player) different from disk settings
+        player.fade_in_enabled = True
+        player.fade_in_duration = 9
+
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        # Disk settings are default (False, 2) from _create_mock_settings
+
+        theme = self._create_mock_theme()
+
+        with patch.object(PlaybackFeaturesView, '_load_config', return_value={}):
+             window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # UI should reflect Player state (Session), not Settings (Disk)
+        self.assertTrue(window.fade_in_enabled_var.get())
+        self.assertEqual(window.fade_in_duration_var.get(), 9.0)
 
         window.destroy()
 
