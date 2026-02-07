@@ -21,17 +21,18 @@ class TangoStudioApp:
         self.settings = Settings()
         self.theme = ThemeManager(self.settings)
         self.player = AudioPlayer(on_track_end=self._on_track_end)
-        
+
         # Initialize fade settings
         self.player.set_fade_in_enabled(self.settings.fade_in_enabled)
         self.player.set_fade_in_duration(self.settings.fade_in_duration)
         self.player.set_fade_out_enabled(self.settings.fade_out_enabled)
         self.player.set_fade_out_duration(self.settings.fade_out_duration)
-        
+
         # Initialize playback state from settings
         self.state.crossfade_enabled = getattr(self.settings, "crossfade_enabled", False)
         self.state.crossfade_duration = getattr(self.settings, "crossfade_duration", 5)
-        
+        self.state.silence_detection_enabled = getattr(self.settings, "silence_detection_enabled", False)
+
         self.window = MainWindow(self.state, self.theme, self.player, self.settings)
 
         # Configure metadata module BPM preference from settings

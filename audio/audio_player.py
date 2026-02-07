@@ -224,7 +224,14 @@ class AudioPlayer:
         self.fade_in_duration = 3
         self.fade_out_enabled = False
         self.fade_out_duration = 3
-        
+
+        # Silence detection
+        self.silence_detection_enabled = False
+        self._silence_threshold = -50.0  # dB
+        self._silence_duration = 3.0  # seconds
+        self._silence_frames_count = 0
+        self._silence_detected = False
+
         self._fade_in_frames = 0
         self._fade_out_frames = 0
         self._frames_played = 0
@@ -288,6 +295,11 @@ class AudioPlayer:
         frames_to_read = frames
 
         with self._lock:
+            # Check for silence-triggered stop first
+            if self._silence_detected:
+                outdata[:] = 0
+                raise sd.CallbackStop
+
             if not self._buffer:
                 outdata[:] = 0
                 raise sd.CallbackStop
@@ -357,7 +369,7 @@ class AudioPlayer:
 
         # Apply Audio Effects (use outdata as the source for processing)
         outdata[:] = self.effects.process(outdata)
-        
+
         # Apply fade in/out logic
         # Copy values locally to minimize locking
         current_frames_played = 0
@@ -368,7 +380,7 @@ class AudioPlayer:
         do_fade_out = False
         is_manual_stopping = False
         manual_stop_start = 0
-        
+
         with self._lock:
             current_frames_played = self._frames_played
             current_total_frames = self._total_frames
@@ -378,7 +390,7 @@ class AudioPlayer:
             fade_out_len = self._fade_out_frames
             is_manual_stopping = self._is_stopping
             manual_stop_start = self._stopping_start_frame
-            
+
             # Update position for next callback
             self._frames_played += frames
 
@@ -388,59 +400,59 @@ class AudioPlayer:
             start_idx = current_frames_played
             end_idx = min(current_frames_played + frames, fade_in_len)
             length = end_idx - start_idx
-            
+
             if length > 0:
                 # Generate linear ramp 0..1
                 # The segment corresponds to [start_idx, end_idx)
                 ramp = np.linspace(start_idx / fade_in_len, end_idx / fade_in_len, length, dtype='float32')
-                
+
                 # Apply to first 'length' frames
                 if outdata.ndim == 2:
                     outdata[:length] *= ramp[:, np.newaxis]
                 else:
                     outdata[:length] *= ramp
-        
+
         # Apply Fade Out
         if do_fade_out and fade_out_len > 0:
             # 1. Natural end of track fade out
             frames_remaining = current_total_frames - current_frames_played
-            
+
             if frames_remaining < fade_out_len + frames and current_total_frames > 0:
                 # We are approaching end of track or past it
                 # Logic: We might be partly into the fade out zone
-                
+
                 # Calculate start frame relative to fade out start
                 # Fade starts at (total - fade_out_len)
                 fade_start_pos = max(0, current_total_frames - fade_out_len)
-                
+
                 # Current chunk start/end absolute positions
                 chunk_start = current_frames_played
                 chunk_end = current_frames_played + frames
-                
+
                 # Intersect chunk with fade region [fade_start_pos, total_frames]
                 # We only fade the part that is >= fade_start_pos
-                
+
                 f_start = max(chunk_start, fade_start_pos)
                 f_end = min(chunk_end, current_total_frames + fade_out_len) # Allow fading slightly past end if needed or clamp
-                
+
                 if f_end > f_start:
                     # Relative indices in outdata
                     out_start = f_start - chunk_start
                     out_end = f_end - chunk_start
-                    
+
                     # Calculate volume 1..0
                     # vol = 1.0 - (pos - fade_start_pos) / fade_out_len
                     # start_vol = 1.0 - (f_start - fade_start_pos) / fade_out_len
                     # end_vol   = 1.0 - (f_end - fade_start_pos) / fade_out_len
-                    
+
                     vol_s = 1.0 - (f_start - fade_start_pos) / fade_out_len
                     vol_e = 1.0 - (f_end - fade_start_pos) / fade_out_len
-                    
+
                     vol_s = max(0.0, min(1.0, vol_s))
                     vol_e = max(0.0, min(1.0, vol_e))
-                    
+
                     ramp = np.linspace(vol_s, vol_e, f_end - f_start, dtype='float32')
-                    
+
                     if outdata.ndim == 2:
                         outdata[out_start:out_end] *= ramp[:, np.newaxis]
                     else:
@@ -451,25 +463,25 @@ class AudioPlayer:
                 # Fade out from manual_stop_start over fade_out_len
                 # frames_played has progressed since manual_stop_start
                 # The manual stop creates a virtual "zero point" at manual_stop_start + fade_out_len
-                
+
                 chunk_start = current_frames_played
                 chunk_end = current_frames_played + frames
-                
+
                 # We are fading out starting from manual_stop_start
-                
+
                 rel_start = chunk_start - manual_stop_start
                 rel_end = chunk_end - manual_stop_start
-                
+
                 # Calculate volume
                 # vol = 1.0 - rel_pos / fade_out_len
-                
+
                 vol_s = 1.0 - rel_start / fade_out_len
                 vol_e = 1.0 - rel_end / fade_out_len
-                
+
                 # Clamp
                 vol_s = max(0.0, min(1.0, vol_s))
                 vol_e = max(0.0, min(1.0, vol_e))
-                
+
                 # Only apply if we have something to fade
                 # If vol_s and vol_e are both 0, we can just zero out
                 if vol_s <= 0 and vol_e <= 0:
@@ -488,6 +500,28 @@ class AudioPlayer:
             # Normalize 0-100 to 0.0-1.0
             vol = self._volume / 100.0
             outdata[:] *= vol
+
+        # Silence Detection (needs to access buffer samplerate safely)
+        with self._lock:
+            if self.silence_detection_enabled and not self._silence_detected and self._buffer:
+                # Calculate RMS level in dB
+                rms = np.sqrt(np.mean(outdata ** 2))
+                level_db = 20 * np.log10(rms + 1e-10)  # Add small value to avoid log(0)
+
+                if level_db < self._silence_threshold:
+                    # Silence detected, increment counter
+                    self._silence_frames_count += frames
+                    # Get samplerate from buffer
+                    sr = self._buffer.samplerate
+                    silence_duration = self._silence_frames_count / sr
+
+                    # If silence exceeds threshold duration, mark for stop
+                    if silence_duration >= self._silence_duration:
+                        self._silence_detected = True
+                        # Don't call on_track_end here - let it happen naturally via CallbackStop
+                else:
+                    # Audio detected, reset silence counter
+                    self._silence_frames_count = 0
 
         # Calculate audio metrics if callback is registered
         self._update_audio_metrics(outdata)
@@ -734,13 +768,17 @@ class AudioPlayer:
                 self._stopped_manually = False
                 self._is_stopping = False
                 self._stopping_start_frame = 0
-                
+
                 # Setup fade frames based on samplerate
                 sr = self._buffer.samplerate
                 self._fade_in_frames = int(self.fade_in_duration * sr)
                 self._fade_out_frames = int(self.fade_out_duration * sr)
                 self._frames_played = 0
-                
+
+                # Reset silence detection for new track
+                self._silence_frames_count = 0
+                self._silence_detected = False
+
                 # Try to get total frames for natural fade out
                 try:
                     self._total_frames = self._buffer.file.frames
@@ -899,7 +937,7 @@ class AudioPlayer:
                 self._is_stopping = True
                 self._stopping_start_frame = self._frames_played
                 return float(self.fade_out_duration)
-            
+
             return 0.0
     def set_volume(self, val):
         """

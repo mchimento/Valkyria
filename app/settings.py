@@ -28,6 +28,9 @@ class Settings:
         self.fade_out_enabled: bool = False
         self.fade_out_duration: int = 3
 
+        # Silence detection
+        self.silence_detection_enabled: bool = False
+
         self.load()
 
     @property
@@ -54,6 +57,7 @@ class Settings:
                 self.fade_in_duration = data.get("fade_in_duration", self.fade_in_duration)
                 self.fade_out_enabled = data.get("fade_out_enabled", self.fade_out_enabled)
                 self.fade_out_duration = data.get("fade_out_duration", self.fade_out_duration)
+                self.silence_detection_enabled = data.get("silence_detection_enabled", self.silence_detection_enabled)
 
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
@@ -73,7 +77,8 @@ class Settings:
                 "fade_in_enabled": self.fade_in_enabled,
                 "fade_in_duration": self.fade_in_duration,
                 "fade_out_enabled": self.fade_out_enabled,
-                "fade_out_duration": self.fade_out_duration
+                "fade_out_duration": self.fade_out_duration,
+                "silence_detection_enabled": self.silence_detection_enabled
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)

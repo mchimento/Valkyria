@@ -22,6 +22,7 @@ class PlaybackFeaturesView(tk.Toplevel):
         play_on_double_default = getattr(self.app_state, "play_on_double", False)
         crossfade_enabled_default = getattr(self.app_state, "crossfade_enabled", False)
         crossfade_duration_default = int(getattr(self.app_state, "crossfade_duration", 5))
+        silence_detection_default = getattr(self.app_state, "silence_detection_enabled", False)
 
         # Load Fade Defaults
         fade_in_enabled_default = self._get_bool_config_value(
@@ -47,7 +48,7 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.app_state.play_on_double = play_on_double_default
 
         self.title("Playback Features")
-        self.geometry("400x420")
+        self.geometry("400x480")
         self.resizable(False, False)
         self.transient(master)
         self.withdraw()
@@ -199,12 +200,16 @@ class PlaybackFeaturesView(tk.Toplevel):
         self._on_fade_in_toggle()
         self._on_fade_out_toggle()
 
-        # --- Crossfade section ---
-        self.crossfade_section = ctk.CTkFrame(self.main_frame, fg_color=self.palette.get("section_bg", self.palette.get("bg", "#ffffff")), corner_radius=6, border_width=1, border_color=self.palette.get("section_border", "#e0e0e0"))
-        self.crossfade_section.pack(fill='x', pady=(0, 10))
+        # --- Advance section ---
+        self.advance_section = ctk.CTkFrame(self.main_frame, fg_color=self.palette.get("section_bg", self.palette.get("bg", "#ffffff")), corner_radius=6, border_width=1, border_color=self.palette.get("section_border", "#e0e0e0"))
+        self.advance_section.pack(fill='x', pady=(0, 10))
 
-        self.cf_row = ctk.CTkFrame(self.crossfade_section, fg_color="transparent")
-        self.cf_row.pack(fill='x', padx=12, pady=(8, 4))
+        self.adv_title = ctk.CTkLabel(self.advance_section, text="Advance", font=section_font, text_color=self.palette.get("header_fg", self.palette.get("fg", "#000000")))
+        self.adv_title.pack(anchor='w', padx=12, pady=(8, 4))
+
+        # Crossfade row
+        self.cf_row = ctk.CTkFrame(self.advance_section, fg_color="transparent")
+        self.cf_row.pack(fill='x', padx=12, pady=(0, 4))
 
         self.crossfade_enabled_var = tk.BooleanVar(value=crossfade_enabled_default)
 
@@ -216,7 +221,6 @@ class PlaybackFeaturesView(tk.Toplevel):
             progress_color=self.palette.get("accent", "#0078d4"),
             text_color=self.palette.get("fg", "#000000"),
             bg_color=self.palette.get("bg", "#ffffff"),
-            font=section_font,
             button_color=self.palette.get("accent", "#ffffff"),
             button_hover_color=self.palette.get("button_hover", "#106ebe"),
             width=80
@@ -233,8 +237,8 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.crossfade_status_label.pack(side='left', padx=(10, 0))
 
         self.crossfade_duration_var = tk.DoubleVar(value=float(crossfade_duration_default))
-        self.cf_slider_frame = ctk.CTkFrame(self.crossfade_section, fg_color="transparent")
-        self.cf_slider_frame.pack(fill='x', padx=12, pady=(6, 12))
+        self.cf_slider_frame = ctk.CTkFrame(self.advance_section, fg_color="transparent")
+        self.cf_slider_frame.pack(fill='x', padx=12, pady=(6, 6))
 
         duration_label = ctk.CTkLabel(self.cf_slider_frame, text="Duration", text_color=self.palette.get("fg", "#000000"))
         duration_label.pack(side='left')
@@ -267,6 +271,35 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.slider_duration.pack(fill='x', expand=True)
 
         self._toggle_crossfade_slider()
+
+        # Silence Detection row
+        self.silence_row = ctk.CTkFrame(self.advance_section, fg_color="transparent")
+        self.silence_row.pack(fill='x', padx=12, pady=(6, 12))
+
+        self.silence_detection_var = tk.BooleanVar(value=silence_detection_default)
+
+        self.silence_switch = ctk.CTkSwitch(
+            self.silence_row,
+            text="Silence Detection:",
+            variable=self.silence_detection_var,
+            command=self._on_silence_detection_toggle,
+            progress_color=self.palette.get("accent", "#0078d4"),
+            text_color=self.palette.get("fg", "#000000"),
+            bg_color=self.palette.get("bg", "#ffffff"),
+            button_color=self.palette.get("accent", "#ffffff"),
+            button_hover_color=self.palette.get("button_hover", "#106ebe"),
+            width=80
+        )
+        self.silence_switch.pack(side='left')
+
+        self.silence_status_label = ctk.CTkLabel(
+            self.silence_row,
+            text="Enabled" if self.silence_detection_var.get() else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if self.silence_detection_var.get() else self.palette.get("fg", "#808080"),
+            font=("Segoe UI", 11, "bold"),
+            bg_color=self.palette.get("bg", "#ffffff")
+        )
+        self.silence_status_label.pack(side='left', padx=(10, 0))
 
         # Action buttons (fixed in an Actions section)
         self.actions_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -375,6 +408,22 @@ class PlaybackFeaturesView(tk.Toplevel):
         if self.app_state:
             self.app_state.crossfade_duration = duration
 
+    def _on_silence_detection_toggle(self):
+        """Handle silence detection toggle."""
+        enabled = self.silence_detection_var.get()
+        # Update session state immediately
+        if self.app_state:
+            self.app_state.silence_detection_enabled = enabled
+
+        # Update status label
+        self.silence_status_label.configure(
+            text="Enabled" if enabled else "Disabled",
+            text_color=self.palette.get("accent", "#0078d4") if enabled else self.palette.get("fg", "#808080")
+        )
+
+        # Update player if available
+        if self.player:
+            self.player.silence_detection_enabled = enabled
 
     def _on_fade_in_toggle(self):
         enabled = self.fade_in_enabled_var.get()
@@ -420,6 +469,7 @@ class PlaybackFeaturesView(tk.Toplevel):
             "play_on_double": self.play_on_double_var.get(),
             "crossfade_enabled": self.crossfade_enabled_var.get(),
             "crossfade_duration": int(self.crossfade_duration_var.get()),
+            "silence_detection_enabled": self.silence_detection_var.get(),
             "fade_in_enabled": self.fade_in_enabled_var.get(),
             "fade_in_duration": int(self.fade_in_duration_var.get()),
             "fade_out_enabled": self.fade_out_enabled_var.get(),
@@ -431,6 +481,7 @@ class PlaybackFeaturesView(tk.Toplevel):
             self.settings.play_on_double = data["play_on_double"]
             self.settings.crossfade_enabled = data["crossfade_enabled"]
             self.settings.crossfade_duration = data["crossfade_duration"]
+            self.settings.silence_detection_enabled = data["silence_detection_enabled"]
             self.settings.fade_in_enabled = data["fade_in_enabled"]
             self.settings.fade_in_duration = data["fade_in_duration"]
             self.settings.fade_out_enabled = data["fade_out_enabled"]
@@ -538,6 +589,24 @@ class PlaybackFeaturesView(tk.Toplevel):
                 bg_color=bg
             )
 
+        # Update silence detection switch colors
+        if hasattr(self, 'silence_switch'):
+            self.silence_switch.configure(
+                progress_color=self.palette.get("accent", "#0078d4"),
+                text_color=fg,
+                bg_color=bg,
+                button_color=self.palette.get("accent", "#ffffff"),
+                button_hover_color=self.palette.get("button_hover", "#106ebe")
+            )
+
+        # Update silence detection status label colors
+        if hasattr(self, 'silence_status_label'):
+            is_enabled = self.silence_detection_var.get()
+            self.silence_status_label.configure(
+                text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
         # Update crossfade slider colors
         if hasattr(self, 'slider_duration'):
             slider_bg = self.palette.get("slider_bg", "#4a4a4a")
@@ -582,7 +651,7 @@ class PlaybackFeaturesView(tk.Toplevel):
             except Exception:
                 pass
 
-        for name in ('gen_title', 'cf_title'):
+        for name in ('gen_title', 'adv_title'):
             if hasattr(self, name):
                 try:
                     getattr(self, name).configure(text_color=self.palette.get('header_fg', self.palette.get('fg', '#000000')))
@@ -593,7 +662,7 @@ class PlaybackFeaturesView(tk.Toplevel):
                 except Exception:
                     pass
 
-        for sec in ('general_section', 'crossfade_section'):
+        for sec in ('general_section', 'advance_section'):
             if hasattr(self, sec):
                 try:
                     getattr(self, sec).configure(fg_color=self.palette.get('section_bg', self.palette.get('bg', '#ffffff')), border_color=self.palette.get('section_border', '#e0e0e0'))
