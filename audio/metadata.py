@@ -864,10 +864,16 @@ def analyze_bpm(filepath, sr=22050, duration=60):
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                     tmpname = tmp.name
                 try:
+                    # Prevent console window on Windows (PyInstaller)
+                    import sys
+                    if sys.platform == 'win32':
+                        creationflags = subprocess.CREATE_NO_WINDOW
+                    else:
+                        creationflags = 0
                     subprocess.run([
                         'ffmpeg', '-y', '-i', filepath,
                         '-t', str(duration), '-ar', str(sr), '-ac', '1', tmpname
-                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, creationflags=creationflags)
                     # Read decoded WAV with soundfile if possible
                     try:
                         import soundfile as sf2
@@ -1048,10 +1054,16 @@ def analyze_key(filepath, duration=60):
                     # Getting duration from ffmpeg is an extra call (ffprobe), so we might just skip offset or guess
                     # Ideally we trust sf.read failed, so maybe just read first 60s to be safe and fast.
 
+                    # Prevent console window on Windows (PyInstaller)
+                    import sys
+                    if sys.platform == 'win32':
+                        creationflags = subprocess.CREATE_NO_WINDOW
+                    else:
+                        creationflags = 0
                     subprocess.run([
                         'ffmpeg', '-y', '-ss', str(offset), '-i', filepath,
                         '-t', str(duration), '-ar', '22050', '-ac', '1', tmpname
-                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, creationflags=creationflags)
                     try:
                         import soundfile as sf2
                         y, sr = sf2.read(tmpname, dtype='float32', always_2d=False)

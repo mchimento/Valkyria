@@ -232,10 +232,16 @@ class WaveformSeekbar(ctk.CTkCanvas):
                             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                                 tmpname = tmp.name
                             try:
+                                # Prevent console window on Windows (PyInstaller)
+                                import sys
+                                if sys.platform == 'win32':
+                                    creationflags = subprocess.CREATE_NO_WINDOW
+                                else:
+                                    creationflags = 0
                                 subprocess.run([
                                     'ffmpeg', '-y', '-i', audio_file,
                                     '-ar', '44100', '-ac', '1', tmpname
-                                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, creationflags=creationflags)
                                 try:
                                     y, sr = sf.read(tmpname, dtype='float32', always_2d=False)
                                     if y.ndim > 1:
