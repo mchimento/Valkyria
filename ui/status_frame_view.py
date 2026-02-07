@@ -34,6 +34,9 @@ class StatusFrameView(ctk.CTkFrame):
         self.current_artwork_photo = None
 
         self._status_restore_job = None
+        self._time_update_job = None
+        self._controls_ref = None
+        self._base_meta_text = ""
 
         self._build_widgets(is_dark=is_dark, frame_bg=initial_bg)
 
@@ -112,7 +115,21 @@ class StatusFrameView(ctk.CTkFrame):
             justify="left",
             height=1,
         )
-        self.meta_label.pack(side=tk.LEFT, fill=tk.X)
+        # Pack metadata label and place time label immediately to its right
+        self.meta_label.pack(side=tk.LEFT, padx=(0, 8))
+
+        # Dedicated time limit label (accent-colored) placed directly next to meta info
+        self.time_limit_label = ctk.CTkLabel(
+            self.meta_frame,
+            text="",
+            anchor="w",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.palette.get("accent", "#0078d4"),
+            bg_color=status_bg,
+            justify="left",
+            height=1,
+        )
+        self.time_limit_label.pack(side=tk.LEFT, padx=(0, 8))
 
     # ------------------------------------------------------------------
     # Public API used by MainWindow
@@ -164,16 +181,18 @@ class StatusFrameView(ctk.CTkFrame):
         parts = []
         if duration_s:
             duration_str = f"{int(duration_s)//60:02d}:{int(duration_s)%60:02d}"
-            # Check if there's a time limit for this track
-            if path in self.state.play_limits:
-                limit_seconds = self.state.play_limits[path]
-                duration_str += f" [⏱ {int(limit_seconds)}s]"
+            # Store limit for dynamic remaining-time display (None when no limit)
+            self._current_limit_seconds = int(self.state.play_limits[path]) if path in self.state.play_limits else None
             parts.append(duration_str)
 
         if bitrate:
             parts.append(f"{bitrate} kbps")
 
-        self.meta_var.set(" • ".join(parts))
+        # Save base meta text (duration + bitrate) and clear any dynamic time text
+        self._base_meta_text = " • ".join(parts)
+        # Update meta display (dynamic time text will be appended by updater when active)
+        self.meta_var.set(self._base_meta_text)
+        self.time_limit_label.configure(text="")
 
     def update_theme(self) -> None:
         self.palette = self.theme.palette
@@ -190,6 +209,7 @@ class StatusFrameView(ctk.CTkFrame):
         self.title_label.configure(text_color=status_fg, bg_color=status_bg)
         self.artist_label.configure(text_color=status_fg, bg_color=status_bg)
         self.meta_label.configure(text_color=meta_fg, bg_color=status_bg)
+        self.time_limit_label.configure(text_color=self.palette.get("accent", "#0078d4"), bg_color=status_bg)
         self.artwork_label.configure(text_color=meta_fg)
 
         # Refresh artwork to update placeholder color if needed
@@ -200,15 +220,87 @@ class StatusFrameView(ctk.CTkFrame):
     # Internal helpers
     # ------------------------------------------------------------------
     def _clear_status(self) -> None:
+        # Stop any running time-limit updates and clear related state
+        self._stop_time_limit_updates()
+        self._current_limit_seconds = None
+        self._base_meta_text = ""
+
         self.title_var.set("")
         self.artist_var.set("")
         self.meta_var.set("")
+        self.time_limit_label.configure(text="")
         self.artwork_label.configure(image=None)
         self.artwork_label.image = None
         try:
             self.artwork_frame.pack_forget()
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # Time limit update loop
+    # ------------------------------------------------------------------
+    def _start_time_limit_updates(self, controls):
+        """Begin periodic updates to show remaining time for a tracked time limit.
+        `controls` should be the ControlsBar instance that exposes a `player` with get_time()."""
+        # store reference to controls so we can query playback position
+        self._controls_ref = controls
+        # cancel any existing job
+        self._stop_time_limit_updates()
+        # Kick off update immediately
+        self._update_time_limit()
+
+    def _stop_time_limit_updates(self):
+        """Cancel the periodic update job if present."""
+        if self._time_update_job is not None:
+            self.after_cancel(self._time_update_job)
+            self._time_update_job = None
+        # keep controls_ref until explicitly cleared by other logic (do not clear here)
+
+
+    def _update_time_limit(self):
+        """Update the meta label with remaining time for the current time-limited track.
+        Schedules itself to run again in 1 second if the time limit remains active."""
+        idx = self.state.current_index
+        # If nothing playing or out of range, stop updates
+        if idx is None or idx >= len(self.state.playlist):
+            self.meta_var.set(self._base_meta_text)
+            self._stop_time_limit_updates()
+            return
+
+        filepath = self.state.playlist[idx]
+        if filepath not in self.state.play_limits:
+            # No time limit for this file; restore base meta text and stop
+            self.meta_var.set(self._base_meta_text)
+            self._stop_time_limit_updates()
+            return
+
+        limit_seconds = int(self.state.play_limits[filepath])
+        # Try to get current playback position from controls
+        remaining_text = ""
+        if self._controls_ref and hasattr(self._controls_ref, 'player'):
+            try:
+                pos_ms = self._controls_ref.player.get_time()
+                pos_s = int(pos_ms // 1000)
+                remaining = max(0, limit_seconds - pos_s)
+                remaining_text = f"⏱ Time limit: {remaining}s remaining"
+            except Exception:
+                remaining_text = f"⏱ Time limit: {limit_seconds}s"
+        else:
+            remaining_text = f"⏱ Time limit: {limit_seconds}s"
+
+        # Update base meta text (unchanged) and set the remaining-time label separately so it can be accent-colored
+        if self._base_meta_text:
+            self.meta_var.set(self._base_meta_text)
+        else:
+            self.meta_var.set("")
+
+        # Set time limit label (accent-colored)
+        self.time_limit_label.configure(text=remaining_text)
+        # Schedule next update
+        try:
+            self._time_update_job = self.after(1000, self._update_time_limit)
+        except Exception:
+            self._time_update_job = None
 
     def _cancel_restore_job(self) -> None:
         if self._status_restore_job is not None:
@@ -289,4 +381,6 @@ class StatusFrameView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def destroy(self):
         self._cancel_restore_job()
+        # Ensure we stop any background time-limit updates
+        self._stop_time_limit_updates()
         super().destroy()

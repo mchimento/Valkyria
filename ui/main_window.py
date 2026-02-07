@@ -302,18 +302,30 @@ class MainWindow:
     def _controls_status_event(self, event_type, count=0):
         if event_type == "play":
             self._restore_status()
+            # Start dynamic time-limit updates only if the current track has a time limit
+            idx = self.state.current_index
+            if idx is not None and idx < len(self.state.playlist):
+                current_file = self.state.playlist[idx]
+                if current_file in self.state.play_limits and hasattr(self, 'controls'):
+                    self.status_view._start_time_limit_updates(self.controls)
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "resume":
             # Resume should update menu state but not re-run the full status restore
-            # which triggers DJ view update/analysis — keep using cached values on resume
+            idx = self.state.current_index
+            if idx is not None and idx < len(self.state.playlist):
+                current_file = self.state.playlist[idx]
+                if current_file in self.state.play_limits and hasattr(self, 'controls'):
+                    self.status_view._start_time_limit_updates(self.controls)
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "pause":
             # On pause, update UI state but avoid performing a status restore
+            self.status_view._stop_time_limit_updates()
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "stop":
+            self.status_view._stop_time_limit_updates()
             self.status_view.handle_stop()
             self.dj_view._clear_info()
             self.state.current_index = None
@@ -322,6 +334,11 @@ class MainWindow:
             self._set_track_info_enabled(False)
         elif event_type in ("prev", "next"):
             self._restore_status()
+            idx = self.state.current_index
+            if idx is not None and idx < len(self.state.playlist):
+                current_file = self.state.playlist[idx]
+                if current_file in self.state.play_limits and hasattr(self, 'controls'):
+                    self.status_view._start_time_limit_updates(self.controls)
             self._update_menu_state()
         elif event_type == "browsed_files" or event_type == "browsed_folder":
             self._set_temporary_status(f"Added {count} file(s) to Songs list")
@@ -1146,10 +1163,17 @@ class MainWindow:
             if filepath in self.state.play_limits:
                 del self.state.play_limits[filepath]
             self._set_temporary_status("Playback time limit cleared")
+            # If this was the current playing track, stop status updates
+            if self.state.current_index is not None and self.state.playlist[self.state.current_index] == filepath:
+                self.status_view._stop_time_limit_updates()
         else:
             # Set the limit
             self.state.play_limits[filepath] = result
             self._set_temporary_status(f"Playback time limit set to {int(result)}s")
+            # If this was the current playing track and player is playing, start updates
+            if self.state.current_index is not None and self.state.playlist[self.state.current_index] == filepath:
+                if hasattr(self, 'controls'):
+                    self.status_view._start_time_limit_updates(self.controls)
 
         # Refresh displays
         self.refresh_all()

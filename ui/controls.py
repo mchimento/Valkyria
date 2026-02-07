@@ -340,10 +340,16 @@ class ControlsBar(ttk.Frame):
 
 
     def play(self):
+        # Stop current playback cleanly, then start after a short delay to avoid decoder race conditions
         self.player.stop()
         self.is_paused = False
         self._update_pause_button_state()
-        self._on_play(from_user=False)
+        try:
+            # Use a small delay to give the decoder time to clean up (prevents mpg123 dequantization errors)
+            self.after(200, lambda: self._on_play(from_user=False))
+        except Exception:
+            # Fallback to direct call if after isn't available
+            self._on_play(from_user=False)
 
     def pause(self):
         self.player.pause()
@@ -378,7 +384,11 @@ class ControlsBar(ttk.Frame):
             self.state.current_index -= 1
             self.is_paused = False
             self._update_pause_button_state()
-            self._on_play(from_user=False)
+            try:
+                # Small delay before starting next track to avoid decoder race conditions
+                self.after(200, lambda: self._on_play(from_user=False))
+            except Exception:
+                self._on_play(from_user=False)
 
     def next(self):
         if self.state.current_index is None:
@@ -389,7 +399,11 @@ class ControlsBar(ttk.Frame):
             self.state.current_index += 1
             self.is_paused = False
             self._update_pause_button_state()
-            self._on_play(from_user=False)
+            try:
+                # Small delay before starting next track to avoid decoder race conditions
+                self.after(200, lambda: self._on_play(from_user=False))
+            except Exception:
+                self._on_play(from_user=False)
 
     def _on_mute_toggle(self):
         """Toggle mute state."""

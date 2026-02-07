@@ -223,12 +223,22 @@ class MiniPlayer(ctk.CTkToplevel):
             self.controls._on_prev()
 
     def _on_play_pause(self):
-        """Toggle play/pause."""
-        if self.controls:
-            if self.controls.is_playing and not self.controls.is_paused:
-                self.controls._on_pause()
-            else:
-                self.controls._on_play(from_user=True)
+        """Toggle play/pause. Respect paused state to resume instead of restarting."""
+        if not self.controls:
+            return
+
+        # If paused, call pause handler to resume
+        if getattr(self.controls, 'is_paused', False):
+            self.controls._on_pause()
+            return
+
+        # If currently playing, pause it
+        if getattr(self.controls, 'is_playing', False) and not getattr(self.controls, 'is_paused', False):
+            self.controls._on_pause()
+            return
+
+        # Otherwise, start playback
+        self.controls._on_play(from_user=True)
 
     def _on_next(self):
         """Next track."""
@@ -318,7 +328,6 @@ class MiniPlayer(ctk.CTkToplevel):
         btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
-        border_color = palette.get("status_border", "#3E3E3E")
 
         self.configure(fg_color=bg)
         self.title_label.configure(text_color=fg)
