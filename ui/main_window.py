@@ -136,14 +136,17 @@ class MainWindow:
             {"label": "Move Up", "command": self.move_selected_up, "accelerator": "Ctrl+Up"},
             {"label": "Move Down", "command": self.move_selected_down, "accelerator": "Ctrl+Down"},
             {"separator": True},
+            {"label": "Play After Current Song", "command": self.play_selected_after_current, "ref": "play_after_current", "accelerator": "Ctrl+Shift+A"},
+            {"separator": True},
             {"label": "Remove Selected", "command": self.remove_selected_from_playlist, "accelerator": "Delete"},
             {"label": "Clear", "command": self.clear_playlist, "accelerator": "Ctrl+C"},
             {"separator": True},
             {"label": "Track Information", "command": self.open_media_info, "ref": "track_info", "accelerator": "Ctrl+I"},
             {"label": "Show Album booklet", "command": self.show_booklet, "ref": "track_booklet", "accelerator": "Ctrl+B"}
         ]
-        self.menu_item_refs["track_info"] = operations_submenu[6]
-        self.menu_item_refs["track_booklet"] = operations_submenu[7]
+        self.menu_item_refs["play_after_current"] = operations_submenu[3]
+        self.menu_item_refs["track_info"] = operations_submenu[8]
+        self.menu_item_refs["track_booklet"] = operations_submenu[9]
 
         repeat_submenu = [
             {"label": "No Repeat", "radiobutton": True, "variable": self.repeat_mode_var,
@@ -228,7 +231,8 @@ class MainWindow:
             change_callback=self._update_menu_state,
             play_callback=self._on_context_play_song,
             metadata_callback=self._on_context_show_metadata,
-            remove_callback=self._on_context_remove_song
+            remove_callback=self._on_context_remove_song,
+            play_after_current_callback=self._on_context_play_after_current
         )
         self.playlist_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -380,6 +384,11 @@ class MainWindow:
         # Update Show Album booklet item - disable when no songs in playlist
         if "track_booklet" in self.menu_item_refs:
             self.menu_item_refs["track_booklet"]["state"] = state
+
+        # Update Play After Current - disable if no current track is playing
+        if "play_after_current" in self.menu_item_refs:
+            play_after_state = "normal" if (has_songs and self.state.current_index is not None) else "disabled"
+            self.menu_item_refs["play_after_current"]["state"] = play_after_state
 
         # Update Playlist menu state
         if "playlist_menu" in self.menu_item_refs:
@@ -957,6 +966,28 @@ class MainWindow:
         self.refresh_all()
         self._set_temporary_status("Playlist sorted by artist")
 
+    def play_selected_after_current(self):
+        """Move selected tracks to play immediately after the currently playing track."""
+        selected_indices = self.playlist_view.get_selected_indices()
+        if not selected_indices:
+            return
+
+        # Check if there's a currently playing track
+        if self.state.current_index is None:
+            return
+
+        # Move tracks after current
+        self.state.playlist, self.state.current_index = playback.play_after_current(
+            self.state.playlist, selected_indices, self.state.current_index
+        )
+
+        self.refresh_all()
+        count = len(selected_indices)
+        if self.state.current_index in selected_indices:
+            count -= 1  # Don't count current track
+        if count > 0:
+            self._set_temporary_status(f"Moved {count} track(s) to play after current song")
+
     # ---------- View Menu ----------
     def toggle_playlist_visibility(self):
         """Toggle playlist visibility."""
@@ -1232,6 +1263,24 @@ class MainWindow:
             self.refresh_all()
             self._set_temporary_status("Removed song from playlist")
 
+    def _on_context_play_after_current(self, index):
+        """Move the song at the given index to play after the current song via context menu."""
+        if index is None or not self.state.playlist:
+            return
+
+        # Check if there's a currently playing track
+        if self.state.current_index is None:
+            messagebox.showinfo("No Track Playing", "Please start playing a track first.", parent=self.root)
+            return
+
+        if 0 <= index < len(self.state.playlist):
+            # Move this single track after current
+            self.state.playlist, self.state.current_index = playback.play_after_current(
+                self.state.playlist, [index], self.state.current_index
+            )
+            self.refresh_all()
+            self._set_temporary_status("Moved track to play after current song")
+
     # ---------- Helper to load folder into playlist (open_folder) ----------
     def _load_files_into_playlist(self, folder):
         if not os.path.isdir(folder):
@@ -1349,6 +1398,7 @@ class MainWindow:
         self.root.bind("<Control-r>", lambda e: self.sort_playlist_by_artist())
         self.root.bind("<Control-Up>", lambda e: self.move_selected_up())
         self.root.bind("<Control-Down>", lambda e: self.move_selected_down())
+        self.root.bind("<Control-n>", lambda e: self.play_selected_after_current())
         self.root.bind("<Delete>", lambda e: self.remove_selected_from_playlist())
         self.root.bind("<Control-c>", lambda e: self.clear_playlist())
         self.root.bind("<Control-i>", lambda e: self.open_media_info())

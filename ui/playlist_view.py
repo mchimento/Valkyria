@@ -9,7 +9,7 @@ class PlaylistView(ttk.Frame):
     def __init__(self, master, state, theme, tooltip_manager=None,
                  select_callback=None, change_callback=None,
                  play_callback=None, metadata_callback=None,
-                 remove_callback=None):
+                 remove_callback=None, play_after_current_callback=None):
         super().__init__(master)
 
         self.state = state
@@ -20,6 +20,7 @@ class PlaylistView(ttk.Frame):
         self.play_callback = play_callback
         self.metadata_callback = metadata_callback
         self.remove_callback = remove_callback
+        self.play_after_current_callback = play_after_current_callback
 
         # Cache for performance
         self._visible_items = []
@@ -126,7 +127,8 @@ class PlaylistView(ttk.Frame):
             play_callback=self._on_context_play,
             metadata_callback=self._on_context_metadata,
             remove_callback=self._on_context_remove,
-            get_current_file_callback=self._get_current_file_path
+            get_current_file_callback=self._get_current_file_path,
+            play_after_current_callback=self._on_context_play_after_current
         )
 
     def _setup_bindings(self):
@@ -551,6 +553,11 @@ class PlaylistView(ttk.Frame):
         """Remove track from context menu."""
         if callable(self.remove_callback):
             self.remove_callback(self.context_menu_index)
+
+    def _on_context_play_after_current(self):
+        """Play track after current song from context menu."""
+        if callable(self.play_after_current_callback):
+            self.play_after_current_callback(self.context_menu_index)
 
     def _get_current_file_path(self):
         """Get the file path of the currently selected track."""

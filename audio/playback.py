@@ -130,3 +130,46 @@ def remove_selected_from_playlist(playlist, selected_indices, current_index):
         new_index = None
 
     return new_playlist, new_index
+
+
+def play_after_current(playlist, selected_indices, current_index):
+    """
+    Move selected tracks to play immediately after the currently playing track.
+
+    Args:
+        playlist: Current playlist
+        selected_indices: List of indices to move
+        current_index: Index of currently playing track
+
+    Returns:
+        Tuple of (new_playlist, new_current_index)
+    """
+    if not selected_indices or not playlist:
+        return playlist.copy(), current_index
+
+    # If no track is playing, can't place after current
+    if current_index is None:
+        return playlist.copy(), current_index
+
+    # If current track is selected, ignore (can't place after itself)
+    selected_indices = [i for i in selected_indices if i != current_index]
+    if not selected_indices:
+        return playlist.copy(), current_index
+
+    # Get tracks to move (preserving their order)
+    tracks_to_move = [playlist[i] for i in sorted(selected_indices)]
+
+    # Create new playlist without selected tracks
+    new_playlist = [track for i, track in enumerate(playlist) if i not in selected_indices]
+
+    # Adjust current_index after removals
+    removed_before_current = sum(1 for i in selected_indices if i < current_index)
+    adjusted_current_index = current_index - removed_before_current
+
+    # Insert tracks right after current track
+    insert_position = adjusted_current_index + 1
+    for track in tracks_to_move:
+        new_playlist.insert(insert_position, track)
+        insert_position += 1
+
+    return new_playlist, adjusted_current_index

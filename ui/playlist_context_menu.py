@@ -7,7 +7,7 @@ from ui.booklet_viewer import BookletViewer
 
 
 class PlaylistContextMenu:
-    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None):
+    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None, play_after_current_callback=None):
         """
         Initialize the playlist context menu.
 
@@ -17,16 +17,20 @@ class PlaylistContextMenu:
             metadata_callback: Function to call when "Show Metadata" is selected
             remove_callback: Function to call when "Remove from Playlist" is selected
             get_current_file_callback: Function to get the current selected file path
+            play_after_current_callback: Function to call when "Play After Current Song" is selected
         """
         self.parent = parent
         self.play_callback = play_callback
         self.metadata_callback = metadata_callback
         self.remove_callback = remove_callback
         self.get_current_file_callback = get_current_file_callback
+        self.play_after_current_callback = play_after_current_callback
 
         # Create the menu
         self.menu = tk.Menu(parent, tearoff=0)
         self.menu.add_command(label="Play Song", command=self._on_play)
+        self.menu.add_command(label="Play After Current Song", command=self._on_play_after_current)
+        self.menu.add_separator()
         self.menu.add_command(label="Show Metadata", command=self._on_metadata)
         self.menu.add_command(label="Show Album Booklet", command=self._on_booklet)
         self.menu.add_separator()
@@ -36,6 +40,11 @@ class PlaylistContextMenu:
         """Handle Play Song menu item."""
         if callable(self.play_callback):
             self.play_callback()
+
+    def _on_play_after_current(self):
+        """Handle Play After Current Song menu item."""
+        if callable(self.play_after_current_callback):
+            self.play_after_current_callback()
 
     def _on_metadata(self):
         """Handle Show Metadata menu item."""
