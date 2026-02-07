@@ -28,6 +28,7 @@ from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
 from ui.time_limit_dialog import TimeLimitDialog
+from ui.mini_player import MiniPlayer
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,15 @@ class MainWindow:
 
         # Ensure no default menu bar is shown
         self.root.config(menu="")
+
+        # Initialize mini player (hidden by default)
+        self.mini_player = None
+        self._mini_player_enabled = True  # Can be toggled in preferences
+        self._is_minimized = False
+        self._last_window_state = None
+
+        # Start polling for window state changes (for mini player)
+        self._check_window_state()
 
         # Apply initial visibility from settings for playlist and browser
         self.toggle_playlist_visibility()
@@ -366,6 +376,93 @@ class MainWindow:
         except Exception:
             pass
 
+    # ---------- Mini Player Management ----------
+    def _check_window_state(self):
+        """Periodically check window state for mini player activation."""
+        try:
+            # Only check if window still exists
+            if not self.root.winfo_exists():
+                return
+
+            current_state = self.root.state()
+
+            # Check if state changed to minimized
+            if current_state == 'iconic' and not self._is_minimized:
+                if self._mini_player_enabled:
+                    logger.info("Main window minimized, showing mini player")
+                    self._is_minimized = True
+                    self._show_mini_player()
+
+            # Check if state changed from minimized
+            elif current_state != 'iconic' and self._is_minimized:
+                logger.info("Main window restored, hiding mini player")
+                self._is_minimized = False
+                self._hide_mini_player()
+
+            self._last_window_state = current_state
+        except Exception as e:
+            logger.error(f"Error checking window state: {e}", exc_info=True)
+
+        # Schedule next check (only if window still exists)
+        try:
+            if self.root.winfo_exists():
+                self.root.after(500, self._check_window_state)
+        except:
+            pass
+
+    def _on_window_state_change(self, event):
+        """Handle window minimize/restore events."""
+        # This method is kept for compatibility but polling is used instead
+        pass
+
+    def _show_mini_player(self):
+        """Show the mini player window."""
+        try:
+            if self.mini_player is None:
+                logger.info("Creating mini player instance")
+                self.mini_player = MiniPlayer(
+                    self.root,
+                    self.state,
+                    self.theme,
+                    self.controls,
+                    self._restore_main_window
+                )
+                # Position mini player in bottom-right corner
+                screen_width = self.root.winfo_screenwidth()
+                screen_height = self.root.winfo_screenheight()
+                x = screen_width - 470  # 450 width + 20 margin
+                y = screen_height - 130  # 90 height + 40 margin
+                self.mini_player.geometry(f"+{x}+{y}")
+                logger.info(f"Mini player positioned at ({x}, {y})")
+
+            self.mini_player.deiconify()
+            logger.info("Mini player shown")
+        except Exception as e:
+            logger.error(f"Failed to show mini player: {e}", exc_info=True)
+            self.mini_player = None
+        except Exception as e:
+            logger.error(f"Failed to show mini player: {e}", exc_info=True)
+
+    def _hide_mini_player(self):
+        """Hide the mini player window."""
+        if self.mini_player:
+            try:
+                logger.info("Hiding mini player")
+                self.mini_player.withdraw()
+            except Exception as e:
+                logger.error(f"Failed to hide mini player: {e}", exc_info=True)
+
+    def _restore_main_window(self):
+        """Restore the main window from minimized state."""
+        try:
+            logger.info("Restoring main window")
+            self.root.deiconify()
+            self.root.state('normal')
+            self.root.lift()
+            self.root.focus_force()
+        except Exception as e:
+            logger.error(f"Failed to restore main window: {e}", exc_info=True)
+
     # ---------- Refresh helpers ----------
     def refresh_all(self):
         self.playlist_view.refresh()
@@ -605,6 +702,13 @@ class MainWindow:
         if hasattr(self, 'menubar') and self.menubar:
             self.menubar.update_theme()
 
+        # Update mini player theme
+        if self.mini_player:
+            try:
+                self.mini_player.update_theme()
+            except Exception:
+                pass
+
         # Update main_frame background to ensure padding areas are correct
         if hasattr(self, 'main_frame'):
             try:
@@ -641,6 +745,12 @@ class MainWindow:
             self.browser_view.update_theme()
             # Update controls theme
             self.controls.update_theme()
+            # Update mini player theme
+            if self.mini_player:
+                try:
+                    self.mini_player.update_theme()
+                except Exception:
+                    pass
             # Update any open TimeLimitDialog windows
             for window in self.root.winfo_children():
                 if hasattr(window, 'update_theme') and window.__class__.__name__ == 'TimeLimitDialog':
@@ -837,6 +947,13 @@ class MainWindow:
 
     def _on_quit(self):
         logger.info("Shutting down Tango Studio")
+        # Clean up mini player
+        if self.mini_player:
+            try:
+                self.mini_player.cleanup()
+                self.mini_player.destroy()
+            except Exception:
+                logger.error("Failed to clean up mini player", exc_info=True)
         # Save geometry
         try:
             self.settings.window_geometry = self.root.geometry()
