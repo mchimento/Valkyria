@@ -55,31 +55,56 @@ class MiniPlayer(ctk.CTkToplevel):
 
     def _build_ui(self):
         """Build the mini player interface."""
+        import platform
+
         palette = self.theme.palette
-        bg = palette.get("bg", "#1E1E1E")
-        fg = palette.get("fg", "#FFFFFF")
+        # Determine appearance (Dark/Light) from CustomTkinter global mode so we aren't comparing against the host tool color
+        appearance = ctk.get_appearance_mode().lower() if hasattr(ctk, 'get_appearance_mode') else 'dark'
+        is_dark = appearance == 'dark'
+
+        # Dedicated mini player background and text color (do not derive from host window colors)
+        mini_bg = palette.get('mini_player_bg', '#1E1E1E' if is_dark else '#FFFFFF')
+        text_color = palette.get('mini_player_fg', '#FFFFFF' if is_dark else '#000000')
         border_color = palette.get("status_border", "#3E3E3E")
 
-        # Use same button colors as main controls
+        # Use same button colors as main controls (but do not derive mini player bg from them)
         btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
         accent = palette.get("accent", "#BB86FC")
 
-        self.configure(fg_color=bg)
+        # Transparent region color is only used when explicitly set via theme under 'mini_player_transparent_key'
+        transparent_key = palette.get('mini_player_transparent_key', None)
+        try:
+            system = platform.system().lower()
+            # Always use solid background; on Windows apply a rounded region so only rounded corners are visible
+            self.configure(fg_color=mini_bg)
+            if system == 'windows':
+                # Defer region application until after the window is realized
+                self.after(50, lambda: self._apply_windows_round_region(12))
+        except Exception:
+            self.configure(fg_color=mini_bg)
 
         # Main container with rounded corners
-        main_frame = ctk.CTkFrame(
+        self.main_frame = ctk.CTkFrame(
             self,
-            fg_color=bg,
+            fg_color=mini_bg,
             border_color=border_color,
             border_width=1,
             corner_radius=12
         )
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+
+        # Apply Windows-specific rounded window region so rectangular top-level corners are clipped
+        try:
+            import platform
+            if platform.system().lower() == 'windows':
+                self.after(50, lambda: self._apply_windows_round_region(12))
+        except Exception:
+            pass
 
         # Content container with padding
-        content_frame = ctk.CTkFrame(main_frame, fg_color="transparent", corner_radius=0)
+        content_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent", corner_radius=0)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
         # Top section: Controls and title
@@ -143,9 +168,9 @@ class MiniPlayer(ctk.CTkToplevel):
             text="No track loaded",
             anchor="w",
             font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=fg,
+            text_color=text_color,
         )
-        self.title_label.pack(fill=tk.X, pady=(10, 0))
+        self.title_label.pack(fill=tk.X, pady=(20, 0))
 
         # Time display below title
         self.time_label = ctk.CTkLabel(
@@ -153,7 +178,7 @@ class MiniPlayer(ctk.CTkToplevel):
             text="0:00 / 0:00",
             anchor="w",
             font=ctk.CTkFont(size=12),
-            text_color=fg,
+            text_color=text_color,
         )
         self.time_label.pack(fill=tk.X, pady=(2, 0))
 
@@ -164,6 +189,7 @@ class MiniPlayer(ctk.CTkToplevel):
             anchor="w",
             font=ctk.CTkFont(size=11),
             text_color=accent,
+            bg_color=mini_bg
         )
         self.time_limit_label.pack(fill=tk.X, pady=(2, 0))
 
@@ -179,12 +205,14 @@ class MiniPlayer(ctk.CTkToplevel):
             fg_color=palette.get("scrollbar_track", "#282828"),
             corner_radius=4,
         )
+        # Ensure progress bar blends with mini player frame color
+        self.progress_bar.configure(bg_color=mini_bg)
         self.progress_bar.pack(fill=tk.X, padx=0)
         self.progress_bar.set(0)
 
         # Close button in top-right corner
         close_btn = ctk.CTkButton(
-            main_frame,
+            self.main_frame,
             text="✕",
             width=24,
             height=24,
@@ -321,24 +349,70 @@ class MiniPlayer(ctk.CTkToplevel):
 
     def update_theme(self):
         """Update colors when theme changes."""
+        import platform
         palette = self.theme.palette
-        bg = palette.get("bg", "#1E1E1E")
-        fg = palette.get("fg", "#FFFFFF")
+        appearance = ctk.get_appearance_mode().lower() if hasattr(ctk, 'get_appearance_mode') else 'dark'
+        is_dark = appearance == 'dark'
+
+        mini_bg = palette.get('mini_player_bg', '#1E1E1E' if is_dark else '#FFFFFF')
+        text_color = palette.get('mini_player_fg', '#FFFFFF' if is_dark else '#000000')
         accent = palette.get("accent", "#BB86FC")
         btn_bg = palette.get("button_bg_color", palette.get("accent", "#0078d4"))
         btn_fg = palette.get("button_fg_color", "#ffffff")
         btn_hover = palette.get("button_hover", palette.get("accent_hover", "#106ebe"))
 
-        self.configure(fg_color=bg)
-        self.title_label.configure(text_color=fg)
+        # Re-apply transparency or background according to platform
+        try:
+            system = platform.system().lower()
+            # Only enable transparent color if theme explicitly provides a key
+            transparent_key = palette.get('mini_player_transparent_key', None)
+            if transparent_key and system == 'windows':
+                self.wm_attributes('-transparentcolor', transparent_key)
+                self.configure(fg_color=transparent_key)
+            else:
+                # Use solid background to avoid purple corners or artifacts
+                self.configure(fg_color=mini_bg)
+        except Exception:
+            self.configure(fg_color=mini_bg)
+
+        # Update main frame color
+        self.main_frame.configure(fg_color=mini_bg)
+        self.title_label.configure(text_color=text_color)
+        self.time_label.configure(text_color=text_color)
+        self.time_limit_label.configure(text_color=accent, bg_color=mini_bg)
+
         self.progress_bar.configure(
             progress_color=accent,
             fg_color=palette.get("scrollbar_track", "#282828")
         )
-        self.time_limit_label.configure(text_color=accent)
 
         for btn in [self.btn_prev, self.btn_play_pause, self.btn_next]:
             btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+
+    def _apply_windows_round_region(self, radius):
+        """Apply a rounded region to the window on Windows so only rounded corners are visible."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            gdi32 = ctypes.windll.gdi32
+            hwnd = self.winfo_id()
+
+            # Get current geometry
+            self.update_idletasks()
+            width = self.winfo_width()
+            height = self.winfo_height()
+            if width <= 0 or height <= 0:
+                # fallback to geometry parsing
+                geo = self.geometry().split('+')[0]
+                w, h = geo.split('x')
+                width, height = int(w), int(h)
+
+            # Create rounded region (ellipse width/height = radius*2)
+            hrgn = gdi32.CreateRoundRectRgn(0, 0, width+1, height+1, radius*2, radius*2)
+            user32.SetWindowRgn(hwnd, hrgn, True)
+        except Exception:
+            # best-effort; ignore failures
+            pass
 
     def cleanup(self):
         """Clean up resources."""
