@@ -356,6 +356,9 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         mock_player.fade_out_enabled = False
         mock_player.fade_out_duration = 3
 
+        # Silence detection attributes
+        mock_player.silence_detection_enabled = False
+
         # Fade setters
         mock_player.set_fade_in_enabled = Mock()
         mock_player.set_fade_in_duration = Mock()
@@ -378,6 +381,7 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         mock_state.play_on_double = False
         mock_state.crossfade_enabled = False
         mock_state.crossfade_duration = 5
+        mock_state.silence_detection_enabled = False
         return mock_state
 
     def _create_mock_settings(self):
@@ -389,6 +393,7 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         mock_settings.fade_out_duration = 3
         mock_settings.crossfade_enabled = False
         mock_settings.crossfade_duration = 5
+        mock_settings.silence_detection_enabled = False
         mock_settings.save = Mock()
         return mock_settings
 
@@ -517,6 +522,136 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         # UI should reflect Player state (Session), not Settings (Disk)
         self.assertTrue(window.fade_in_enabled_var.get())
         self.assertEqual(window.fade_in_duration_var.get(), 9.0)
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_silence_detection_updates_state_and_player(self, mock_center, mock_path):
+        """Test that toggling silence detection updates both state and player immediately."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # Test enabling silence detection
+        window.silence_detection_var.set(True)
+        window._on_silence_detection_toggle()
+
+        # Verify state was updated immediately
+        self.assertTrue(state.silence_detection_enabled)
+
+        # Verify player was updated immediately
+        self.assertTrue(player.silence_detection_enabled)
+
+        # Verify settings were NOT updated (no auto-save)
+        self.assertFalse(settings.silence_detection_enabled, "Settings should not be updated before Save")
+
+        # Test disabling
+        window.silence_detection_var.set(False)
+        window._on_silence_detection_toggle()
+
+        self.assertFalse(state.silence_detection_enabled)
+        self.assertFalse(player.silence_detection_enabled)
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_silence_detection_persists_on_save(self, mock_center, mock_path):
+        """Test that silence detection setting is persisted when Save is clicked."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # Enable silence detection
+        window.silence_detection_var.set(True)
+        window._on_silence_detection_toggle()
+
+        # Verify settings not updated yet
+        self.assertFalse(settings.silence_detection_enabled)
+
+        # Trigger Save
+        with patch.object(window, '_write_config_file', return_value=True):
+            window._save_features_config()
+
+        # Verify settings were updated
+        self.assertTrue(settings.silence_detection_enabled)
+
+        # Verify save was called
+        settings.save.assert_called_once()
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_silence_detection_loads_from_session(self, mock_center, mock_path):
+        """Test that silence detection initializes from session state."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        # Set session state to enabled (different from disk settings)
+        state.silence_detection_enabled = True
+
+        with patch.object(PlaybackFeaturesView, '_load_config', return_value={}):
+            window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # UI should reflect session state (enabled), not disk settings (disabled)
+        self.assertTrue(window.silence_detection_var.get())
+
+        window.destroy()
+
+    @patch('ui.playback_features_view.get_user_data_path')
+    @patch('ui.playback_features_view.center_window')
+    def test_silence_detection_status_label_updates(self, mock_center, mock_path):
+        """Test that silence detection status label updates correctly."""
+        from ui.playback_features_view import PlaybackFeaturesView
+
+        mock_path.return_value = Path("dummy_path")
+
+        player = self._create_mock_player()
+        state = self._create_mock_state()
+        settings = self._create_mock_settings()
+        theme = self._create_mock_theme()
+
+        window = PlaybackFeaturesView(self.root, state, settings, theme, player)
+
+        # Initially disabled
+        initial_text = window.silence_status_label.cget("text")
+        self.assertEqual(initial_text, "Disabled")
+
+        # Enable and check label
+        window.silence_detection_var.set(True)
+        window._on_silence_detection_toggle()
+
+        enabled_text = window.silence_status_label.cget("text")
+        self.assertEqual(enabled_text, "Enabled")
+
+        # Disable and check label
+        window.silence_detection_var.set(False)
+        window._on_silence_detection_toggle()
+
+        disabled_text = window.silence_status_label.cget("text")
+        self.assertEqual(disabled_text, "Disabled")
 
         window.destroy()
 
