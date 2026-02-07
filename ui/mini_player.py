@@ -17,7 +17,7 @@ class MiniPlayer(ctk.CTkToplevel):
 
         # Window configuration
         self.title("Tango Studio - Mini Player")
-        self.geometry("450x110")
+        self.geometry("450x130")
         self.resizable(False, False)
 
         # Always on top

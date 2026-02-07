@@ -528,8 +528,8 @@ class ControlsBar(ttk.Frame):
                                 self.time_limit_triggered = True
                                 # Stop current playback to avoid decoder errors
                                 self.player.stop()
-                                # Small delay to ensure clean shutdown
-                                self.after(100, self._on_next)
+                                # Longer delay to ensure clean shutdown before next track
+                                self.after(250, self._on_next)
 
                 # Check for crossfade trigger
                 if self.is_playing and not self.is_paused and not self.crossfade_triggered:
