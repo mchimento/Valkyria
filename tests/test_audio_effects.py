@@ -352,9 +352,9 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         mock_player = Mock()
         # Fade attributes (Runtime state)
         mock_player.fade_in_enabled = False
-        mock_player.fade_in_duration = 2
+        mock_player.fade_in_duration = 3
         mock_player.fade_out_enabled = False
-        mock_player.fade_out_duration = 2
+        mock_player.fade_out_duration = 3
 
         # Fade setters
         mock_player.set_fade_in_enabled = Mock()
@@ -384,9 +384,9 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         mock_settings = Mock()
         # Disk settings
         mock_settings.fade_in_enabled = False
-        mock_settings.fade_in_duration = 2
+        mock_settings.fade_in_duration = 3
         mock_settings.fade_out_enabled = False
-        mock_settings.fade_out_duration = 2
+        mock_settings.fade_out_duration = 3
         mock_settings.crossfade_enabled = False
         mock_settings.crossfade_duration = 5
         mock_settings.save = Mock()
@@ -420,8 +420,7 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         window._on_fade_in_change(5.0)
 
         player.set_fade_in_duration.assert_called_with(5)
-        self.assertEqual(settings.fade_in_duration, 2, "Settings should not be updated before Save")
-
+        self.assertEqual(settings.fade_in_duration, 3, "Settings should not be updated before Save")
         window.destroy()
 
     @patch('ui.playback_features_view.get_user_data_path')
@@ -475,7 +474,7 @@ class TestPlaybackFeaturesView(unittest.TestCase):
         window.fade_out_duration_var.set(7.0)
 
         # Settings should still be defaults
-        self.assertEqual(settings.fade_in_duration, 2)
+        self.assertEqual(settings.fade_in_duration, 3)
 
         # Trigger Save
         # Mock _write_config_file to avoid file I/O

@@ -24,9 +24,9 @@ class Settings:
 
         # Fade settings
         self.fade_in_enabled: bool = False
-        self.fade_in_duration: int = 2
+        self.fade_in_duration: int = 3
         self.fade_out_enabled: bool = False
-        self.fade_out_duration: int = 2
+        self.fade_out_duration: int = 3
 
         self.load()
 

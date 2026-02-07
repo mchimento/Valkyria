@@ -28,13 +28,13 @@ class PlaybackFeaturesView(tk.Toplevel):
             config_values, "fade_in_enabled", getattr(self.settings, "fade_in_enabled", False)
         )
         fade_in_duration_default = self._get_int_config_value(
-            config_values, "fade_in_duration", int(getattr(self.settings, "fade_in_duration", 2)), minimum=0, maximum=10
+            config_values, "fade_in_duration", int(getattr(self.settings, "fade_in_duration", 3)), minimum=0, maximum=10
         )
         fade_out_enabled_default = self._get_bool_config_value(
             config_values, "fade_out_enabled", getattr(self.settings, "fade_out_enabled", False)
         )
         fade_out_duration_default = self._get_int_config_value(
-            config_values, "fade_out_duration", int(getattr(self.settings, "fade_out_duration", 2)), minimum=0, maximum=10
+            config_values, "fade_out_duration", int(getattr(self.settings, "fade_out_duration", 3)), minimum=0, maximum=10
         )
 
         # Sync with active player state (Session Cache)
