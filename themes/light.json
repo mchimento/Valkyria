@@ -36,6 +36,7 @@
   "slider_bg": "#E0E0E0",
   "slider_hover": "#106EBE",
   "slider_progress": "#0078D4",
+  "slider_button": "#0078D4",
   "switch_bg": "#C0C0C0",
   "select_bg": "#0078D4",
   "select_fg": "#FFFFFF",

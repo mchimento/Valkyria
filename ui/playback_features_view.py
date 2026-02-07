@@ -607,6 +607,72 @@ class PlaybackFeaturesView(tk.Toplevel):
                 bg_color=bg
             )
 
+        # Update fade in switch colors
+        if hasattr(self, 'fade_in_switch'):
+            self.fade_in_switch.configure(
+                progress_color=self.palette.get("accent", "#0078d4"),
+                text_color=fg,
+                bg_color=bg,
+                fg_color=self.palette.get("switch_bg", "#939393"),
+                button_color=self.palette.get("accent", "#ffffff"),
+                button_hover_color=self.palette.get("accent_hover", "#106ebe")
+            )
+
+        # Update fade in status label colors
+        if hasattr(self, 'fade_in_status'):
+            is_enabled = self.fade_in_enabled_var.get()
+            self.fade_in_status.configure(
+                text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        # Update fade out switch colors
+        if hasattr(self, 'fade_out_switch'):
+            self.fade_out_switch.configure(
+                progress_color=self.palette.get("accent", "#0078d4"),
+                text_color=fg,
+                bg_color=bg,
+                fg_color=self.palette.get("switch_bg", "#939393"),
+                button_color=self.palette.get("accent", "#ffffff"),
+                button_hover_color=self.palette.get("accent_hover", "#106ebe")
+            )
+
+        # Update fade out status label colors
+        if hasattr(self, 'fade_out_status'):
+            is_enabled = self.fade_out_enabled_var.get()
+            self.fade_out_status.configure(
+                text_color=self.palette.get("accent", "#0078d4") if is_enabled else self.palette.get("fg", "#808080"),
+                bg_color=bg
+            )
+
+        # Update fade in slider colors
+        if hasattr(self, 'slider_fade_in'):
+            slider_bg = self.palette.get("slider_bg", "#4a4a4a")
+            slider_fg = self.palette.get("slider_progress", self.palette.get("accent", "#0078d4"))
+            slider_button = self.palette.get("slider_button", "#ffffff")
+            accent_hover = self.palette.get("button_hover", "#106ebe")
+            self.slider_fade_in.configure(
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_button,
+                button_hover_color=accent_hover,
+                bg_color=bg
+            )
+
+        # Update fade out slider colors
+        if hasattr(self, 'slider_fade_out'):
+            slider_bg = self.palette.get("slider_bg", "#4a4a4a")
+            slider_fg = self.palette.get("slider_progress", self.palette.get("accent", "#0078d4"))
+            slider_button = self.palette.get("slider_button", "#ffffff")
+            accent_hover = self.palette.get("button_hover", "#106ebe")
+            self.slider_fade_out.configure(
+                fg_color=slider_bg,
+                progress_color=slider_fg,
+                button_color=slider_button,
+                button_hover_color=accent_hover,
+                bg_color=bg
+            )
+
         # Update crossfade slider colors
         if hasattr(self, 'slider_duration'):
             slider_bg = self.palette.get("slider_bg", "#4a4a4a")
