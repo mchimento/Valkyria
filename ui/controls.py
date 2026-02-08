@@ -207,6 +207,25 @@ class ControlsBar(ttk.Frame):
         if self.tooltip_manager:
             self.tooltip_manager.attach(self.btn_mute, lambda: self._get_mute_tooltip(initial_mute))
 
+        # Sync UI with actual player mute state if possible (do not rely solely on saved settings)
+        try:
+            if hasattr(self.player, 'get_mute_state'):
+                actual_mute = bool(self.player.get_mute_state())
+            else:
+                actual_mute = bool(initial_mute)
+        except Exception:
+            actual_mute = bool(initial_mute)
+
+        # Update internal state and UI to reflect actual player state
+        self.is_muted = actual_mute
+        self.btn_mute.configure(text=self._get_mute_label(self.is_muted))
+        self._update_mute_button_state()
+
+        # Persist the resolved mute state back to settings so UI stays consistent on next startup
+        if self.settings:
+            self.settings.mute = self.is_muted
+            self.settings.save()
+
         # Volume slider on the right - using CustomTkinter for modern look
         palette = self.theme.palette if hasattr(self.theme, 'palette') else {}
         slider_fg = palette.get("slider_fg", palette.get("accent", "#0078d4"))

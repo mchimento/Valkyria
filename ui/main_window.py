@@ -320,7 +320,6 @@ class MainWindow:
             self._update_menu_state()
             self._set_track_info_enabled(True)
         elif event_type == "pause":
-            # On pause, update UI state but avoid performing a status restore
             self.status_view._stop_time_limit_updates()
             self._update_menu_state()
             self._set_track_info_enabled(True)
