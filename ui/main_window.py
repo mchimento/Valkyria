@@ -733,14 +733,35 @@ class MainWindow:
             except:
                 pass
 
-        # Update open windows
-        for window in self.root.winfo_children():
+        # Update open windows - use winfo_children on root to find all toplevels
+        # Need to check all descendants since some windows may be parented to widgets
+        def find_all_toplevels(widget):
+            """Recursively find all Toplevel windows."""
+            toplevels = []
+            for child in widget.winfo_children():
+                if isinstance(child, tk.Toplevel):
+                    toplevels.append(child)
+                toplevels.extend(find_all_toplevels(child))
+            return toplevels
+
+        for window in find_all_toplevels(self.root):
             if isinstance(window, AudioEffectsWindow):
                 try:
                     window.update_theme()
                 except Exception:
                     pass
-            if isinstance(window, PlaybackFeaturesView):
+            elif isinstance(window, PlaybackFeaturesView):
+                try:
+                    window.update_theme()
+                except Exception:
+                    pass
+            elif isinstance(window, BookletViewer):
+                try:
+                    window.update_theme()
+                except Exception:
+                    pass
+            elif hasattr(window, 'update_theme'):
+                # Handle other windows with update_theme method
                 try:
                     window.update_theme()
                 except Exception:
@@ -873,7 +894,7 @@ class MainWindow:
 
         if 0 <= first_selected_index < len(self.state.playlist):
             track = self.state.playlist[first_selected_index]
-            BookletViewer(self.root, track)
+            BookletViewer(self.root, track, theme=self.theme)
 
     def open_about(self):
         # Create custom dialog using CustomTkinter

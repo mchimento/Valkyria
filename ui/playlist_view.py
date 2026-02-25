@@ -168,7 +168,8 @@ class PlaylistView(ttk.Frame):
             get_current_file_callback=self._get_current_file_path,
             play_after_current_callback=self._on_context_play_after_current,
             set_time_limit_callback=self._on_context_set_time_limit,
-            clear_time_limit_callback=self._on_context_clear_time_limit
+            clear_time_limit_callback=self._on_context_clear_time_limit,
+            theme=self.theme
         )
 
     def _setup_bindings(self):

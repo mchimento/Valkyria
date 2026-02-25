@@ -7,7 +7,7 @@ from ui.booklet_viewer import BookletViewer
 
 
 class PlaylistContextMenu:
-    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None, play_after_current_callback=None, set_time_limit_callback=None, clear_time_limit_callback=None):
+    def __init__(self, parent, play_callback=None, metadata_callback=None, remove_callback=None, get_current_file_callback=None, play_after_current_callback=None, set_time_limit_callback=None, clear_time_limit_callback=None, theme=None):
         """
         Initialize the playlist context menu.
 
@@ -20,6 +20,7 @@ class PlaylistContextMenu:
             play_after_current_callback: Function to call when "Play After Current Song" is selected
             set_time_limit_callback: Function to call when "Play for time..." is selected
             clear_time_limit_callback: Function to call when "Clear time limit" is selected
+            theme: Theme manager instance
         """
         self.parent = parent
         self.play_callback = play_callback
@@ -29,6 +30,7 @@ class PlaylistContextMenu:
         self.play_after_current_callback = play_after_current_callback
         self.set_time_limit_callback = set_time_limit_callback
         self.clear_time_limit_callback = clear_time_limit_callback
+        self.theme = theme
 
         # Create the menu
         self.menu = tk.Menu(parent, tearoff=0)
@@ -52,12 +54,12 @@ class PlaylistContextMenu:
         """Handle Play After Current Song menu item."""
         if callable(self.play_after_current_callback):
             self.play_after_current_callback()
-    
+
     def _on_set_time_limit(self):
         """Handle Play for time... menu item."""
         if callable(self.set_time_limit_callback):
             self.set_time_limit_callback()
-    
+
     def _on_clear_time_limit(self):
         """Handle Clear time limit menu item."""
         if callable(self.clear_time_limit_callback):
@@ -73,7 +75,7 @@ class PlaylistContextMenu:
         if callable(self.get_current_file_callback):
             filepath = self.get_current_file_callback()
             if filepath:
-                BookletViewer(self.parent, filepath).show()
+                BookletViewer(self.parent, filepath, theme=self.theme).show()
 
     def _on_remove(self):
         """Handle Remove from Playlist menu item."""
