@@ -13,7 +13,7 @@ import audio.metadata as metadata_module
 logger = logging.getLogger(__name__)
 
 
-class TangoStudioApp:
+class ValkyriaApp:
     def __init__(self):
         logger.info("Initializing Valkyria")
 

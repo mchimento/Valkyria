@@ -6,7 +6,7 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from app.application import TangoStudioApp
+from app.application import ValkyriaApp
 from app.state import AppState
 
 class TestAppIntegration(unittest.TestCase):
@@ -71,7 +71,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_app_initialization(self):
         """Test that the application initializes all components correctly."""
-        app = TangoStudioApp()
+        app = ValkyriaApp()
 
         self.assertIsInstance(app.state, AppState)
         self.assertEqual(app.settings, self.mock_settings)
@@ -86,7 +86,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_track_end_callback_flow(self):
         """Test the flow from player track end to UI update."""
-        app = TangoStudioApp()
+        app = ValkyriaApp()
 
         # Simulate track end callback
         app._on_track_end()
@@ -96,7 +96,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_run_starts_window(self):
         """Test that run() starts the main window loop."""
-        app = TangoStudioApp()
+        app = ValkyriaApp()
 
         app.run()
 
@@ -104,7 +104,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_bpm_preference_initialization(self):
         """Test that BPM preference is set from settings on initialization."""
-        app = TangoStudioApp()
+        app = ValkyriaApp()
 
         self.mock_metadata.set_bpm_preference.assert_called_with(self.mock_settings.bpm_mode)
 

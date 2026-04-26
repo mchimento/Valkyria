@@ -5,7 +5,7 @@ Entry point for Valkyria
 import signal
 import sys
 import logging
-from app.application import TangoStudioApp
+from app.application import ValkyriaApp
 from app.logging_config import setup_logging
 
 # Global reference to app for signal handling
@@ -36,7 +36,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 
     setup_logging()
-    app_instance = TangoStudioApp()
+    app_instance = ValkyriaApp()
     app_instance.run()
 
 if __name__ == "__main__":
