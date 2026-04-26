@@ -10,6 +10,9 @@ class MiniPlayer(ctk.CTkToplevel):
     def __init__(self, parent, state, theme_manager, controls, on_restore_callback):
         super().__init__(parent)
 
+        # Start hidden so the caller can apply Win32 styles before first show.
+        self.withdraw()
+
         self.app_state = state
         self.theme = theme_manager
         self.controls = controls
@@ -22,12 +25,6 @@ class MiniPlayer(ctk.CTkToplevel):
 
         # Always on top
         self.attributes("-topmost", True)
-
-        # Hide from taskbar (Windows specific)
-        try:
-            self.attributes("-toolwindow", True)
-        except:
-            pass
 
         # Remove window decorations for modern look
         self.overrideredirect(True)
@@ -242,8 +239,9 @@ class MiniPlayer(ctk.CTkToplevel):
             self.on_restore()
 
     def _on_close(self):
-        """Handle window close - hide instead of destroy."""
-        self.withdraw()
+        """Restore the main window; it will hide the mini player as part of restore."""
+        if self.on_restore:
+            self.on_restore()
 
     def _on_prev(self):
         """Previous track."""

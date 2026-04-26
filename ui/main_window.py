@@ -22,7 +22,7 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
-from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence
+from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence, set_win32_icon, make_window_independent
 from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
@@ -557,17 +557,20 @@ class MainWindow:
                 screen_width = self.root.winfo_screenwidth()
                 screen_height = self.root.winfo_screenheight()
                 x = screen_width - 470  # 450 width + 20 margin
-                y = screen_height - 130  # 90 height + 40 margin
+                y = screen_height - 170  # 130 height + 40 margin
                 self.mini_player.geometry(f"+{x}+{y}")
                 logger.info(f"Mini player positioned at ({x}, {y})")
 
+                # Sever Win32 owner link before first show so root.withdraw()
+                # does not drag the mini player down with it.
+                make_window_independent(self.mini_player)
+
             self.mini_player.deiconify()
+            set_win32_icon(self.mini_player, get_resource_path("assets/app-icon.ico"))
             logger.info("Mini player shown")
         except Exception as e:
             logger.error(f"Failed to show mini player: {e}", exc_info=True)
             self.mini_player = None
-        except Exception as e:
-            logger.error(f"Failed to show mini player: {e}", exc_info=True)
 
     def _hide_mini_player(self):
         """Hide the mini player window."""
@@ -583,10 +586,13 @@ class MainWindow:
         try:
             logger.info("Restoring main window")
             self._is_minimized = False
+            self._hide_mini_player()
             self.root.deiconify()
             self.root.state('normal')
             self.root.lift()
             self.root.focus_force()
+            # Re-apply Win32 icon — deiconify resets it to the process default.
+            set_win32_icon(self.root, get_resource_path("assets/app-icon.ico"))
         except Exception as e:
             logger.error(f"Failed to restore main window: {e}", exc_info=True)
 

@@ -65,6 +65,37 @@ def apply_theme_titlebar(window, palette):
         pass
 
 
+def make_window_independent(window):
+    """Sever the Win32 owner relationship between a Toplevel and its Tk root.
+
+    On Windows, withdrawing the owner (root) silently hides all owned
+    Toplevels.  Clearing GWL_HWNDPARENT on the outer HWND makes the window
+    fully independent so root.withdraw() leaves it unaffected.
+    Also applies WS_EX_APPWINDOW so it gets its own taskbar button.
+    Must be called while the window is still hidden (before first deiconify).
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        GWL_HWNDPARENT   = -8
+        GWL_EXSTYLE      = -20
+        WS_EX_APPWINDOW  = 0x00040000
+        WS_EX_TOOLWINDOW = 0x00000080
+
+        outer = ctypes.windll.user32.GetParent(window.winfo_id())
+        if not outer:
+            outer = window.winfo_id()
+
+        ctypes.windll.user32.SetWindowLongW(outer, GWL_HWNDPARENT, 0)
+
+        style = ctypes.windll.user32.GetWindowLongW(outer, GWL_EXSTYLE)
+        style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+        ctypes.windll.user32.SetWindowLongW(outer, GWL_EXSTYLE, style)
+    except Exception:
+        pass
+
+
 def force_taskbar_presence(window, ico_path=None):
     """Make a frameless (overrideredirect) window appear in the Windows taskbar.
 
