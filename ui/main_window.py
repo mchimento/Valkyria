@@ -593,6 +593,10 @@ class MainWindow:
             self.root.focus_force()
             # Re-apply Win32 icon — deiconify resets it to the process default.
             set_win32_icon(self.root, get_resource_path("assets/app-icon.ico"))
+            # Re-trigger BPM/key analysis: update_info() skips it when the window
+            # is withdrawn (winfo_ismapped() is False). Defer by one tick so the
+            # window is mapped before is_visible() is checked.
+            self.root.after(0, self._restore_status)
         except Exception as e:
             logger.error(f"Failed to restore main window: {e}", exc_info=True)
 

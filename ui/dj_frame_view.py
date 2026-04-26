@@ -57,11 +57,17 @@ class DJFrameView(ctk.CTkFrame):
             self.player.set_audio_metrics_callback(self._on_audio_metrics_update)
 
     def is_visible(self):
-        """Check if the DJ frame is currently visible (packed)."""
+        """Check if the DJ frame is currently visible.
+
+        Uses toplevel state() instead of winfo_ismapped() because state() is
+        updated synchronously by deiconify()/withdraw(), while winfo_ismapped()
+        lags behind until the window manager responds — causing estimation to be
+        skipped when update_info() is called immediately after deiconify().
+        """
         try:
-            return self.winfo_ismapped()
+            return self.winfo_toplevel().state() not in ('withdrawn', 'iconic')
         except Exception:
-            return False
+            return True
 
     # ------------------------------------------------------------------
     # Construction
@@ -432,16 +438,10 @@ class DJFrameView(ctk.CTkFrame):
             self.current_temp_bpm = None
             self.save_btn.place_forget()
         else:
-            # Only estimate BPM if visible to save CPU
-            if not self.is_visible():
-                self.bpm_var.set("--")
-                self._estimating_file = None
-                self.current_temp_bpm = None
-                self.save_btn.place_forget()
-            elif self._estimating_file == filepath:
+            if self._estimating_file == filepath:
                 return
             elif filepath in getattr(self, 'temporary_bpm_values', {}):
-                # We already have a per-file estimated BPM for this file; show it instead of re-running estimation
+                # Cached estimate — show regardless of visibility (cheap display, not computation)
                 try:
                     bpm_val = self.temporary_bpm_values.get(filepath)
                     self.current_temp_bpm = bpm_val
@@ -451,6 +451,10 @@ class DJFrameView(ctk.CTkFrame):
                 except Exception:
                     pass
                 self._estimating_file = None
+            elif not self.is_visible():
+                # No cache and hidden — don't start expensive analysis
+                self.bpm_var.set("--")
+                self.save_btn.place_forget()
             else:
                 self.bpm_var.set("Estimating...")
                 self._estimating_file = filepath
@@ -459,9 +463,7 @@ class DJFrameView(ctk.CTkFrame):
 
                 def estimate_bpm():
                     try:
-                        # Submit to background manager
                         analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
-
                     except Exception as e:
                         logger.error(f"BPM estimation error for {filepath}: {e}")
                         self.after(0, lambda: self._finish_estimation(filepath, None))
@@ -488,16 +490,10 @@ class DJFrameView(ctk.CTkFrame):
             self.current_temp_key = None
             self.save_key_btn.place_forget()
         else:
-            # Only estimate Key if visible to save CPU
-            if not self.is_visible():
-                self.key_var.set("--")
-                self._estimating_key_file = None
-                self.current_temp_key = None
-                self.save_key_btn.place_forget()
-            elif self._estimating_key_file == filepath:
+            if self._estimating_key_file == filepath:
                 return
             elif filepath in getattr(self, 'temporary_key_values', {}):
-                # We already have a per-file estimated Key for this file; show it instead of re-running estimation
+                # Cached estimate — show regardless of visibility (cheap display, not computation)
                 try:
                     key_val = self.temporary_key_values.get(filepath)
                     camelot_val = None
@@ -517,6 +513,10 @@ class DJFrameView(ctk.CTkFrame):
                 except Exception:
                     pass
                 self._estimating_key_file = None
+            elif not self.is_visible():
+                # No cache and hidden — don't start expensive analysis
+                self.key_var.set("--")
+                self.save_key_btn.place_forget()
             else:
                 self.key_var.set("Estimating...")
                 self._estimating_key_file = filepath
@@ -525,7 +525,6 @@ class DJFrameView(ctk.CTkFrame):
 
                 def estimate_key():
                     try:
-                        # Key estimation
                         analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
                     except Exception as e:
                         logger.error(f"Key estimation error for {filepath}: {e}")
@@ -539,6 +538,7 @@ class DJFrameView(ctk.CTkFrame):
 
         display_bpm = get_display_bpm(bpm)
         if display_bpm:
+            self.temporary_bpm_values[filepath] = bpm
             self.bpm_var.set(display_bpm)
             self.current_temp_bpm = bpm
             self.save_btn.configure(text="Save BPM", state="normal")
@@ -547,7 +547,6 @@ class DJFrameView(ctk.CTkFrame):
             self.bpm_var.set("--")
             self.save_btn.place_forget()
 
-        # Clear estimating marker now that estimation finished (success or failure)
         self._estimating_file = None
 
     def _finish_key_estimation(self, filepath, key):
