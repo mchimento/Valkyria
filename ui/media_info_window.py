@@ -8,7 +8,7 @@ import os
 import threading
 from audio.metadata import get_file_info, save_metadata, metadata_extractor, analyze_bpm, analyze_key, key_to_camelot
 from audio.bpm import analysis_manager
-from ui.utils import center_window
+from ui.utils import center_window, apply_theme_titlebar
 
 
 class MediaInfoWindow:
@@ -28,8 +28,8 @@ class MediaInfoWindow:
         self.window.withdraw()
 
         center_window(self.window, parent)
-
-        # Create notebook (tabbed interface)
+        if self.theme_manager:
+            apply_theme_titlebar(self.window, self.theme_manager.palette)
         self.notebook = ttk.Notebook(self.window)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -127,6 +127,7 @@ class MediaInfoWindow:
     def update_theme(self):
         """Public method to update theme colors."""
         if self.theme_manager:
+            apply_theme_titlebar(self.window, self.theme_manager.palette)
             self._apply_theme()
 
     def _apply_theme(self):

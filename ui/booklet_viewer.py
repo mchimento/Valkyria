@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
 from PIL import Image, ImageTk
+from ui.utils import apply_theme_titlebar
 import io
 from audio.metadata import get_booklet_images
 
@@ -37,8 +38,7 @@ class BookletViewer(tk.Toplevel):
         self.geometry("800x600")
         self.resizable(True, True)
         self.configure(bg=self.frame_bg)
-
-        # Extract images
+        apply_theme_titlebar(self, self.theme.palette)
         self.images = get_booklet_images(filepath)
 
         # Setup UI
@@ -290,6 +290,7 @@ class BookletViewer(tk.Toplevel):
         """Update theme colors when theme changes."""
         # Re-read colors from palette directly like playlist_view does
         palette = self.theme.palette
+        apply_theme_titlebar(self, palette)
         self.btn_bg = palette["button_bg_color"]
         self.btn_fg = palette["button_fg_color"]
         self.btn_hover = palette["button_hover"]

@@ -22,7 +22,7 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
-from ui.utils import center_window
+from ui.utils import center_window, apply_rounded_corners
 from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
@@ -55,6 +55,14 @@ class MainWindow:
 
         self.palette = self.theme.palette
 
+        # 1-px window border (VS Code style): root bg = border colour,
+        # all content lives inside self._content which is padded by 1 px.
+        _border = self.palette.get("border", "#3E3E3E")
+        _bg     = self.palette.get("bg", "#1E1E1E")
+        self.root.configure(bg=_border)
+        self._content = tk.Frame(self.root, bg=_bg)
+        self._content.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
         # Tooltip manager (shared)
         self.tooltip_manager = TooltipManager(self.root, self.palette)
 
@@ -62,8 +70,15 @@ class MainWindow:
         self._build_menu()
         self._build_layout()
 
-        # Ensure no default menu bar is shown
-        self.root.config(menu="")
+        # Remove the native title bar; the menu bar provides window controls
+        self.root.overrideredirect(True)
+        self.root.update_idletasks()
+        apply_rounded_corners(self.root)
+        self._setup_resize()
+        self.menubar.setup_window_controls(self._on_quit)
+
+        # Keep the maximise icon in sync when the window state changes
+        self.root.bind("<Configure>", self._on_root_configure, add="+")
 
         # Initialize mini player (hidden by default)
         self.mini_player = None
@@ -97,9 +112,88 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
     # ---------- Build UI ----------
+    def _setup_resize(self):
+        """Attach mouse-based resize to all four edges/corners of the frameless window."""
+        BORDER = 6  # px from window edge that count as a resize zone
+        self._resize_dir = None
+        self._resize_start = {}  # x, y, w, h, wx, wy
+
+        def _cursor_for(on_left, on_right, on_top, on_bottom):
+            if (on_left and on_top) or (on_right and on_bottom):
+                return "size_nw_se"
+            if (on_right and on_top) or (on_left and on_bottom):
+                return "size_ne_sw"
+            if on_left or on_right:
+                return "size_we"
+            if on_top or on_bottom:
+                return "size_ns"
+            return ""
+
+        def _dirs(event):
+            x = event.x_root - self.root.winfo_x()
+            y = event.y_root - self.root.winfo_y()
+            w = self.root.winfo_width()
+            h = self.root.winfo_height()
+            return x < BORDER, x > w - BORDER, y < BORDER, y > h - BORDER
+
+        def _on_motion(event):
+            if self._resize_dir is not None:
+                return
+            on_left, on_right, on_top, on_bottom = _dirs(event)
+            cur = _cursor_for(on_left, on_right, on_top, on_bottom)
+            self.root.configure(cursor=cur)
+
+        def _on_press(event):
+            on_left, on_right, on_top, on_bottom = _dirs(event)
+            if not any((on_left, on_right, on_top, on_bottom)):
+                self._resize_dir = None
+                return
+            self._resize_dir = (on_left, on_right, on_top, on_bottom)
+            self._resize_start = {
+                "x": event.x_root, "y": event.y_root,
+                "w": self.root.winfo_width(), "h": self.root.winfo_height(),
+                "wx": self.root.winfo_x(), "wy": self.root.winfo_y(),
+            }
+
+        def _on_drag(event):
+            if not self._resize_dir:
+                return
+            on_left, on_right, on_top, on_bottom = self._resize_dir
+            s = self._resize_start
+            dx = event.x_root - s["x"]
+            dy = event.y_root - s["y"]
+            x, y, w, h = s["wx"], s["wy"], s["w"], s["h"]
+            min_w, min_h = 400, 300
+            if on_right:
+                w = max(min_w, w + dx)
+            if on_bottom:
+                h = max(min_h, h + dy)
+            if on_left:
+                new_w = max(min_w, w - dx)
+                x = x + w - new_w
+                w = new_w
+            if on_top:
+                new_h = max(min_h, h - dy)
+                y = y + h - new_h
+                h = new_h
+            self.root.geometry(f"{w}x{h}+{x}+{y}")
+
+        def _on_release(event):
+            self._resize_dir = None
+            self.root.configure(cursor="")
+
+        self.root.bind("<Motion>",          _on_motion,  add="+")
+        self.root.bind("<ButtonPress-1>",   _on_press,   add="+")
+        self.root.bind("<B1-Motion>",       _on_drag,    add="+")
+        self.root.bind("<ButtonRelease-1>", _on_release, add="+")
+
+    def _on_root_configure(self, event):
+        if event.widget is self.root:
+            self.menubar.sync_maximize_button()
+
     def _build_menu(self):
-        # Create custom menu bar and pack it at the top
-        self.menubar = CustomMenuBar(self.root, self.theme)
+        # Create custom menu bar and pack it at the top of the content frame
+        self.menubar = CustomMenuBar(self._content, self.theme, parent_window=self.root)
         self.menubar.pack(side=tk.TOP, fill=tk.X)
 
         # Initialize variables for checkbuttons and radiobuttons
@@ -229,7 +323,7 @@ class MainWindow:
 
     def _build_layout(self):
         # Main frame
-        self.main_frame = ttk.Frame(self.root, padding=6, style="TFrame")
+        self.main_frame = ttk.Frame(self._content, padding=6, style="TFrame")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Left: Playlist view
@@ -263,7 +357,7 @@ class MainWindow:
         self.browser_view.set_playlist_view(self.playlist_view)
 
         # Bottom info frames container
-        self.bottom_info_frame = ttk.Frame(self.root, style="TFrame")
+        self.bottom_info_frame = ttk.Frame(self._content, style="TFrame")
         self.bottom_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=(12, 12), pady=(0, 20))
 
         # DJ Frame (right-aligned)
@@ -283,7 +377,7 @@ class MainWindow:
 
         # Bottom: Controls bar
         self.controls = ControlsBar(
-            self.root,
+            self._content,
             self.player,
             self.state,
             self.theme,
@@ -685,9 +779,13 @@ class MainWindow:
 
         # Force root window background update to fix corner artifacts
         root_bg = self.palette.get('bg', '#1E1E1E' if is_dark else '#FAFAFA')
+        border_color = self.palette.get('border', '#3E3E3E' if is_dark else '#D0D0D0')
         try:
+            self.root.configure(bg=border_color)
+            if hasattr(self, '_content'):
+                self._content.configure(bg=root_bg)
             # Use direct Tk call to ensure root background is updated everywhere
-            self.root.tk.call(self.root._w, 'configure', '-bg', root_bg)
+            self.root.tk.call(self.root._w, 'configure', '-bg', border_color)
             # Also force update the root window immediately
             self.root.update_idletasks()
         except:
@@ -987,30 +1085,28 @@ class MainWindow:
 
     def _on_quit(self):
         logger.info("Shutting down Valkyria")
-        # Clean up mini player
         if self.mini_player:
             try:
                 self.mini_player.cleanup()
                 self.mini_player.destroy()
             except Exception:
                 logger.error("Failed to clean up mini player", exc_info=True)
-        # Save geometry
         try:
             self.settings.window_geometry = self.root.geometry()
             self.settings.save()
         except Exception:
             logger.error("Failed to save window geometry on exit", exc_info=True)
-        # Destroy window immediately (player cleanup will happen in background)
-        try:
-            self.root.destroy()
-        except Exception:
-            logger.error("Failed to destroy window on exit", exc_info=True)
-        # Stop player after window is destroyed (non-blocking for user)
         try:
             self.player.stop()
         except Exception:
             logger.error("Failed to stop player on exit", exc_info=True)
+        try:
+            self.root.destroy()
+        except Exception:
+            logger.error("Failed to destroy window on exit", exc_info=True)
         logger.info("Valkyria shut down complete")
+        import sys
+        sys.exit(0)
 
     # ---------- Playlist operations (menu) ----------
     def shuffle_playlist(self):

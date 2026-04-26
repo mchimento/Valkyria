@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
 from app.paths import get_user_data_path
-from ui.utils import center_window
+from ui.utils import center_window, apply_theme_titlebar
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,7 @@ class PlaybackFeaturesView(tk.Toplevel):
         self.withdraw()
 
         center_window(self, master)
-
-        self.configure(bg=self.palette.get("bg", "#ffffff"))
+        apply_theme_titlebar(self, self.palette)
 
         # Main container: use CTkFrame for consistent theming and padding
         self.main_frame = ctk.CTkFrame(self, fg_color=self.palette.get("bg", "#ffffff"))
@@ -759,4 +758,5 @@ class PlaybackFeaturesView(tk.Toplevel):
     def update_theme(self):
         """Update theme when theme changes."""
         self.palette = self.theme_manager.palette
+        apply_theme_titlebar(self, self.palette)
         self._apply_theme()

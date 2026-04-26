@@ -4,10 +4,12 @@ from typing import Callable, List, Dict, Any
 
 
 class CustomMenuBar(ctk.CTkFrame):
-    def __init__(self, parent, theme_manager, **kwargs):
+    def __init__(self, parent, theme_manager, parent_window=None, **kwargs):
         super().__init__(parent, **kwargs)
         self.theme_manager = theme_manager
-        self.parent_window = parent
+        # parent_window is the actual Tk/Toplevel window for state/geometry ops;
+        # falls back to parent when not supplied (original behaviour).
+        self.parent_window = parent_window if parent_window is not None else parent
         self.active_menu = None
         self.menu_buttons = {}
         self.dropdown_menus = {}
@@ -20,6 +22,8 @@ class CustomMenuBar(ctk.CTkFrame):
             bg_color=root_bg,
             corner_radius=0
         )
+        # Prevent children from resizing the bar
+        self.pack_propagate(False)
 
     def _get_root_bg(self):
         """Get root window background color based on theme."""
@@ -139,6 +143,99 @@ class CustomMenuBar(ctk.CTkFrame):
 
         for btn in self.menu_buttons.values():
             btn.configure(fg_color=menubar_bg, hover_color=hover_color, text_color=text_color, bg_color=root_bg)
+
+        if hasattr(self, '_btn_min'):
+            self._btn_min.configure(fg_color=menubar_bg, hover_color=hover_color, text_color=text_color, bg_color=menubar_bg)
+        if hasattr(self, '_btn_max'):
+            self._btn_max.configure(fg_color=menubar_bg, hover_color=hover_color, text_color=text_color, bg_color=menubar_bg)
+        if hasattr(self, '_btn_close'):
+            self._btn_close.configure(fg_color=menubar_bg, hover_color="#C42B1C", text_color=text_color, bg_color=menubar_bg)
+
+    # ------------------------------------------------------------------ #
+    #  VS Code-style integrated window controls                           #
+    # ------------------------------------------------------------------ #
+
+    def setup_window_controls(self, close_callback):
+        """Add ─ □ ✕ buttons and a draggable title spacer.
+
+        Call this after all add_menu() calls so the controls sit on the right.
+        """
+        menubar_bg = self._get_menubar_bg()
+        hover      = self._get_hover_color()
+        text       = self._get_text_color()
+
+        # Close — rightmost, red on hover
+        self._btn_close = ctk.CTkButton(
+            self, text="✕", width=46, height=30,
+            fg_color=menubar_bg, hover_color="#C42B1C",
+            text_color=text, corner_radius=0, border_width=0,
+            font=("Segoe UI", 13),
+            command=close_callback,
+        )
+        self._btn_close.pack(side=tk.RIGHT, padx=0, pady=0)
+
+        # Maximise
+        self._btn_max = ctk.CTkButton(
+            self, text="□", width=46, height=30,
+            fg_color=menubar_bg, hover_color=hover,
+            text_color=text, corner_radius=0, border_width=0,
+            font=("Segoe UI", 12),
+            command=self._toggle_maximize,
+        )
+        self._btn_max.pack(side=tk.RIGHT, padx=0, pady=0)
+
+        # Minimise
+        self._btn_min = ctk.CTkButton(
+            self, text="─", width=46, height=30,
+            fg_color=menubar_bg, hover_color=hover,
+            text_color=text, corner_radius=0, border_width=0,
+            font=("Segoe UI", 14),
+            command=self._minimize,
+        )
+        self._btn_min.pack(side=tk.RIGHT, padx=0, pady=0)
+
+        # Draggable spacer fills the gap between menus and controls
+        self._drag_spacer = ctk.CTkFrame(self, fg_color="transparent", cursor="fleur")
+        self._drag_spacer.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._drag_spacer.bind("<ButtonPress-1>",  self._drag_start)
+        self._drag_spacer.bind("<B1-Motion>",       self._drag_motion)
+        self._drag_spacer.bind("<Double-Button-1>", lambda e: self._toggle_maximize())
+
+    # -- drag helpers --
+    def _drag_start(self, event):
+        self._ox = event.x_root - self.parent_window.winfo_x()
+        self._oy = event.y_root - self.parent_window.winfo_y()
+
+    def _drag_motion(self, event):
+        if self.parent_window.state() == "zoomed":
+            self.parent_window.state("normal")
+            self._ox = self.parent_window.winfo_width() // 2
+            self._oy = 15
+            self._update_max_btn()
+        x = event.x_root - self._ox
+        y = event.y_root - self._oy
+        self.parent_window.geometry(f"+{x}+{y}")
+
+    # -- window-state helpers --
+    def _toggle_maximize(self):
+        if self.parent_window.state() == "zoomed":
+            self.parent_window.state("normal")
+        else:
+            self.parent_window.state("zoomed")
+        self._update_max_btn()
+
+    def _minimize(self):
+        self.parent_window.iconify()
+
+    def _update_max_btn(self):
+        if hasattr(self, "_btn_max"):
+            self._btn_max.configure(
+                text="❐" if self.parent_window.state() == "zoomed" else "□"
+            )
+
+    def sync_maximize_button(self):
+        """Call from a <Configure> binding to keep the icon correct."""
+        self._update_max_btn()
 
 
 class DropdownMenu(ctk.CTkFrame):

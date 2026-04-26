@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
 import customtkinter as ctk
-from ui.utils import center_window
+from ui.utils import center_window, apply_theme_titlebar
 
 class PreferencesWindow(tk.Toplevel):
     """
@@ -32,8 +32,7 @@ class PreferencesWindow(tk.Toplevel):
         self.withdraw()
 
         center_window(self, master)
-
-        # Create main container with padding
+        apply_theme_titlebar(self, self.palette)
         main_container = ttk.Frame(self)
         main_container.pack(fill='both', expand=True, padx=20, pady=20)
 
@@ -215,6 +214,7 @@ class PreferencesWindow(tk.Toplevel):
         """Apply theme to all widgets in this window including padding areas."""
         # Update palette reference to current theme
         self.palette = self.theme_manager.palette
+        apply_theme_titlebar(self, self.palette)
 
         palette = self.theme_manager.palette
         bg = palette.get("bg", "#ffffff")

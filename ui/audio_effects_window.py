@@ -4,7 +4,7 @@ import customtkinter as ctk
 import json
 import logging
 from pathlib import Path
-from ui.utils import center_window
+from ui.utils import center_window, apply_theme_titlebar
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,7 @@ class AudioEffectsWindow(tk.Toplevel):
         self.withdraw()
 
         center_window(self, parent)
-
-        # Load EQ configuration and defaults
+        apply_theme_titlebar(self, self.palette)
         self.eq_config = AUDIO_CONFIG['equalizer']
         self.eq_defaults = AUDIO_DEFAULTS['equalizer']
 
@@ -1468,6 +1467,8 @@ class AudioEffectsWindow(tk.Toplevel):
 
     def update_theme(self):
         """Public method to refresh theme."""
+        self.palette = self.theme_manager.palette
+        apply_theme_titlebar(self, self.palette)
         self._apply_theme()
 
     def _on_enable_toggle(self):
