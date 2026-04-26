@@ -17,7 +17,7 @@
 
 ## Introduction
 
-Valkirya can automatically analyze and store the BPM (Beats Per Minute) of your music files. This enables DJ-style features such as tempo sorting, smart playlists, beat-matched transitions, and harmonic mixing.
+Valkyria can automatically analyze and store the BPM (Beats Per Minute) of your music files. This enables DJ-style features such as tempo sorting, smart playlists, beat-matched transitions, and harmonic mixing.
 
 BPM detection is powered by the industry-standard **librosa** audio analysis library, which uses sophisticated signal processing techniques to estimate tempo directly from the audio waveform.
 
@@ -50,7 +50,7 @@ BPM is independent of audio quality — a high-quality FLAC file and a low-quali
 
 ## How BPM is Calculated
 
-Valkirya uses the **librosa** audio analysis library to estimate BPM directly from the sound waveform. This is the same library used by researchers, music information retrieval systems, and professional audio analysis tools.
+Valkyria uses the **librosa** audio analysis library to estimate BPM directly from the sound waveform. This is the same library used by researchers, music information retrieval systems, and professional audio analysis tools.
 
 ### The Challenge
 

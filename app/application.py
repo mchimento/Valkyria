@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class TangoStudioApp:
     def __init__(self):
-        logger.info("Initializing Valkirya")
+        logger.info("Initializing Valkyria")
 
         self.state = AppState()
         self.settings = Settings()
@@ -41,7 +41,7 @@ class TangoStudioApp:
         except Exception:
             pass
 
-        logger.info("Valkirya initialized successfully")
+        logger.info("Valkyria initialized successfully")
 
     def _on_track_end(self):
         """Called from audio backend thread context via event; schedule UI-safe callback."""
@@ -56,5 +56,5 @@ class TangoStudioApp:
 
     def run(self):
         """Start the application main loop."""
-        logger.info("Starting Valkirya")
+        logger.info("Starting Valkyria")
         self.window.start()

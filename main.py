@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Entry point for Valkirya
+Entry point for Valkyria
 """
 import signal
 import sys
