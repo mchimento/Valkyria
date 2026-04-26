@@ -1,5 +1,5 @@
 """
-Path utility module for Tango Studio.
+Path utility module for Valkirya.
 Handles path resolution for resources and user data, supporting both
 development environment and PyInstaller frozen state.
 """

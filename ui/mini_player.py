@@ -16,7 +16,7 @@ class MiniPlayer(ctk.CTkToplevel):
         self.on_restore = on_restore_callback
 
         # Window configuration
-        self.title("Tango Studio - Mini Player")
+        self.title("Valkyria - Mini Player")
         self.geometry("450x130")
         self.resizable(False, False)
 

@@ -43,7 +43,7 @@ class MainWindow:
         # Root window
         ctk.set_appearance_mode("Dark" if self.settings.theme == "dark" else "Light")
         self.root = tk.Tk()
-        self.root.title("Tango Studio")
+        self.root.title("Valkyria")
         if self.settings.window_geometry:
             try:
                 self.root.geometry(self.settings.window_geometry)
@@ -931,7 +931,7 @@ class MainWindow:
         # Title
         title_label = ctk.CTkLabel(
             content_frame,
-            text="Tango Studio",
+            text="Valkyria",
             font=("Segoe UI", 24, "bold"),
             text_color=accent_color
         )
@@ -986,7 +986,7 @@ class MainWindow:
         open_doc_in_browser(doc_filename, self.theme)
 
     def _on_quit(self):
-        logger.info("Shutting down Tango Studio")
+        logger.info("Shutting down Valkyria")
         # Clean up mini player
         if self.mini_player:
             try:
@@ -1010,7 +1010,7 @@ class MainWindow:
             self.player.stop()
         except Exception:
             logger.error("Failed to stop player on exit", exc_info=True)
-        logger.info("Tango Studio shut down complete")
+        logger.info("Valkyria shut down complete")
 
     # ---------- Playlist operations (menu) ----------
     def shuffle_playlist(self):

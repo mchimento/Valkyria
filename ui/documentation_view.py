@@ -1,5 +1,5 @@
 """
-Documentation viewer for Tango Studio.
+Documentation viewer.
 Opens markdown documentation in the default web browser.
 """
 

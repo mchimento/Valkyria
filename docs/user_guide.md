@@ -1,6 +1,6 @@
-# Tango Studio User Guide
+# Valkyria User Guide
 
-Welcome to **Tango Studio**, a modern audio player with advanced features for music enthusiasts and DJs.
+Welcome to **Valkyria**, a modern audio player with advanced features for music enthusiasts and DJs.
 
 ## Table of Contents
 
@@ -49,18 +49,18 @@ Welcome to **Tango Studio**, a modern audio player with advanced features for mu
 
 ### Opening Audio Files
 
-Tango Studio provides multiple convenient methods to build your music library and playlists. Each method is optimized for different workflows:
+Valkyria provides multiple convenient methods to build your music library and playlists. Each method is optimized for different workflows:
 
 * **Open File** (Ctrl+O): Opens a file dialog to select a single audio file. Best for adding individual tracks or when you want precise control over what gets added.
 * **Open Multiple Files** (Ctrl+M): Opens a file dialog allowing multiple selection. Hold Ctrl or Shift to select multiple files at once. Ideal for adding several specific tracks from a folder without adding the entire folder.
 * **Open Folder** (Ctrl+F): Recursively scans a folder and all its subfolders for audio files, automatically adding them to the playlist. Perfect for importing entire album folders or music collections organized in subdirectories.
 * **Open Playlist** (Ctrl+L): Load an existing M3U or M3U8 playlist file. Supports both relative and absolute file paths, making it ideal for portable playlists or shared music collections.
 
-When you open files or folders, Tango Studio automatically filters for supported audio formats and skips unsupported file types. The status bar will display the number of files successfully added.
+When you open files or folders, Valkyria automatically filters for supported audio formats and skips unsupported file types. The status bar will display the number of files successfully added.
 
 ### Supported Formats
 
-Tango Studio supports a wide range of audio formats to accommodate various quality preferences and use cases:
+Valkyria supports a wide range of audio formats to accommodate various quality preferences and use cases:
 
 | Format | Type | Best Use Case |
 |--------|------|---------------|
@@ -70,13 +70,13 @@ Tango Studio supports a wide range of audio formats to accommodate various quali
 | **OGG** | Lossy compression | Open-source alternative to MP3, good quality-to-size ratio |
 | **M4A** | Lossy/Lossless | iTunes/Apple ecosystem, AAC encoding, good mobile compatibility |
 
-All formats support embedded metadata (title, artist, album, artwork, BPM) which Tango Studio reads and displays throughout the interface.
+All formats support embedded metadata (title, artist, album, artwork, BPM) which Valkyria reads and displays throughout the interface.
 
 ## Playback Controls
 
 ### Basic Controls
 
-Tango Studio provides intuitive playback controls accessible via buttons, keyboard shortcuts, and the waveform seekbar:
+Valkyria provides intuitive playback controls accessible via buttons, keyboard shortcuts, and the waveform seekbar:
 
 * **Play/Pause** (Spacebar): Toggles between playing and paused states. If stopped, Play will start from the beginning of the current track. If paused, Play resumes from the paused position.
 * **Stop** (S): Completely stops playback and resets the position to the beginning. Useful when you want to restart a track from scratch or clear the current playback state.
@@ -111,12 +111,12 @@ The current repeat mode persists across application restarts.
 
 ### Adding Songs
 
-Tango Studio offers flexible methods to build and modify your playlist during playback:
+Valkyria offers flexible methods to build and modify your playlist during playback:
 
 * **Add**: Appends selected songs from the browser view to the end of the current playlist. The playlist order remains unchanged.
 * **Add Below**: Inserts selected songs immediately after the currently playing track. This is perfect for queuing up songs you want to hear next without disrupting the remaining playlist.
 * **Double-click in Browser**: Double-clicking a song in the browser view adds it to the playlist. The specific behavior (play immediately or just add) can be configured in Playback Features.
-* **Duplicate Detection**: Tango Studio automatically prevents adding duplicate entries. If you try to add a song already in the playlist, it will be silently skipped.
+* **Duplicate Detection**: Valkyria automatically prevents adding duplicate entries. If you try to add a song already in the playlist, it will be silently skipped.
 
 ### Organizing Your Playlist
 
@@ -143,7 +143,7 @@ Playlist files store file paths (absolute by default) and can be edited in any t
 
 ## Live Audio Analysis Panel
 
-The Live Audio Analysis Panel is located at the bottom-right corner of Tango Studio and provides real-time audio metrics and track information during playback. This professional-grade metering suite helps you monitor loudness levels, understand track characteristics, and make informed decisions about audio processing.
+The Live Audio Analysis Panel is located at the bottom-right corner of Valkyria and provides real-time audio metrics and track information during playback. This professional-grade metering suite helps you monitor loudness levels, understand track characteristics, and make informed decisions about audio processing.
 
 ### Audio Metering (Left Column)
 
@@ -265,7 +265,7 @@ BPM (Beats Per Minute) analysis displays the tempo of the currently playing trac
 
 **BPM Normalization**
 
-BPM analysis sometimes produces "half-time" (too slow) or "double-time" (too fast) results. Tango Studio includes optional automatic normalization to bring BPM values into the musically perceived range (80-180 BPM for most music).
+BPM analysis sometimes produces "half-time" (too slow) or "double-time" (too fast) results. Valkyria includes optional automatic normalization to bring BPM values into the musically perceived range (80-180 BPM for most music).
 
 **Normalization can be enabled/disabled in Preferences:**
 
@@ -311,7 +311,7 @@ Codes useful for harmonic mixing:
 | E       | 12B     |
 | C#m     | 12A     |
 
-Key information must be present in the audio file's metadata tags. Tango Studio does not automatically detect musical key.
+Key information must be present in the audio file's metadata tags. Valkyria does not automatically detect musical key.
 
 #### ENERGY (Energy Analyser)
 
@@ -622,7 +622,7 @@ Automatically skips to the next track when the current track ends with prolonged
 
 #### How It Works
 
-When silence detection is enabled, Tango Studio continuously monitors the audio level during playback. If the audio level stays below -50 dBFS (essentially silence) for 3 consecutive seconds, the player automatically advances to the next track.
+When silence detection is enabled, Valkyria continuously monitors the audio level during playback. If the audio level stays below -50 dBFS (essentially silence) for 3 consecutive seconds, the player automatically advances to the next track.
 
 #### Technical Details
 
@@ -762,7 +762,7 @@ If embedded in the file metadata, the album artwork is displayed at full resolut
 
 ## Themes
 
-Tango Studio includes carefully crafted dark and light themes for comfortable viewing in any environment.
+Valkyria includes carefully crafted dark and light themes for comfortable viewing in any environment.
 
 ### Switching Themes
 
@@ -840,7 +840,7 @@ Master these shortcuts for efficient navigation and control:
 
 ## Audio Devices
 
-Tango Studio automatically detects all available audio output devices on your system. Select your preferred device from **Tools → Audio Device**.
+Valkyria automatically detects all available audio output devices on your system. Select your preferred device from **Tools → Audio Device**.
 
 ### Device Selection
 
@@ -859,12 +859,12 @@ Tango Studio automatically detects all available audio output devices on your sy
 
 If a device doesn't appear in the list:
 * Ensure the device is properly connected and recognized by your OS
-* Restart Tango Studio after connecting new audio hardware
+* Restart Valkyria after connecting new audio hardware
 * Check device drivers are up to date
 
 ## Browser View
 
-The browser view provides a convenient file explorer integrated directly into Tango Studio for browsing and adding music to your playlist.
+The browser view provides a convenient file explorer integrated directly into Valkyria for browsing and adding music to your playlist.
 
 ### Navigation
 
@@ -895,14 +895,14 @@ Once you've browsed to a folder containing audio files:
 
 * **Large Playlists**: For playlists with 1000+ tracks, sorting and shuffling operations may take a moment to complete. The application remains responsive during these operations.
 * **BPM Analysis**: BPM analysis is CPU-intensive. For best results, analyze tracks during idle time rather than while recording, gaming, or performing other CPU-intensive tasks.
-* **Memory Usage**: Tango Studio loads metadata on demand and caches it efficiently. Even very large libraries (10,000+ files) are handled smoothly.
+* **Memory Usage**: Valkyria loads metadata on demand and caches it efficiently. Even very large libraries (10,000+ files) are handled smoothly.
 
 ### File Management
 
 * **Organized Libraries**: Maintain a consistent folder structure (e.g., Artist → Album → Tracks) for easier browsing
 * **Metadata Quality**: Ensure files have accurate ID3 tags for better organization and display
 * **Backup Playlists**: Regularly save important playlists. Consider using relative paths for portable playlists
-* **M3U8 Compatibility**: Tango Studio's playlists work in VLC, foobar2000, and most other players
+* **M3U8 Compatibility**: Valkyria's playlists work in VLC, foobar2000, and most other players
 
 ### Audio Quality
 
@@ -927,11 +927,11 @@ Once you've browsed to a folder containing audio files:
 
 **Solutions**:
 
-* Verify system volume is not muted (check both Tango Studio and OS volume mixer)
+* Verify system volume is not muted (check both Valkyria and OS volume mixer)
 * Confirm correct audio device is selected in Tools → Audio Device
 * Test with a different audio file to rule out file corruption
 * Ensure audio drivers are up to date
-* Try restarting Tango Studio
+* Try restarting Valkyria
 
 **Problem**: Crackling, popping, or distortion
 
@@ -1018,7 +1018,7 @@ Once you've browsed to a folder containing audio files:
 
 **Solutions**:
 
-* Ensure Tango Studio has write permissions to its configuration directory
+* Ensure Valkyria has write permissions to its configuration directory
 * Check available disk space
 * Try running as administrator
 * Configuration file may be corrupted. Delete it to reset
@@ -1028,4 +1028,4 @@ Once you've browsed to a folder containing audio files:
 **Version**: 1.0.0
 **Last Updated**: January 2026
 
-Thank you for using Tango Studio!
+Thank you for using Valkyria!

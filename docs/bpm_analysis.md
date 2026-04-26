@@ -17,7 +17,7 @@
 
 ## Introduction
 
-Tango Studio can automatically analyze and store the BPM (Beats Per Minute) of your music files. This enables DJ-style features such as tempo sorting, smart playlists, beat-matched transitions, and harmonic mixing.
+Valkirya can automatically analyze and store the BPM (Beats Per Minute) of your music files. This enables DJ-style features such as tempo sorting, smart playlists, beat-matched transitions, and harmonic mixing.
 
 BPM detection is powered by the industry-standard **librosa** audio analysis library, which uses sophisticated signal processing techniques to estimate tempo directly from the audio waveform.
 
@@ -50,7 +50,7 @@ BPM is independent of audio quality — a high-quality FLAC file and a low-quali
 
 ## How BPM is Calculated
 
-Tango Studio uses the **librosa** audio analysis library to estimate BPM directly from the sound waveform. This is the same library used by researchers, music information retrieval systems, and professional audio analysis tools.
+Valkirya uses the **librosa** audio analysis library to estimate BPM directly from the sound waveform. This is the same library used by researchers, music information retrieval systems, and professional audio analysis tools.
 
 ### The Challenge
 
@@ -122,7 +122,7 @@ The BPM detection algorithm follows these steps:
 
 ### 5. Optional Tempo Normalization
 
-**What Happens**: Tango Studio can optionally normalize the raw tempo into a musically perceived BPM range.
+**What Happens**: Valkyria can optionally normalize the raw tempo into a musically perceived BPM range.
 
 **The Problem**: Algorithms often produce "correct but perceptually wrong" results:
 
@@ -248,7 +248,7 @@ Mutagen → Save to File Metadata
 
 ### Librosa Configuration
 
-Tango Studio uses librosa with these parameters:
+Valkyria uses librosa with these parameters:
 
 * **Sample Rate**: 22,050 Hz (sufficient for tempo detection)
 * **Hop Length**: 512 samples (~23 ms frames at 22.05 kHz)
@@ -266,7 +266,7 @@ Librosa provides a confidence score alongside the BPM estimate:
 | **Medium (0.5-0.8)** | Clear tempo with some ambiguity | Jazz with swing, tracks with tempo changes |
 | **Low (<0.5)** | Weak or inconsistent tempo | Ambient, classical, experimental, rubato passages |
 
-**Note**: Tango Studio currently doesn't expose the confidence score in the UI, but it's used internally to validate results.
+**Note**: Valkyria currently doesn't expose the confidence score in the UI, but it's used internally to validate results.
 
 ## Limitations and Accuracy
 
@@ -371,11 +371,11 @@ If the detected BPM is incorrect:
 
 * Different normalization strategies
 * Different analysis algorithms
-* Tango Studio stores raw values, other software may display normalized values
+* Valkyria stores raw values, other software may display normalized values
 
 **Solutions**:
 
-* Enable BPM normalization in Tango Studio preferences
+* Enable BPM normalization in Valkyria preferences
 * Check if other software has normalization settings
 * Use the same BPM field (some software uses "TBPM" vs "BPM" tags)
 * Manually verify with tap tempo if needed

@@ -1,11 +1,11 @@
-# Tango Studio
+# Valkirya
 
 A simple audio player which supports playlist management and browsing
 local audio files.
 
 ## Features
 
-Tango Studio features include:
+Valkirya features include:
 
 -   Play audio files (MP3, WAV, FLAC, OGG, M4A).
 -   Load single files, multiple files, or playlists (M3U / M3U8).

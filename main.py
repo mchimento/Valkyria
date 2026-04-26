@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Entry point for Tango Studio
+Entry point for Valkirya
 """
 import signal
 import sys
