@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/logo-no-background.png" alt="Valkyria" width="240"/>
+</p>
+
 # Valkyria User Guide
 
 Welcome to **Valkyria**, a modern audio player with advanced features for music enthusiasts and DJs.

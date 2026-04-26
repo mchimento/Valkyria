@@ -22,13 +22,14 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
-from ui.utils import center_window, apply_rounded_corners
+from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence
 from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
 from ui.time_limit_dialog import TimeLimitDialog
 from ui.mini_player import MiniPlayer
+from app.paths import get_resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class MainWindow:
         ctk.set_appearance_mode("Dark" if self.settings.theme == "dark" else "Light")
         self.root = tk.Tk()
         self.root.title("Valkyria")
+        self._set_app_icon()
         if self.settings.window_geometry:
             try:
                 self.root.geometry(self.settings.window_geometry)
@@ -74,6 +76,7 @@ class MainWindow:
         self.root.overrideredirect(True)
         self.root.update_idletasks()
         apply_rounded_corners(self.root)
+        force_taskbar_presence(self.root, get_resource_path("assets/app-icon.ico"))
         self._setup_resize()
         self.menubar.setup_window_controls(self._on_quit)
 
@@ -100,6 +103,7 @@ class MainWindow:
         self.root.bind("<<PlaylistDouble>>", self._on_playlist_double)
         self.root.bind("<<OpenPlaylist>>", lambda e: self.open_playlist())
         self.root.bind("<<SavePlaylist>>", lambda e: self.save_playlist_as())
+        self.root.bind("<<MinimizeRequested>>", lambda e: self._on_minimize_requested())
 
         # Global click handler to clear playlist selection when clicking outside
         self.root.bind_all("<Button-1>", self._on_global_click, add="+")
@@ -488,6 +492,17 @@ class MainWindow:
             pass
 
     # ---------- Mini Player Management ----------
+    def _on_minimize_requested(self):
+        """Minimize the frameless window using withdraw() + mini player.
+
+        overrideredirect(True) prevents iconify() from working on Windows, so we
+        hide the window ourselves and rely on the mini player for restore.
+        """
+        self._is_minimized = True
+        if self._mini_player_enabled:
+            self._show_mini_player()
+        self.root.withdraw()
+
     def _check_window_state(self):
         """Periodically check window state for mini player activation."""
         try:
@@ -504,8 +519,8 @@ class MainWindow:
                     self._is_minimized = True
                     self._show_mini_player()
 
-            # Check if state changed from minimized
-            elif current_state != 'iconic' and self._is_minimized:
+            # Check if state changed from minimized (ignore 'withdrawn' — that's our own hide)
+            elif current_state not in ('iconic', 'withdrawn') and self._is_minimized:
                 logger.info("Main window restored, hiding mini player")
                 self._is_minimized = False
                 self._hide_mini_player()
@@ -567,6 +582,7 @@ class MainWindow:
         """Restore the main window from minimized state."""
         try:
             logger.info("Restoring main window")
+            self._is_minimized = False
             self.root.deiconify()
             self.root.state('normal')
             self.root.lift()
@@ -994,21 +1010,26 @@ class MainWindow:
             track = self.state.playlist[first_selected_index]
             BookletViewer(self.root, track, theme=self.theme)
 
+    def _set_app_icon(self):
+        try:
+            from PIL import Image, ImageTk
+            icon_path = get_resource_path("assets/app-icon.png")
+            if icon_path.exists():
+                img = ImageTk.PhotoImage(Image.open(icon_path).resize((64, 64), Image.LANCZOS))
+                self.root.iconphoto(True, img)
+                self._app_icon = img  # prevent garbage collection
+        except Exception:
+            pass
+
     def open_about(self):
         # Create custom dialog using CustomTkinter
         about_window = ctk.CTkToplevel(self.root)
         about_window.title("About")
-        about_window.geometry("400x250")
+        about_window.geometry("400x300")
         about_window.resizable(False, False)
 
         # Hide window initially to prevent flickering during positioning
         about_window.withdraw()
-
-        # Remove icon from About dialog
-        try:
-            about_window.iconbitmap("assets/transparent.ico")
-        except:
-            pass
 
         # Center the window
         about_window.transient(self.root)
@@ -1026,24 +1047,35 @@ class MainWindow:
         content_frame = ctk.CTkFrame(about_window, fg_color="transparent")
         content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        # Title
-        title_label = ctk.CTkLabel(
-            content_frame,
-            text="Valkyria",
-            font=("Segoe UI", 24, "bold"),
-            text_color=accent_color
-        )
-        title_label.pack(pady=(0, 15))
+        # Logo image
+        try:
+            from PIL import Image
+            logo_path = get_resource_path("assets/logo-no-background.png")
+            if logo_path.exists():
+                logo_pil = Image.open(logo_path)
+                logo_ctk = ctk.CTkImage(light_image=logo_pil, dark_image=logo_pil, size=(280, 93))
+                logo_label = ctk.CTkLabel(content_frame, image=logo_ctk, text="")
+                logo_label.pack(pady=(0, 12))
+            else:
+                raise FileNotFoundError
+        except Exception:
+            # Fallback to text title if image unavailable
+            ctk.CTkLabel(
+                content_frame,
+                text="Valkyria",
+                font=("Segoe UI", 24, "bold"),
+                text_color=accent_color
+            ).pack(pady=(0, 15))
 
         # Description
         desc_label = ctk.CTkLabel(
             content_frame,
             text="A modern audio player with custom themes and intuitive controls.",
-            font=("Segoe UI", 14),
+            font=("Segoe UI", 13),
             text_color=fg_color,
             wraplength=350
         )
-        desc_label.pack(pady=5)
+        desc_label.pack(pady=4)
 
         # Version
         version_label = ctk.CTkLabel(

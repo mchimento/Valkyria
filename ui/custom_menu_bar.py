@@ -151,10 +151,6 @@ class CustomMenuBar(ctk.CTkFrame):
         if hasattr(self, '_btn_close'):
             self._btn_close.configure(fg_color=menubar_bg, hover_color="#C42B1C", text_color=text_color, bg_color=menubar_bg)
 
-    # ------------------------------------------------------------------ #
-    #  VS Code-style integrated window controls                           #
-    # ------------------------------------------------------------------ #
-
     def setup_window_controls(self, close_callback):
         """Add ─ □ ✕ buttons and a draggable title spacer.
 
@@ -201,7 +197,6 @@ class CustomMenuBar(ctk.CTkFrame):
         self._drag_spacer.bind("<B1-Motion>",       self._drag_motion)
         self._drag_spacer.bind("<Double-Button-1>", lambda e: self._toggle_maximize())
 
-    # -- drag helpers --
     def _drag_start(self, event):
         self._ox = event.x_root - self.parent_window.winfo_x()
         self._oy = event.y_root - self.parent_window.winfo_y()
@@ -225,7 +220,9 @@ class CustomMenuBar(ctk.CTkFrame):
         self._update_max_btn()
 
     def _minimize(self):
-        self.parent_window.iconify()
+        # iconify() silently fails on Windows when overrideredirect is active;
+        # delegate to the main window which uses withdraw() instead.
+        self.parent_window.event_generate("<<MinimizeRequested>>")
 
     def _update_max_btn(self):
         if hasattr(self, "_btn_max"):

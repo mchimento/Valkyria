@@ -30,6 +30,15 @@ def open_documentation(doc_filename, theme_manager):
         with open(doc_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
 
+        # Resolve relative image paths to absolute file:// URIs so the browser
+        # can load them from the temp file location.
+        docs_dir = get_docs_path()
+        markdown_content = re.sub(
+            r'src="(\.\./[^"]+)"',
+            lambda m: 'src="' + (docs_dir / m.group(1)).resolve().as_uri() + '"',
+            markdown_content
+        )
+
         # Preprocess markdown content
         lines = markdown_content.split('\n')
         processed_lines = []
