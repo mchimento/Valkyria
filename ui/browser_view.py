@@ -1,17 +1,24 @@
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
 import os
 
 from audio.metadata import get_display_title
+from audio.audio_player import AudioPlayer
 
 class BrowserView(ttk.Frame):
-    def __init__(self, master, state, theme, tooltip_manager=None, status_callback=None):
+    def __init__(self, master, state, theme, tooltip_manager=None, status_callback=None, player=None):
         super().__init__(master)
         self.state = state
         self.theme = theme
         self.tooltip_manager = tooltip_manager
         self.status_callback = status_callback
+
+        self._main_player = player
+        self._preview_player = AudioPlayer(on_track_end=self._on_preview_track_end) if player is not None else None
+        self._preview_path = None
+        self._preview_devices = []
 
         # Header label
         self.header_label = tk.Label(
@@ -45,6 +52,33 @@ class BrowserView(ttk.Frame):
         btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
 
+        # Preview device selector — placed above the browse buttons
+        self._preview_device_label = ctk.CTkLabel(
+            center_frame,
+            text="Preview output",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 10),
+            text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888")),
+            bg_color="transparent"
+        )
+        self._preview_device_label.pack(anchor='w', pady=(0, 2))
+
+        self._preview_device_var = tk.StringVar()
+        self._preview_device_menu = ctk.CTkOptionMenu(
+            center_frame,
+            variable=self._preview_device_var,
+            values=["No device"],
+            command=self._on_preview_device_changed,
+            width=120,
+            fg_color=btn_bg,
+            button_color=btn_bg,
+            button_hover_color=btn_hover,
+            text_color=btn_fg,
+            dropdown_fg_color=self.theme.palette.get("bg", "#121212"),
+            dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
+            dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
+        )
+        self._preview_device_menu.pack(pady=(0, 10))
+
         self.btn_folder = ctk.CTkButton(center_frame, text="📂 Folder", command=self.browse_folder, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
         self.btn_folder.pack(pady=6)
@@ -60,6 +94,23 @@ class BrowserView(ttk.Frame):
         self.btn_add_below = ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
         self.btn_add_below.pack(pady=8)
+
+        self._preview_btn_row = ctk.CTkFrame(center_frame, fg_color="transparent")
+        self._preview_btn_row.pack(pady=(10, 6))
+
+        self._btn_preview_play = ctk.CTkButton(
+            self._preview_btn_row, text="▶",
+            command=self._on_preview_play_btn, width=52, height=28,
+            fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover
+        )
+        self._btn_preview_play.pack(side="left", padx=(0, 4))
+
+        self._btn_preview_stop = ctk.CTkButton(
+            self._preview_btn_row, text="⏹",
+            command=self._preview_stop, width=52, height=28,
+            fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover
+        )
+        self._btn_preview_stop.pack(side="left")
 
         # Tree frame (Right side)
         tree_frame = ttk.Frame(content_frame)
@@ -144,11 +195,15 @@ class BrowserView(ttk.Frame):
         self.drag_tooltip_label.pack()
         self.drag_tooltip_visible = False
 
+        self._refresh_preview_devices()
+        self.bind("<Destroy>", self._on_destroy)
+
         self._setup_bindings()
 
     def _setup_bindings(self):
         """Setup event bindings."""
         self.tree.bind('<Delete>', self.remove_selected_from_browser)
+        self.tree.bind("<Double-1>", self._on_double_click)
 
         self.tree.bind("<ButtonPress-1>", self._on_drag_start)
         self.tree.bind("<B1-Motion>", self._on_drag_motion)
@@ -185,6 +240,38 @@ class BrowserView(ttk.Frame):
                 btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
             except Exception:
                 pass
+
+        if hasattr(self, '_preview_device_label'):
+            try:
+                self._preview_device_label.configure(
+                    text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888"))
+                )
+            except Exception:
+                pass
+
+        if hasattr(self, '_preview_device_menu'):
+            try:
+                self._preview_device_menu.configure(
+                    fg_color=btn_bg, button_color=btn_bg,
+                    button_hover_color=btn_hover, text_color=btn_fg,
+                    dropdown_fg_color=frame_bg,
+                    dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
+                    dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
+                )
+            except Exception:
+                pass
+
+        if hasattr(self, '_preview_btn_row'):
+            try:
+                self._preview_btn_row.configure(fg_color="transparent", bg_color=frame_bg)
+            except Exception:
+                pass
+        for btn in [getattr(self, '_btn_preview_play', None), getattr(self, '_btn_preview_stop', None)]:
+            if btn is not None:
+                try:
+                    btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
+                except Exception:
+                    pass
 
         # Update hover tag color last to ensure it takes precedence
         hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
@@ -674,3 +761,119 @@ class BrowserView(ttk.Frame):
             if "hover" in tags:
                 tags.remove("hover")
                 self.tree.item(child, tags=tuple(tags))
+
+    # ========== Preview ==========
+
+    def _get_preview_devices(self):
+        """Return (id, name) pairs available for preview, excluding the main player's device."""
+        if self._main_player is None:
+            return []
+        all_devices = self._main_player.get_audio_devices()
+        try:
+            import sounddevice as sd
+            default_idx = sd.default.device[1]
+            default_id = str(default_idx) if default_idx >= 0 else None
+        except Exception:
+            default_id = None
+
+        main_id = self._main_player._device_id  # None = system default
+        excluded = set()
+        if main_id is None:
+            excluded.add('__DEFAULT__')
+            if default_id is not None:
+                excluded.add(default_id)
+        else:
+            excluded.add(main_id)
+            if main_id == default_id:
+                excluded.add('__DEFAULT__')
+        return [(did, name) for did, name in all_devices if did not in excluded]
+
+    def _refresh_preview_devices(self):
+        """Rebuild the preview device dropdown, filtering out the main player's current device."""
+        if not hasattr(self, '_preview_device_menu'):
+            return
+        devices = self._get_preview_devices()
+        self._preview_devices = devices
+        if not devices:
+            self._preview_device_menu.configure(values=["No device available"], state="disabled")
+            self._preview_device_var.set("No device available")
+            self._set_preview_controls_state("disabled")
+        else:
+            names = [name for _, name in devices]
+            self._preview_device_menu.configure(values=names, state="normal")
+            if self._preview_device_var.get() not in names:
+                self._preview_device_var.set(names[0])
+            self._set_preview_controls_state("normal")
+
+    def refresh_preview_devices(self):
+        """Public entry point — call when the main player's output device changes."""
+        self._refresh_preview_devices()
+
+    def _set_preview_controls_state(self, state):
+        for widget in (getattr(self, '_btn_preview_play', None), getattr(self, '_btn_preview_stop', None)):
+            if widget is not None:
+                try:
+                    widget.configure(state=state)
+                except Exception:
+                    pass
+
+    def _on_preview_device_changed(self, _name):
+        """Stop any active preview when the user picks a different output device."""
+        if self._preview_path is not None:
+            self._preview_stop()
+
+    def _preview_play(self, path):
+        """Start (or restart) preview of *path* on the selected preview device."""
+        if self._preview_player is None:
+            return
+        self._refresh_preview_devices()
+        if not self._preview_devices:
+            return
+        selected_name = self._preview_device_var.get()
+        device_id = next((did for did, name in self._preview_devices if name == selected_name), None)
+        if device_id is None:
+            return
+        self._preview_path = path
+        def _start():
+            self._preview_player.set_audio_device(device_id)
+            self._preview_player.play(path)
+        threading.Thread(target=_start, daemon=True).start()
+
+    def _preview_stop(self):
+        """Stop the preview player."""
+        self._preview_path = None
+        if self._preview_player is not None:
+            threading.Thread(target=self._preview_player.stop, daemon=True).start()
+
+    def _on_preview_play_btn(self):
+        sels = self.tree.selection()
+        if not sels:
+            return
+        idx = self.tree.index(sels[0])
+        if 0 <= idx < len(self.state.browser_files):
+            self._preview_play(self.state.browser_files[idx])
+
+    def _on_double_click(self, event):
+        item = self.tree.identify_row(event.y)
+        if not item:
+            return
+        idx = self.tree.index(item)
+        if not (0 <= idx < len(self.state.browser_files)):
+            return
+        path = self.state.browser_files[idx]
+        # Toggle: double-clicking the same song stops it; any other song switches to it
+        if path == self._preview_path:
+            self._preview_stop()
+        else:
+            self._preview_play(path)
+
+    def _on_preview_track_end(self):
+        """Called from the preview player's background thread when a track finishes."""
+        self._preview_path = None
+
+    def _on_destroy(self, event):
+        if event.widget is self and self._preview_player is not None:
+            try:
+                self._preview_player.stop()
+            except Exception:
+                pass
