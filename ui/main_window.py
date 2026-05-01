@@ -7,7 +7,9 @@ import logging
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
+import ctypes
 import os
+import sys
 import threading
 import time
 from audio.metadata import metadata_extractor
@@ -506,20 +508,16 @@ class MainWindow:
     def _check_window_state(self):
         """Periodically check window state for mini player activation."""
         try:
-            # Only check if window still exists
             if not self.root.winfo_exists():
                 return
 
             current_state = self.root.state()
 
-            # Check if state changed to minimized
             if current_state == 'iconic' and not self._is_minimized:
                 if self._mini_player_enabled:
                     logger.info("Main window minimized, showing mini player")
                     self._is_minimized = True
                     self._show_mini_player()
-
-            # Check if state changed from minimized (ignore 'withdrawn' — that's our own hide)
             elif current_state not in ('iconic', 'withdrawn') and self._is_minimized:
                 logger.info("Main window restored, hiding mini player")
                 self._is_minimized = False
@@ -529,7 +527,6 @@ class MainWindow:
         except Exception as e:
             logger.error(f"Error checking window state: {e}", exc_info=True)
 
-        # Schedule next check (only if window still exists)
         try:
             if self.root.winfo_exists():
                 self.root.after(500, self._check_window_state)
@@ -556,8 +553,8 @@ class MainWindow:
                 # Position mini player in bottom-right corner
                 screen_width = self.root.winfo_screenwidth()
                 screen_height = self.root.winfo_screenheight()
-                x = screen_width - 470  # 450 width + 20 margin
-                y = screen_height - 170  # 130 height + 40 margin
+                x = screen_width - 470
+                y = screen_height - 170
                 self.mini_player.geometry(f"+{x}+{y}")
                 logger.info(f"Mini player positioned at ({x}, {y})")
 
@@ -672,49 +669,95 @@ class MainWindow:
     def on_change(self, *args):
         self.state.play_on_double = self.play_on_double_var.get()
 
+    # ---------- Cursor helpers ----------
+    def _show_busy_cursor(self):
+        if sys.platform == "win32":
+            try:
+                wait = ctypes.windll.user32.LoadCursorW(None, 32514)  # IDC_WAIT
+                copy = ctypes.windll.user32.CopyImage(wait, 2, 0, 0, 0x0040)  # IMAGE_CURSOR, LR_DEFAULTSIZE
+                ctypes.windll.user32.SetSystemCursor(copy, 32512)  # OCR_NORMAL
+                self._win32_busy = True
+            except Exception:
+                self._win32_busy = False
+        else:
+            self.root.configure(cursor="watch")
+
+    def _hide_busy_cursor(self):
+        if sys.platform == "win32" and getattr(self, "_win32_busy", False):
+            try:
+                ctypes.windll.user32.SystemParametersInfoW(0x0057, 0, None, 0)  # SPI_SETCURSORS
+            except Exception:
+                pass
+            self._win32_busy = False
+        else:
+            self.root.configure(cursor="")
+
     # ---------- Menu / File actions ----------
     def open_file(self):
         path = filedialog.askopenfilename(parent=self.root, title="Open File",
                                          filetypes=[("Audio files", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("All files", "*.*")])
         if not path:
             return
-        self.state.playlist = [path]
-        self.refresh_all()
-        self._restore_status()
+        self._show_busy_cursor()
+        def _do():
+            try:
+                self.state.playlist = [path]
+                self.refresh_all()
+                self._restore_status()
+            finally:
+                self._hide_busy_cursor()
+        self.root.after(10, _do)
 
     def open_files(self):
         paths = filedialog.askopenfilenames(parent=self.root, title="Open Multiple Files",
                                             filetypes=[("Audio files", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("All files", "*.*")])
         if not paths:
             return
-        self.state.playlist = list(paths)
-        self.refresh_all()
-        self._restore_status()
+        self._show_busy_cursor()
+        def _do():
+            try:
+                self.state.playlist = list(paths)
+                self.refresh_all()
+                self._restore_status()
+            finally:
+                self._hide_busy_cursor()
+        self.root.after(10, _do)
 
     def open_folder(self):
         folder = filedialog.askdirectory(parent=self.root, title="Open Folder")
         if not folder:
             return
-        self._load_files_into_playlist(folder)
-        self._restore_status()
+        self._show_busy_cursor()
+        def _do():
+            try:
+                self._load_files_into_playlist(folder)
+                self._restore_status()
+            finally:
+                self._hide_busy_cursor()
+        self.root.after(10, _do)
 
     def open_playlist(self):
         path = filedialog.askopenfilename(parent=self.root, title="Open Playlist",
                                           filetypes=[("M3U playlist", "*.m3u *.m3u8"), ("All files", "*.*")])
         if not path:
             return
-        try:
-            items = m3u_module.parse_m3u(path)
-            if not items:
-                self._set_temporary_status("No entries found in playlist")
-                return
-            self.state.playlist = items
-            self.state.current_playlist_path = path
-            self.refresh_all()
-            self._set_temporary_status(f"Playlist {path} was loaded")
-            self._restore_status()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load playlist: {e}", parent=self.root)
+        self._show_busy_cursor()
+        def _do():
+            try:
+                items = m3u_module.parse_m3u(path)
+                if not items:
+                    self._set_temporary_status("No entries found in playlist")
+                    return
+                self.state.playlist = items
+                self.state.current_playlist_path = path
+                self.refresh_all()
+                self._set_temporary_status(f"Playlist {path} was loaded")
+                self._restore_status()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load playlist: {e}", parent=self.root)
+            finally:
+                self._hide_busy_cursor()
+        self.root.after(10, _do)
 
     def save_playlist(self):
         if not self.state.current_playlist_path:
@@ -1152,9 +1195,15 @@ class MainWindow:
 
     # ---------- Playlist operations (menu) ----------
     def shuffle_playlist(self):
-        self.state.playlist, self.state.current_index = playback.shuffle_playlist(self.state.playlist, self.state.current_index)
-        self.refresh_all()
-        self._set_temporary_status("Playlist shuffled")
+        self._show_busy_cursor()
+        t0 = time.perf_counter()
+        def _do():
+            self.state.playlist, self.state.current_index = playback.shuffle_playlist(self.state.playlist, self.state.current_index)
+            self.refresh_all()
+            self._set_temporary_status("Playlist shuffled")
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            self.root.after(max(0, 200 - elapsed_ms), self._hide_busy_cursor)
+        self.root.after(10, _do)
 
     def clear_playlist(self):
         if not self.state.playlist:
@@ -1264,14 +1313,26 @@ class MainWindow:
         self.refresh_all()
 
     def sort_playlist_by_title(self):
-        self.state.playlist, self.state.current_index = playback.sort_playlist_by_title(self.state.playlist, self.state.current_index)
-        self.refresh_all()
-        self._set_temporary_status("Playlist sorted by title")
+        self._show_busy_cursor()
+        t0 = time.perf_counter()
+        def _do():
+            self.state.playlist, self.state.current_index = playback.sort_playlist_by_title(self.state.playlist, self.state.current_index)
+            self.refresh_all()
+            self._set_temporary_status("Playlist sorted by title")
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            self.root.after(max(0, 200 - elapsed_ms), self._hide_busy_cursor)
+        self.root.after(10, _do)
 
     def sort_playlist_by_artist(self):
-        self.state.playlist, self.state.current_index = playback.sort_playlist_by_artist(self.state.playlist, self.state.current_index)
-        self.refresh_all()
-        self._set_temporary_status("Playlist sorted by artist")
+        self._show_busy_cursor()
+        t0 = time.perf_counter()
+        def _do():
+            self.state.playlist, self.state.current_index = playback.sort_playlist_by_artist(self.state.playlist, self.state.current_index)
+            self.refresh_all()
+            self._set_temporary_status("Playlist sorted by artist")
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            self.root.after(max(0, 200 - elapsed_ms), self._hide_busy_cursor)
+        self.root.after(10, _do)
 
     def play_selected_after_current(self):
         """Move selected tracks to play immediately after the currently playing track."""
