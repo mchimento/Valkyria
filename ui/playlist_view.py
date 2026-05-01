@@ -1,3 +1,5 @@
+import queue
+import threading
 import tkinter as tk
 from tkinter import ttk
 from audio.metadata import get_metadata, get_display_title, metadata_extractor
@@ -35,6 +37,9 @@ class PlaylistView(ttk.Frame):
 
         self._clicked_item = None
         self._last_highlighted_index = None
+
+        # Background metadata load cancellation token
+        self._bg_load_id = 0
 
         # Column resize tracking
         self._resize_indicators = []
@@ -323,7 +328,6 @@ class PlaylistView(ttk.Frame):
             self.scroll_thumb,
             fill=self.theme.palette.get("scrollbar_thumb", "#BB86FC")
         )
-        self.refresh(preserve_selection=True)
 
     # ========== Refresh and Rendering ==========
 
@@ -359,7 +363,11 @@ class PlaylistView(ttk.Frame):
             pass
 
     def refresh(self, preserve_selection=False):
-        """Efficiently refresh the playlist display."""
+        """Refresh the playlist display using a two-phase load when metadata is not yet cached."""
+        # Increment token so any in-progress background load knows to stop
+        self._bg_load_id += 1
+        load_id = self._bg_load_id
+
         # Store current selection
         selected_indices = []
         if preserve_selection:
@@ -368,7 +376,7 @@ class PlaylistView(ttk.Frame):
         # Clear tree
         self.tree.delete(*self.tree.get_children())
 
-        # Recalculate filtered indices if search is active (playlist may have been modified)
+        # Rebuild search filter — requires metadata, so always synchronous
         if self._search_text:
             self._filtered_indices = []
             for i, filepath in enumerate(self.state.playlist):
@@ -376,87 +384,43 @@ class PlaylistView(ttk.Frame):
                 title = metadata.get("title", get_display_title(filepath)).lower()
                 artist = metadata.get("artist", "").lower()
                 album = metadata.get("album", "").lower()
-
-                # Match against title, artist, or album (case-insensitive)
                 if (self._search_text in title or
-                    self._search_text in artist or
-                    self._search_text in album):
+                        self._search_text in artist or
+                        self._search_text in album):
                     self._filtered_indices.append(i)
 
-        # Determine which tracks to display based on search filter
+        # Determine which tracks to display
         if self._search_text:
-            # Apply filter - only show matching tracks
             display_tracks = [(i, self.state.playlist[i]) for i in self._filtered_indices]
         else:
-            # No filter - show all tracks
             display_tracks = list(enumerate(self.state.playlist))
 
-        # Batch insert for performance
-        items_to_insert = []
-        for display_index, (actual_index, filepath) in enumerate(display_tracks):
-            # Get metadata for the file
-            metadata = self._get_metadata(filepath)
-            title = metadata.get("title", get_display_title(filepath))
-            artist = metadata.get("artist", "")
-            album = metadata.get("album", "")
-            duration = metadata.get("duration", "")
+        # Progressive insert when uncached; synchronous when already cached
+        uncached = [fp for _, fp in display_tracks if fp not in metadata_extractor._cache]
+        if uncached:
+            # Rows are inserted by the background thread as metadata becomes ready,
+            # so each row appears with all columns complete — no empty-column flash.
+            self._start_progressive_insert(display_tracks, load_id)
+        else:
+            self._insert_rows_with_metadata(display_tracks)
+            if preserve_selection:
+                children = self.tree.get_children()
+                for idx in selected_indices:
+                    if idx < len(children):
+                        self.tree.selection_add(children[idx])
 
-            # Check if there's a time limit for this track
-            if filepath in self.state.play_limits:
-                limit_seconds = self.state.play_limits[filepath]
-                duration = f"⏱ {int(limit_seconds)}s"
-
-            # Determine tags based on state
-            tags = ["odd" if display_index % 2 == 1 else "even"]
-
-            # Playing indicator
-            icon = ""
-            if self.state.current_index is not None and actual_index == self.state.current_index:
-                icon = "▶"
-                tags.append("playing")
-
-            items_to_insert.append((actual_index, icon, title, artist, album, duration, filepath, tags))
-
-        # Insert all at once
-        for actual_index, icon, title, artist, album, duration, filepath, tags in items_to_insert:
-            # Add padding to column values
-            padded_artist = f"  {artist}"  # Add 2 spaces padding
-            padded_album = f"  {album}"   # Add 2 spaces padding
-            padded_duration = f"  {duration}"  # Add 2 spaces padding
-
-            # Store actual index in item's tags for later retrieval
-            item_tags = tuple(tags) + (f"index_{actual_index}",)
-            item_id = self.tree.insert(
-                '',
-                tk.END,
-                text=icon,
-                values=(title, padded_artist, padded_album, padded_duration),
-                tags=item_tags
-            )
-
-        # Restore selection
-        if preserve_selection:
-            children = self.tree.get_children()
-            for idx in selected_indices:
-                if idx < len(children):
-                    self.tree.selection_add(children[idx])
-
-        # Update scrollbar
+        # Update scrollbar and tracking state
         self._update_scrollbar()
-
-        # Update last highlighted index
         self._last_highlighted_index = self.state.current_index
 
-        # Hide/show search bar, tree and scrollbar based on playlist content
+        # Show/hide search bar, tree and scrollbar based on playlist content
         has_songs = len(self.state.playlist) > 0
         is_empty = len(display_tracks) == 0
 
         if has_songs:
-            # Show search bar if there are songs in the playlist
             if not self.search_frame.winfo_ismapped():
                 self.search_frame.pack(before=self.tree_frame, anchor="e", padx=10, pady=(0, 10))
         else:
-            # Hide search bar if playlist is empty
             self.search_frame.pack_forget()
 
         if is_empty:
@@ -465,6 +429,95 @@ class PlaylistView(ttk.Frame):
         else:
             self.scrollbar_canvas.pack(side="right", fill="y")
             self.tree.pack(fill="both", expand=True, padx=(0, 10))
+
+    def _insert_rows_with_metadata(self, display_tracks):
+        """Insert all rows with fully resolved metadata (called when everything is cached)."""
+        for display_index, (actual_index, filepath) in enumerate(display_tracks):
+            metadata = self._get_metadata(filepath)
+            title = metadata.get("title", get_display_title(filepath))
+            artist = metadata.get("artist", "")
+            album = metadata.get("album", "")
+            duration = metadata.get("duration", "")
+            if filepath in self.state.play_limits:
+                duration = f"⏱ {int(self.state.play_limits[filepath])}s"
+            tags = ["odd" if display_index % 2 == 1 else "even"]
+            icon = ""
+            if self.state.current_index is not None and actual_index == self.state.current_index:
+                icon = "▶"
+                tags.append("playing")
+            self.tree.insert(
+                '', tk.END, text=icon,
+                values=(title, f"  {artist}", f"  {album}", f"  {duration}"),
+                tags=tuple(tags) + (f"index_{actual_index}",)
+            )
+
+    def _start_progressive_insert(self, display_tracks, load_id):
+        """Insert rows into the treeview progressively as metadata is loaded.
+
+        Each row appears only once all its columns are ready, so there is never
+        a visible empty-column state. The drain loop keeps at most one pending
+        after() in the event queue so other UI events are never blocked.
+        """
+        root = self.winfo_toplevel()
+        BATCH_SIZE = 50
+        batch_q = queue.SimpleQueue()
+
+        def worker():
+            batch = []
+            for display_idx, (actual_index, filepath) in enumerate(display_tracks):
+                if self._bg_load_id != load_id:
+                    break
+                try:
+                    meta = get_metadata(filepath)
+                    title = meta.get("title", get_display_title(filepath))
+                    artist = meta.get("artist", "")
+                    album = meta.get("album", "")
+                    duration = meta.get("duration", "")
+                except Exception:
+                    title = get_display_title(filepath)
+                    artist = album = duration = ""
+                batch.append((display_idx, actual_index, filepath, title, artist, album, duration))
+                if len(batch) >= BATCH_SIZE:
+                    batch_q.put(list(batch))
+                    batch.clear()
+            if batch:
+                batch_q.put(list(batch))
+            batch_q.put(None)
+
+        def drain():
+            if self._bg_load_id != load_id:
+                return
+            try:
+                batch = batch_q.get_nowait()
+            except queue.Empty:
+                root.after(10, drain)
+                return
+            if batch is None:
+                return
+            self._insert_rows_batch(batch, load_id)
+            root.after(1, drain)
+
+        threading.Thread(target=worker, daemon=True, name="metadata-bg-load").start()
+        root.after(10, drain)
+
+    def _insert_rows_batch(self, updates, load_id):
+        """Append a batch of fully-loaded rows to the treeview (runs on the main thread)."""
+        if self._bg_load_id != load_id:
+            return
+        for display_idx, actual_index, filepath, title, artist, album, duration in updates:
+            if filepath in self.state.play_limits:
+                duration = f"⏱ {int(self.state.play_limits[filepath])}s"
+            tags = ["odd" if display_idx % 2 == 1 else "even"]
+            icon = ""
+            if self.state.current_index is not None and actual_index == self.state.current_index:
+                icon = "▶"
+                tags.append("playing")
+            self.tree.insert(
+                '', tk.END, text=icon,
+                values=(title, f"  {artist}", f"  {album}", f"  {duration}"),
+                tags=tuple(tags) + (f"index_{actual_index}",)
+            )
+        self._update_scrollbar()
 
     def _get_metadata(self, filepath):
         """Get metadata for a file using the centralized metadata module."""

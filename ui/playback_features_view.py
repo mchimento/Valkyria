@@ -55,6 +55,7 @@ class PlaybackFeaturesView(tk.Toplevel):
 
         center_window(self, master)
         apply_theme_titlebar(self, self.palette)
+        self.configure(bg=self.palette.get("bg", "#ffffff"))
 
         # Main container: use CTkFrame for consistent theming and padding
         self.main_frame = ctk.CTkFrame(self, fg_color=self.palette.get("bg", "#ffffff"))
