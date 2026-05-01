@@ -52,33 +52,6 @@ class BrowserView(ttk.Frame):
         btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
 
-        # Preview device selector — placed above the browse buttons
-        self._preview_device_label = ctk.CTkLabel(
-            center_frame,
-            text="Preview output",
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 10),
-            text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888")),
-            bg_color="transparent"
-        )
-        self._preview_device_label.pack(anchor='w', pady=(0, 2))
-
-        self._preview_device_var = tk.StringVar()
-        self._preview_device_menu = ctk.CTkOptionMenu(
-            center_frame,
-            variable=self._preview_device_var,
-            values=["No device"],
-            command=self._on_preview_device_changed,
-            width=120,
-            fg_color=btn_bg,
-            button_color=btn_bg,
-            button_hover_color=btn_hover,
-            text_color=btn_fg,
-            dropdown_fg_color=self.theme.palette.get("bg", "#121212"),
-            dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
-            dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
-        )
-        self._preview_device_menu.pack(pady=(0, 10))
-
         self.btn_folder = ctk.CTkButton(center_frame, text="📂 Folder", command=self.browse_folder, width=120,
                       fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
         self.btn_folder.pack(pady=6)
@@ -112,9 +85,44 @@ class BrowserView(ttk.Frame):
         )
         self._btn_preview_stop.pack(side="left")
 
-        # Tree frame (Right side)
-        tree_frame = ttk.Frame(content_frame)
-        tree_frame.pack(side="left", fill="both", expand=True)
+        # Right side: device selector row + tree
+        right_side_frame = ttk.Frame(content_frame)
+        right_side_frame.pack(side="left", fill="both", expand=True)
+
+        # Preview device selector — above the browse list
+        bg = self.theme.palette.get("bg", "#121212")
+        self._device_row = ttk.Frame(right_side_frame)
+        self._device_row.pack(fill="x", pady=(0, 6))
+
+        self._preview_device_label = ctk.CTkLabel(
+            self._device_row,
+            text="Preview output:",
+            font=(self.theme.palette.get("ui_font", "Segoe UI"), 10),
+            text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888")),
+            bg_color=bg
+        )
+        self._preview_device_label.pack(side="left", padx=(0, 6))
+
+        self._preview_device_var = tk.StringVar()
+        self._preview_device_menu = ctk.CTkOptionMenu(
+            self._device_row,
+            variable=self._preview_device_var,
+            values=["No device"],
+            command=self._on_preview_device_changed,
+            fg_color=btn_bg,
+            button_color=btn_bg,
+            button_hover_color=btn_hover,
+            text_color=btn_fg,
+            bg_color=bg,
+            dropdown_fg_color=bg,
+            dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
+            dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
+        )
+        self._preview_device_menu.pack(side="left", fill="x", expand=True)
+
+        # Tree frame
+        tree_frame = ttk.Frame(right_side_frame)
+        tree_frame.pack(fill="both", expand=True)
 
         # Custom scrollbar (styled to be modern)
         self.scrollbar_canvas = tk.Canvas(
@@ -241,10 +249,17 @@ class BrowserView(ttk.Frame):
             except Exception:
                 pass
 
+        if hasattr(self, '_device_row'):
+            try:
+                self._device_row.configure(style="TFrame")
+            except Exception:
+                pass
+
         if hasattr(self, '_preview_device_label'):
             try:
                 self._preview_device_label.configure(
-                    text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888"))
+                    text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888")),
+                    bg_color=frame_bg
                 )
             except Exception:
                 pass
@@ -254,6 +269,7 @@ class BrowserView(ttk.Frame):
                 self._preview_device_menu.configure(
                     fg_color=btn_bg, button_color=btn_bg,
                     button_hover_color=btn_hover, text_color=btn_fg,
+                    bg_color=frame_bg,
                     dropdown_fg_color=frame_bg,
                     dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
                     dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
