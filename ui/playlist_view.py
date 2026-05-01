@@ -575,6 +575,7 @@ class PlaylistView(ttk.Frame):
         # Get actual playlist index (not tree display index)
         actual_index = self._get_actual_index_from_tree_item(sels[0])
         self.state.current_index = actual_index
+        self._last_double_index = actual_index
         self.master.event_generate("<<PlaylistDouble>>")
         self._highlight_current()
 

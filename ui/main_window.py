@@ -1582,45 +1582,40 @@ class MainWindow:
         """
         idx = getattr(self.playlist_view, "_last_double_index", None)
         if idx is None:
-            # fallback to currently selected
-            sels = self.playlist_view.tree.selection()
-            if not sels:
-                return
-            idx = self.playlist_view.tree.index(sels[0])
+            idx = self.state.current_index
+        if idx is None:
+            return
 
         if 0 <= idx < len(self.state.playlist):
-            # Increment request tracking
             with self._play_request_lock:
                 self._play_request_id += 1
                 my_id = self._play_request_id
 
-            def _transition():
-                # Trigger fade out if needed
-                if self.player.is_playing() and self.settings.fade_out_enabled:
+            if self.player.is_playing() and self.settings.fade_out_enabled:
+                # Fade out is active: run in background thread so we can wait for it
+                def _transition():
                     wait = self.player.trigger_fade_out()
                     if wait > 0:
                         time.sleep(wait)
-
-                # Check if a newer request has come in
-                with self._play_request_lock:
-                    if self._play_request_id != my_id:
-                        return
-
-                # Switch track on main thread
-                def _force_play():
-                    # Double check ID on main thread before execution
                     with self._play_request_lock:
                         if self._play_request_id != my_id:
                             return
-
-                    self.state.current_index = idx
-                    self.refresh_all()
-                    self.controls._on_play()
-                    self._restore_status()
-
-                self.root.after(0, _force_play)
-
-            threading.Thread(target=_transition, daemon=True).start()
+                    def _force_play():
+                        with self._play_request_lock:
+                            if self._play_request_id != my_id:
+                                return
+                        self.state.current_index = idx
+                        self.refresh_all()
+                        self.controls._on_play()
+                        self._restore_status()
+                    self.root.after(0, _force_play)
+                threading.Thread(target=_transition, daemon=True).start()
+            else:
+                # No fade out — play immediately on the main thread, same as next/previous
+                self.state.current_index = idx
+                self.refresh_all()
+                self.controls._on_play()
+                self._restore_status()
 
     def _on_playlist_select(self, index):
         """
