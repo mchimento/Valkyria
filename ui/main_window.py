@@ -356,7 +356,7 @@ class MainWindow:
         self.right_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(6,0))
 
-        self.browser_view = BrowserView(self.right_frame, self.state, self.theme, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event)
+        self.browser_view = BrowserView(self.right_frame, self.state, self.theme, tooltip_manager=self.tooltip_manager, status_callback=self._controls_status_event, player=self.player)
         self.browser_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Link browser view to playlist view for drag and drop
@@ -816,6 +816,8 @@ class MainWindow:
         """Set the audio output device."""
         try:
             self.player.set_audio_device(device_id)
+            if hasattr(self, 'browser_view'):
+                self.browser_view.refresh_preview_devices()
             device_name = [name for did, name in self.player.get_audio_devices() if did == device_id]
             device_name = device_name[0] if device_name else device_id
             self._set_temporary_status(f"Audio device set to: {device_name}")
