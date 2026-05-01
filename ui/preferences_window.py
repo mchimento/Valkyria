@@ -21,6 +21,9 @@ class PreferencesWindow(tk.Toplevel):
         self.on_bpm_preference_change = on_bpm_preference_change
         self.original_theme = settings.theme
         self.original_bpm_mode = settings.bpm_mode
+        # Tracks which theme is currently rendered in the main window (may differ
+        # from original_theme if the user previewed a different theme)
+        self._current_applied_theme = settings.theme
 
 
         self.title("Preferences")
@@ -206,9 +209,10 @@ class PreferencesWindow(tk.Toplevel):
         # Update preferences window
         self._apply_theme_to_this_window(preview_theme)
 
-        # Notify main window via callback
+        # Notify main window via callback and track what is now applied
         if callable(self.on_apply):
             self.on_apply(preview_theme)
+        self._current_applied_theme = preview_theme
 
     def _apply_theme_to_this_window(self, theme_name):
         """Apply theme to all widgets in this window including padding areas."""
@@ -386,24 +390,21 @@ class PreferencesWindow(tk.Toplevel):
         new_theme = self.var.get()
         new_bpm_mode = self.bpm_var.get()
 
-        # Check if BPM mode changed
         bpm_mode_changed = (new_bpm_mode != self.settings.bpm_mode)
 
         self.settings.theme = new_theme
         self.settings.bpm_mode = new_bpm_mode
-        # Persist mini player toggle
         self.settings.mini_player_enabled = getattr(self, 'mini_player_var', tk.BooleanVar(value=True)).get()
         self.settings.save()
 
-        # Update global BPM preference
         from audio.metadata import set_bpm_preference
         set_bpm_preference(new_bpm_mode)
 
-        # Trigger BPM refresh if mode changed
         if bpm_mode_changed and callable(self.on_bpm_preference_change):
             self.on_bpm_preference_change()
 
-        if callable(self.on_apply):
+        # Only apply theme if it differs from what is already rendered
+        if new_theme != self._current_applied_theme and callable(self.on_apply):
             self.on_apply(new_theme)
         self.destroy()
 
@@ -412,14 +413,13 @@ class PreferencesWindow(tk.Toplevel):
         self.settings.bpm_mode = self.original_bpm_mode
         self.settings.save()
 
-        # Restore original BPM mode
         from audio.metadata import set_bpm_preference
         set_bpm_preference(self.settings.bpm_mode)
 
-        # Trigger BPM refresh if mode was different
         if self.original_bpm_mode != self.settings.bpm_mode and callable(self.on_bpm_preference_change):
             self.on_bpm_preference_change()
 
-        if callable(self.on_apply):
+        # Only restore theme if a preview changed what is currently rendered
+        if self._current_applied_theme != self.original_theme and callable(self.on_apply):
             self.on_apply(self.original_theme)
         self.destroy()

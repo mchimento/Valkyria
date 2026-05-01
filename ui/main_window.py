@@ -1694,13 +1694,11 @@ class MainWindow:
         if index is None or not self.state.playlist:
             return
 
-        # Check if there's a currently playing track
         if self.state.current_index is None:
             messagebox.showinfo("No Track Playing", "Please start playing a track first.", parent=self.root)
             return
 
         if 0 <= index < len(self.state.playlist):
-            # Move this single track after current
             self.state.playlist, self.state.current_index = playback.play_after_current(
                 self.state.playlist, [index], self.state.current_index
             )
