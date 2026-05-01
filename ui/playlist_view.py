@@ -395,22 +395,19 @@ class PlaylistView(ttk.Frame):
         else:
             display_tracks = list(enumerate(self.state.playlist))
 
-        # Two-phase load: skip if all metadata is already cached
+        # Progressive insert when uncached; synchronous when already cached
         uncached = [fp for _, fp in display_tracks if fp not in metadata_extractor._cache]
         if uncached:
-            # Phase 1: insert rows immediately with filename only (zero file I/O)
-            self._insert_rows_filename_only(display_tracks)
-            # Phase 2: load metadata on background thread and patch rows in batches
-            self._start_metadata_bg_load(display_tracks, load_id)
+            # Rows are inserted by the background thread as metadata becomes ready,
+            # so each row appears with all columns complete — no empty-column flash.
+            self._start_progressive_insert(display_tracks, load_id)
         else:
             self._insert_rows_with_metadata(display_tracks)
-
-        # Restore selection
-        if preserve_selection:
-            children = self.tree.get_children()
-            for idx in selected_indices:
-                if idx < len(children):
-                    self.tree.selection_add(children[idx])
+            if preserve_selection:
+                children = self.tree.get_children()
+                for idx in selected_indices:
+                    if idx < len(children):
+                        self.tree.selection_add(children[idx])
 
         # Update scrollbar and tracking state
         self._update_scrollbar()
@@ -454,26 +451,12 @@ class PlaylistView(ttk.Frame):
                 tags=tuple(tags) + (f"index_{actual_index}",)
             )
 
-    def _insert_rows_filename_only(self, display_tracks):
-        """Insert rows immediately using only filenames — no file I/O."""
-        for display_index, (actual_index, filepath) in enumerate(display_tracks):
-            title = get_display_title(filepath)
-            tags = ["odd" if display_index % 2 == 1 else "even"]
-            icon = ""
-            if self.state.current_index is not None and actual_index == self.state.current_index:
-                icon = "▶"
-                tags.append("playing")
-            self.tree.insert(
-                '', tk.END, text=icon,
-                values=(title, "", "", ""),
-                tags=tuple(tags) + (f"index_{actual_index}",)
-            )
+    def _start_progressive_insert(self, display_tracks, load_id):
+        """Insert rows into the treeview progressively as metadata is loaded.
 
-    def _start_metadata_bg_load(self, display_tracks, load_id):
-        """Load metadata on a background thread and patch treeview rows via a queue-drain loop.
-
-        The drain loop keeps at most one pending after() in the event queue at any
-        time, so other UI events (window close, button clicks) are never blocked.
+        Each row appears only once all its columns are ready, so there is never
+        a visible empty-column state. The drain loop keeps at most one pending
+        after() in the event queue so other UI events are never blocked.
         """
         root = self.winfo_toplevel()
         BATCH_SIZE = 50
@@ -483,7 +466,7 @@ class PlaylistView(ttk.Frame):
             batch = []
             for display_idx, (actual_index, filepath) in enumerate(display_tracks):
                 if self._bg_load_id != load_id:
-                    break  # Newer refresh started; stop producing
+                    break
                 try:
                     meta = get_metadata(filepath)
                     title = meta.get("title", get_display_title(filepath))
@@ -499,38 +482,42 @@ class PlaylistView(ttk.Frame):
                     batch.clear()
             if batch:
                 batch_q.put(list(batch))
-            batch_q.put(None)  # sentinel — signals end of stream
+            batch_q.put(None)
 
         def drain():
             if self._bg_load_id != load_id:
-                return  # Load was superseded; stop draining
+                return
             try:
                 batch = batch_q.get_nowait()
             except queue.Empty:
-                root.after(10, drain)  # Nothing ready yet; yield and retry
+                root.after(10, drain)
                 return
             if batch is None:
-                return  # Sentinel received — all batches processed
-            self._apply_metadata_batch(batch, load_id)
-            root.after(1, drain)  # Yield one event-loop tick before next batch
+                return
+            self._insert_rows_batch(batch, load_id)
+            root.after(1, drain)
 
         threading.Thread(target=worker, daemon=True, name="metadata-bg-load").start()
         root.after(10, drain)
 
-    def _apply_metadata_batch(self, updates, load_id):
-        """Patch a batch of treeview rows with loaded metadata (runs on the main thread)."""
+    def _insert_rows_batch(self, updates, load_id):
+        """Append a batch of fully-loaded rows to the treeview (runs on the main thread)."""
         if self._bg_load_id != load_id:
-            return  # Stale batch — a newer refresh has already replaced these rows
-        children = self.tree.get_children()
-        for display_idx, _, filepath, title, artist, album, duration in updates:
-            if display_idx >= len(children):
-                continue
+            return
+        for display_idx, actual_index, filepath, title, artist, album, duration in updates:
             if filepath in self.state.play_limits:
                 duration = f"⏱ {int(self.state.play_limits[filepath])}s"
-            self.tree.item(
-                children[display_idx],
-                values=(title, f"  {artist}", f"  {album}", f"  {duration}")
+            tags = ["odd" if display_idx % 2 == 1 else "even"]
+            icon = ""
+            if self.state.current_index is not None and actual_index == self.state.current_index:
+                icon = "▶"
+                tags.append("playing")
+            self.tree.insert(
+                '', tk.END, text=icon,
+                values=(title, f"  {artist}", f"  {album}", f"  {duration}"),
+                tags=tuple(tags) + (f"index_{actual_index}",)
             )
+        self._update_scrollbar()
 
     def _get_metadata(self, filepath):
         """Get metadata for a file using the centralized metadata module."""
