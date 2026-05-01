@@ -44,6 +44,7 @@ Welcome to **Valkyria**, a modern audio player with advanced features for music 
 * [Keyboard Shortcuts](#keyboard-shortcuts)
 * [Audio Devices](#audio-devices)
 * [Browser View](#browser-view)
+  * [Song Preview](#song-preview)
 * [Tips & Tricks](#tips--tricks)
 * [Troubleshooting](#troubleshooting)
 
@@ -884,14 +885,33 @@ Once you've browsed to a folder containing audio files:
 * **Select Files**: Click to select individual files, Ctrl+Click for multiple selection, Shift+Click for range selection
 * **Add Button**: Adds selected files to the end of the playlist
 * **Add Below Button**: Inserts selected files after the currently playing track
-* **Double-Click**: Behavior depends on "Play on Double-Click" setting
+* **Double-Click**: Previews, i.e. plays in secondary audio divice if avaialble, the selected file (see [Song Preview](#song-preview) below).
+
+You can also drag songs from the browser view and drop them in the playback queueu.
+
+### Song Preview
+
+The browser includes a built-in audio preview that lets you audition files through a secondary audio device without interrupting main playback.
+
+#### Preview Output Device
+
+A **Preview output** dropdown appears above the file list. It lists all available audio output devices **except** the one currently used by the main player, so preview audio is always routed to a different device.
+
+* If only one audio output device is connected, the preview controls are disabled automatically.
+* The dropdown updates whenever you change the main player's output device via **Settings → Audio Device**.
+
+#### Previewing a File
+
+* **Double-click** any file in the browser list to start previewing it. Double-clicking the same file again stops the preview.
+* The **▶** button starts (or restarts) preview playback for the currently selected file.
+* The **⏹** button stops playback immediately.
+
+Preview playback is independent from the main playlist — starting a preview does not affect the currently playing track, and stopping the preview does not pause or stop the main player.
 
 ### Browser Tips
 
-* **Drag and Drop**: Drag files from the browser directly onto the playlist (feature availability may vary)
-* **Filter by Type**: Browser automatically shows only supported audio formats
+* **Drag and Drop**: Drag files from the browser directly onto the playlist
 * **Quick Access**: Keep browser view visible (F10) for instant access to your music library
-* **Folder Bookmarks**: Use Browse Folder to quickly jump to frequently-accessed directories
 
 ## Tips & Tricks
 
