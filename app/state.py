@@ -2,7 +2,7 @@
 Global runtime state
 """
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 @dataclass
 class AppState:
@@ -24,4 +24,4 @@ class AppState:
     silence_detection_enabled: bool = False
 
     _current_theme: str = 'light'
-    exts = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
+    exts: Tuple[str, ...] = field(default_factory=lambda: (".mp3", ".wav", ".flac", ".ogg", ".m4a"))

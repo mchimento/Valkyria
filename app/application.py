@@ -17,8 +17,8 @@ class ValkyriaApp:
     def __init__(self):
         logger.info("Initializing Valkyria")
 
-        self.state = AppState()
         self.settings = Settings()
+        self.state = AppState(exts=self.settings.supported_extensions)
         self.theme = ThemeManager(self.settings)
         self.player = AudioPlayer(on_track_end=self._on_track_end)
 

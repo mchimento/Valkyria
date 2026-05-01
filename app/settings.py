@@ -4,8 +4,8 @@ Settings (simple JSON)
 import logging
 from pathlib import Path
 import json
-from typing import Optional
-from app.paths import get_user_data_path
+from typing import Optional, Tuple
+from app.paths import get_user_data_path, get_resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,10 @@ class Settings:
         # BPM preference: 'perceived' maps tempo into 50-100, 'raw' returns detected tempo
         self.bpm_mode: str = 'raw'
 
+        # Supported audio extensions — loaded from config.json
+        self.supported_extensions: Tuple[str, ...] = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
+        self._load_app_config()
+
         # Mini player (enabled by default)
         self.mini_player_enabled: bool = True
 
@@ -35,6 +39,19 @@ class Settings:
         self.silence_detection_enabled: bool = False
 
         self.load()
+
+    def _load_app_config(self) -> None:
+        """Load static app defaults from the bundled config.json."""
+        try:
+            path = get_resource_path("config.json")
+            if path.exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                exts = data.get("audio", {}).get("supported_extensions")
+                if exts:
+                    self.supported_extensions = tuple(exts)
+        except Exception:
+            logger.warning("Failed to load app config from config.json", exc_info=True)
 
     @property
     def config_path(self) -> Path:

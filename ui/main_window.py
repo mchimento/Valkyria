@@ -1711,7 +1711,7 @@ class MainWindow:
     def _load_files_into_playlist(self, folder):
         if not os.path.isdir(folder):
             return
-        exts = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
+        exts = self.state.exts
         files = []
         for root, _, filenames in os.walk(folder):
             for fn in filenames:
