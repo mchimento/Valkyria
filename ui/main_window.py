@@ -1004,8 +1004,13 @@ class MainWindow:
             logger.error(f"Failed to open playlist generator: {e}", exc_info=True)
 
     def _on_playlist_generated(self, songs: list, mode: str):
-        """Receive generated songs and replace or append the playlist."""
+        """Receive generated songs and route them to the playlist or browser."""
         if not songs:
+            return
+        if mode == "browser":
+            self.state.browser_files.clear()
+            self.state.browser_files.extend(songs)
+            self.browser_view.refresh()
             return
         if mode == "replace":
             self.state.playlist.clear()

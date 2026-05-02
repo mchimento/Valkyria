@@ -401,6 +401,19 @@ class PlaylistGeneratorWindow(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _render_tree(self):
+        # Capture selected object (by identity) before wiping the tree
+        _sel_obj = None
+        sel = self.tree.selection()
+        if sel:
+            data = self._tree_map.get(sel[0])
+            if data:
+                if data[0] == "group":
+                    _sel_obj = data[1]
+                elif data[0] == "subgroup":
+                    _sel_obj = data[2]
+                elif data[0] == "source":
+                    _sel_obj = data[3]
+
         self.tree.delete(*self.tree.get_children())
         self._tree_map.clear()
 
@@ -428,6 +441,9 @@ class PlaylistGeneratorWindow(tk.Toplevel):
                     short = self._short_path(source.path)
                     s_iid = self.tree.insert(sg_iid, "end", text=f"  {icon} {short}", tags=("source",))
                     self._tree_map[s_iid] = ("source", group, subgroup, source)
+
+        if _sel_obj is not None:
+            self._reselect_item(_sel_obj)
 
     def _short_path(self, path: str, max_len: int = 48) -> str:
         if len(path) <= max_len:
@@ -805,6 +821,17 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             messagebox.showinfo("Generate", "Add at least one group with sources first.", parent=self)
             return
 
+        empty = [g.name for g in self._template.groups
+                 if not any(sg.sources for sg in g.subgroups)]
+        if empty:
+            names = "\n".join(f"  • {n}" for n in empty)
+            if not messagebox.askyesno(
+                "Groups Without Sources",
+                f"These groups have no sources and will contribute no songs:\n{names}\n\nContinue anyway?",
+                parent=self,
+            ):
+                return
+
         self._generate_btn.configure(state="disabled")
         self._status_label.configure(text="Generating…")
         self.update_idletasks()
@@ -834,18 +861,53 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         h, rem = divmod(int(total_dur), 3600)
         m, s = divmod(rem, 60)
         dur_str = f"{h}h {m:02d}m {s:02d}s" if h else f"{m}m {s:02d}s"
-        self._status_label.configure(text=f"Generated {len(songs)} songs ({dur_str})")
+        summary = f"Generated {len(songs)} songs ({dur_str})"
+        self._status_label.configure(text=summary)
 
-        answer = messagebox.askyesnocancel(
-            "Add to Playlist",
-            f"Generated {len(songs)} songs ({dur_str}).\n\nReplace current playlist?",
-            parent=self
-        )
-        if answer is None:
+        mode = self._ask_generate_destination(summary)
+        if mode is None:
             return
-        mode = "replace" if answer else "append"
         if callable(self.on_generate):
             self.on_generate(songs, mode)
+
+    def _ask_generate_destination(self, summary: str):
+        """Modal dialog; returns 'replace', 'append', 'browser', or None."""
+        result = [None]
+        p = self.palette
+        bg = p.get("bg", "#1e1e1e")
+        fg = p.get("fg", "#ffffff")
+        fg_muted = p.get("fg_muted", "#888888")
+        font = (p.get("ui_font", "Segoe UI"), 11)
+
+        dlg = tk.Toplevel(self, bg=bg)
+        dlg.title("Send Songs")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        tk.Label(dlg, text=summary, bg=bg, fg=fg, font=font).pack(padx=24, pady=(18, 4))
+        tk.Label(dlg, text="Where do you want to send them?",
+                 bg=bg, fg=fg_muted,
+                 font=(p.get("ui_font", "Segoe UI"), 10)).pack(padx=24, pady=(0, 14))
+
+        btn_row = tk.Frame(dlg, bg=bg)
+        btn_row.pack(padx=24, pady=(0, 20))
+
+        def _pick(val):
+            result[0] = val
+            dlg.destroy()
+
+        for text, val in [("Replace Playlist", "replace"), ("Append to Playlist", "append"),
+                          ("Send to Browser", "browser"), ("Cancel", None)]:
+            self._make_btn(btn_row, text, lambda v=val: _pick(v), width=148, side="left", padx=(0, 6))
+
+        dlg.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - dlg.winfo_width()) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        self.wait_window(dlg)
+        return result[0]
 
     # ------------------------------------------------------------------
     # Theming

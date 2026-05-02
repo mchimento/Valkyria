@@ -150,12 +150,13 @@ class GeneratorTemplate:
 # ---------------------------------------------------------------------------
 
 def scan_audio_dir(path: str) -> List[str]:
-    """Return all audio files found directly inside a directory (non-recursive)."""
+    """Return all audio files found recursively inside a directory."""
     result = []
     try:
-        for entry in sorted(os.scandir(path), key=lambda e: e.name.lower()):
-            if entry.is_file() and Path(entry.name).suffix.lower() in AUDIO_EXTENSIONS:
-                result.append(entry.path)
+        for root, _dirs, files in os.walk(path):
+            for name in sorted(files, key=str.lower):
+                if Path(name).suffix.lower() in AUDIO_EXTENSIONS:
+                    result.append(os.path.join(root, name))
     except OSError as e:
         logger.warning(f"Could not scan directory {path}: {e}")
     return result
@@ -240,7 +241,7 @@ def generate(template: GeneratorTemplate, metadata_extractor) -> List[str]:
     groups = template.groups
     rules = template.rules
 
-    pools = {g.name: build_group_pool(g, metadata_extractor) for g in groups}
+    pools = [build_group_pool(g, metadata_extractor) for g in groups]
 
     result: List[str] = []
     used: set = set()
@@ -275,7 +276,7 @@ def generate(template: GeneratorTemplate, metadata_extractor) -> List[str]:
         return True
 
     if rules.order_mode == "fully_random":
-        all_songs = [s for g in groups for s in pools[g.name]]
+        all_songs = [s for pool in pools for s in pool]
         random.shuffle(all_songs)
         for song in all_songs:
             if not _can_add():
@@ -283,26 +284,26 @@ def generate(template: GeneratorTemplate, metadata_extractor) -> List[str]:
             _add(song)
         return result
 
-    # Round-robin across groups
-    group_pools: dict = {}
-    for g in groups:
-        pool = pools[g.name][:]
+    # Round-robin across groups — use indices so duplicate group names don't collide
+    group_pools = []
+    for pool in pools:
+        p = pool[:]
         if rules.order_mode == "shuffle_within_group":
-            random.shuffle(pool)
-        group_pools[g.name] = pool
+            random.shuffle(p)
+        group_pools.append(p)
 
-    positions = {g.name: 0 for g in groups}
-    exhausted: set = set()
+    positions = [0] * len(groups)
+    exhausted: set = set()  # stores group indices
 
     while len(exhausted) < len(groups) and _can_add():
         made_progress = False
-        for g in groups:
-            if g.name in exhausted:
+        for i, g in enumerate(groups):
+            if i in exhausted:
                 continue
             if not _can_add():
                 break
-            pool = group_pools[g.name]
-            pos = positions[g.name]
+            pool = group_pools[i]
+            pos = positions[i]
             picked = 0
             while picked < g.songs_per_round and pos < len(pool):
                 if not _can_add():
@@ -312,9 +313,9 @@ def generate(template: GeneratorTemplate, metadata_extractor) -> List[str]:
                 if _add(song):
                     picked += 1
                     made_progress = True
-            positions[g.name] = pos
+            positions[i] = pos
             if pos >= len(pool):
-                exhausted.add(g.name)
+                exhausted.add(i)
         if not made_progress:
             break
 
