@@ -291,6 +291,10 @@ class AudioPlayer:
         # Clear output buffer first to prevent residual audio
         outdata.fill(0)
 
+        # If stop was requested, abort immediately — don't process any more old audio
+        if self._stopped_manually:
+            raise sd.CallbackAbort
+
         data = []
         frames_to_read = frames
 
@@ -302,7 +306,7 @@ class AudioPlayer:
 
             if not self._buffer:
                 outdata[:] = 0
-                raise sd.CallbackStop
+                raise sd.CallbackAbort
 
             # Calculate frames to read based on rate
             if abs(self._playback_rate - 1.0) < 0.01:
@@ -796,6 +800,7 @@ class AudioPlayer:
                     samplerate=self._buffer.samplerate,
                     channels=self._buffer.channels,
                     device=device,
+                    latency='low',
                     callback=self._stream_callback,
                     finished_callback=self._on_stream_finished
                 )
