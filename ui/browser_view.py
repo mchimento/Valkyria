@@ -36,8 +36,6 @@ class _RoundedButton(tk.Canvas):
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
         self.bind("<Button-1>", self._on_press)
-        self.tag_bind(self._shape, "<Button-1>", self._on_press)
-        self.tag_bind(self._label, "<Button-1>", self._on_press)
 
     def _create_shape(self, color):
         r, w, h = self._radius, self._btn_w, self._btn_h
@@ -157,10 +155,10 @@ class BrowserView(ttk.Frame):
         self._preview_btn_row = tk.Frame(center_frame, bg=bg)
         self._preview_btn_row.pack(pady=(10, 6))
 
-        self._btn_preview_play = _make_btn(self._preview_btn_row, "▶", self._on_preview_play_btn, width=52, height=28)
+        self._btn_preview_play = _make_btn(self._preview_btn_row, "▶", self._on_preview_play_btn, width=58, height=32)
         self._btn_preview_play.pack(side="left", padx=(0, 4))
 
-        self._btn_preview_stop = _make_btn(self._preview_btn_row, "⏹", self._preview_stop, width=52, height=28)
+        self._btn_preview_stop = _make_btn(self._preview_btn_row, "⏹", self._preview_stop, width=58, height=32)
         self._btn_preview_stop.pack(side="left")
 
         # Right side: device selector row + tree
@@ -686,7 +684,7 @@ class BrowserView(ttk.Frame):
             insert_pos = self.state.current_index + 1
 
         added = 0
-        for i, f in enumerate(files_to_add):
+        for f in files_to_add:
             self.state.playlist.insert(insert_pos + added, f)
             added += 1
 
