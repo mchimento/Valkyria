@@ -44,7 +44,6 @@ def apply_theme_titlebar(window, palette):
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
             return r | (g << 8) | (b << 16)
 
-        window.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
         if not hwnd:
             hwnd = window.winfo_id()

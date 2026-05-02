@@ -31,7 +31,8 @@ from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
 from ui.time_limit_dialog import TimeLimitDialog
 from ui.mini_player import MiniPlayer
-from app.paths import get_resource_path
+from ui.playlist_generator_window import PlaylistGeneratorWindow
+from app.paths import get_resource_path, get_generator_templates_path
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +303,8 @@ class MainWindow:
             audio_device_item,
             {"label": "Audio Effects and Filters", "command": self.open_audio_effects, "accelerator": "F7"},
             {"label": "Playback features", "command": self.open_playback_features, "accelerator": "F8"},
+            {"separator": True},
+            {"label": "Playlist Generator", "command": self.open_playlist_generator, "accelerator": "F6"},
             {"separator": True},
             {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
@@ -988,6 +991,31 @@ class MainWindow:
             PlaybackFeaturesView(self.root, self.state, self.settings, self.theme, self.player)
         except Exception as e:
             logger.error(f"Failed to open playback features: {e}", exc_info=True)
+
+    def open_playlist_generator(self):
+        """Open the Playlist Generator window."""
+        try:
+            PlaylistGeneratorWindow(
+                self.root, self.theme,
+                on_generate=self._on_playlist_generated,
+                templates_path=str(get_generator_templates_path()),
+            )
+        except Exception as e:
+            logger.error(f"Failed to open playlist generator: {e}", exc_info=True)
+
+    def _on_playlist_generated(self, songs: list, mode: str):
+        """Receive generated songs and replace or append the playlist."""
+        if not songs:
+            return
+        if mode == "replace":
+            self.state.playlist.clear()
+            self.state.current_index = None
+            self.player.stop()
+        for path in songs:
+            self.state.playlist.append(path)
+        if mode == "replace" and self.state.playlist:
+            self.state.current_index = 0
+        self.refresh_all()
 
     def open_audio_effects(self):
         """Open the Audio Effects window."""
@@ -1833,6 +1861,7 @@ class MainWindow:
         # Tools menu accelerators
         self.root.bind_all("<Control-p>", lambda e: self.open_preferences())
         # Use bind_all for function keys so accelerators work regardless of focus
+        self.root.bind_all("<F6>", lambda e: self.open_playlist_generator())
         self.root.bind_all("<F7>", lambda e: self.open_audio_effects())
         self.root.bind_all("<F8>", lambda e: self.open_playback_features())
 

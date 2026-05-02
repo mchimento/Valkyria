@@ -1,11 +1,91 @@
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import customtkinter as ctk
 import os
 
 from audio.metadata import get_display_title
 from audio.audio_player import AudioPlayer
+
+
+class _RoundedButton(tk.Canvas):
+    """Flat canvas button with rounded corners — no CTk dependency."""
+
+    def __init__(self, parent, text, command,
+                 bg="#0078d4", fg="#ffffff", hover_bg="#106ebe",
+                 canvas_bg="#121212", width=120, height=32,
+                 radius=8, font=None):
+        super().__init__(parent, width=width, height=height,
+                         highlightthickness=0, bd=0, bg=canvas_bg)
+        self._btn_bg = bg
+        self._btn_fg = fg
+        self._btn_hover = hover_bg
+        self._command = command
+        self._radius = radius
+        self._btn_w = width
+        self._btn_h = height
+        self._font = font or ("Segoe UI", 10)
+        self._disabled = False
+        self._hovered = False
+
+        self._shape = self._create_shape(bg)
+        self._label = self.create_text(
+            width // 2, height // 2, text=text,
+            fill=fg, font=self._font, anchor="center",
+        )
+
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_press)
+        self.tag_bind(self._shape, "<Button-1>", self._on_press)
+        self.tag_bind(self._label, "<Button-1>", self._on_press)
+
+    def _create_shape(self, color):
+        r, w, h = self._radius, self._btn_w, self._btn_h
+        pts = [r, 0,   w-r, 0,   w, 0,   w, r,
+               w, h-r, w, h,    w-r, h,  r, h,
+               0, h,   0, h-r,  0, r,    0, 0]
+        return self.create_polygon(pts, smooth=True, fill=color, outline="")
+
+    def _on_enter(self, _):
+        if not self._disabled:
+            self.itemconfig(self._shape, fill=self._btn_hover)
+            self._hovered = True
+
+    def _on_leave(self, _):
+        if not self._disabled:
+            self.itemconfig(self._shape, fill=self._btn_bg)
+            self._hovered = False
+
+    def _on_press(self, _):
+        if not self._disabled and self._command:
+            self._command()
+
+    def configure(self, **kwargs):
+        if "state" in kwargs:
+            self._disabled = kwargs.pop("state") == "disabled"
+            self.itemconfig(self._shape,
+                            fill="#555555" if self._disabled else self._btn_bg)
+            self.itemconfig(self._label,
+                            fill="#888888" if self._disabled else self._btn_fg)
+        if "bg" in kwargs:
+            self._btn_bg = kwargs.pop("bg")
+            if not self._disabled and not self._hovered:
+                self.itemconfig(self._shape, fill=self._btn_bg)
+        if "fg" in kwargs:
+            self._btn_fg = kwargs.pop("fg")
+            if not self._disabled:
+                self.itemconfig(self._label, fill=self._btn_fg)
+        if "hover_bg" in kwargs:
+            self._btn_hover = kwargs.pop("hover_bg")
+        if "activebackground" in kwargs:
+            self._btn_hover = kwargs.pop("activebackground")
+        if "activeforeground" in kwargs:
+            kwargs.pop("activeforeground")
+        if "canvas_bg" in kwargs:
+            super().configure(bg=kwargs.pop("canvas_bg"))
+        super().configure(**kwargs)
+
+    config = configure
 
 class BrowserView(ttk.Frame):
     def __init__(self, master, state, theme, tooltip_manager=None, status_callback=None, player=None):
@@ -44,45 +124,43 @@ class BrowserView(ttk.Frame):
         button_container.pack(expand=True, fill="both")
 
         # Create another frame to center buttons horizontally within the container
-        center_frame = ttk.Frame(button_container)
-        center_frame.pack(expand=True)
+        self._center_frame = tk.Frame(button_container, bg=self.theme.palette.get("bg", "#121212"))
+        self._center_frame.pack(expand=True)
+        center_frame = self._center_frame
 
-        # Get button colors from theme palette
         btn_bg = self.theme.palette.get("button_bg_color", self.theme.palette.get("accent", "#0078d4"))
         btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
         btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
+        bg = self.theme.palette.get("bg", "#121212")
+        ui_font = self.theme.palette.get("ui_font", "Segoe UI")
 
-        self.btn_folder = ctk.CTkButton(center_frame, text="📂 Folder", command=self.browse_folder, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        def _make_btn(parent, text, command, width=120, height=32):
+            return _RoundedButton(
+                parent, text=text, command=command,
+                bg=btn_bg, fg=btn_fg, hover_bg=btn_hover,
+                canvas_bg=bg, width=width, height=height,
+                radius=8, font=(ui_font, 10),
+            )
+
+        self.btn_folder = _make_btn(center_frame, "📂 Folder", self.browse_folder)
         self.btn_folder.pack(pady=6)
 
-        self.btn_file = ctk.CTkButton(center_frame, text="🎵 File", command=self.browse_files, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_file = _make_btn(center_frame, "🎵 File", self.browse_files)
         self.btn_file.pack(pady=6)
 
-        self.btn_add = ctk.CTkButton(center_frame, text="➕ Add", command=self.add_selected_to_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_add = _make_btn(center_frame, "➕ Add", self.add_selected_to_playlist)
         self.btn_add.pack(pady=8)
 
-        self.btn_add_below = ctk.CTkButton(center_frame, text="⬇ Add Below", command=self.add_selected_below_playlist, width=120,
-                      fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover)
+        self.btn_add_below = _make_btn(center_frame, "⬇ Add Below", self.add_selected_below_playlist)
         self.btn_add_below.pack(pady=8)
 
-        self._preview_btn_row = ctk.CTkFrame(center_frame, fg_color="transparent")
+        self._preview_btn_row = tk.Frame(center_frame, bg=bg)
         self._preview_btn_row.pack(pady=(10, 6))
 
-        self._btn_preview_play = ctk.CTkButton(
-            self._preview_btn_row, text="▶",
-            command=self._on_preview_play_btn, width=52, height=28,
-            fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover
-        )
+        self._btn_preview_play = _make_btn(self._preview_btn_row, "▶", self._on_preview_play_btn, width=52, height=28)
         self._btn_preview_play.pack(side="left", padx=(0, 4))
 
-        self._btn_preview_stop = ctk.CTkButton(
-            self._preview_btn_row, text="⏹",
-            command=self._preview_stop, width=52, height=28,
-            fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover
-        )
+        self._btn_preview_stop = _make_btn(self._preview_btn_row, "⏹", self._preview_stop, width=52, height=28)
         self._btn_preview_stop.pack(side="left")
 
         # Right side: device selector row + tree
@@ -90,34 +168,24 @@ class BrowserView(ttk.Frame):
         right_side_frame.pack(side="left", fill="both", expand=True)
 
         # Preview device selector — above the browse list
-        bg = self.theme.palette.get("bg", "#121212")
         self._device_row = ttk.Frame(right_side_frame)
         self._device_row.pack(fill="x", pady=(0, 6))
 
-        self._preview_device_label = ctk.CTkLabel(
+        self._preview_device_label = ttk.Label(
             self._device_row,
             text="Preview output:",
-            font=(self.theme.palette.get("ui_font", "Segoe UI"), 10),
-            text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888")),
-            bg_color=bg
         )
         self._preview_device_label.pack(side="left", padx=(0, 6))
 
         self._preview_device_var = tk.StringVar()
-        self._preview_device_menu = ctk.CTkOptionMenu(
+        self._preview_device_menu = ttk.Combobox(
             self._device_row,
-            variable=self._preview_device_var,
+            textvariable=self._preview_device_var,
             values=["No device"],
-            command=self._on_preview_device_changed,
-            fg_color=btn_bg,
-            button_color=btn_bg,
-            button_hover_color=btn_hover,
-            text_color=btn_fg,
-            bg_color=bg,
-            dropdown_fg_color=bg,
-            dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
-            dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
+            state="readonly",
+            width=28,
         )
+        self._preview_device_menu.bind("<<ComboboxSelected>>", lambda e: self._on_preview_device_changed(self._preview_device_var.get()))
         self._preview_device_menu.pack(side="left", fill="x", expand=True)
 
         # Tree frame
@@ -228,84 +296,38 @@ class BrowserView(ttk.Frame):
 
     def update_theme(self):
         """Update theme-dependent styles."""
-        if "striped_bg" in self.theme.palette:
-            self.tree.tag_configure("striped", background=self.theme.palette["striped_bg"])
+        p = self.theme.palette
+        bg = p.get("bg", "#121212")
+        btn_bg = p.get("button_bg_color", p.get("accent", "#0078d4"))
+        btn_fg = p.get("button_fg_color", "#ffffff")
+        btn_hover = p.get("button_hover", p.get("accent_hover", "#106ebe"))
 
-        # Update header label colors
-        self.header_label.config(
-            fg=self.theme.palette.get("fg", "#FFFFFF"),
-            bg=self.theme.palette.get("bg", "#121212")
-        )
+        if "striped_bg" in p:
+            self.tree.tag_configure("striped", background=p["striped_bg"])
 
-        # Update buttons
-        btn_bg = self.theme.palette.get("button_bg_color", self.theme.palette.get("accent", "#0078d4"))
-        btn_fg = self.theme.palette.get("button_fg_color", "#ffffff")
-        btn_hover = self.theme.palette.get("button_hover", self.theme.palette.get("accent_hover", "#106ebe"))
-        frame_bg = self.theme.palette.get("bg", "#121212")
+        self.header_label.config(fg=p.get("fg", "#FFFFFF"), bg=bg)
 
-        for btn in [self.btn_folder, self.btn_file, self.btn_add, self.btn_add_below]:
-            try:
-                btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
-            except Exception:
-                pass
-
-        if hasattr(self, '_device_row'):
-            try:
-                self._device_row.configure(style="TFrame")
-            except Exception:
-                pass
-
-        if hasattr(self, '_preview_device_label'):
-            try:
-                self._preview_device_label.configure(
-                    text_color=self.theme.palette.get("fg_dim", self.theme.palette.get("fg", "#888888")),
-                    bg_color=frame_bg
-                )
-            except Exception:
-                pass
-
-        if hasattr(self, '_preview_device_menu'):
-            try:
-                self._preview_device_menu.configure(
-                    fg_color=btn_bg, button_color=btn_bg,
-                    button_hover_color=btn_hover, text_color=btn_fg,
-                    bg_color=frame_bg,
-                    dropdown_fg_color=frame_bg,
-                    dropdown_hover_color=self.theme.palette.get("hover_bg", "#2a2a2a"),
-                    dropdown_text_color=self.theme.palette.get("fg", "#ffffff"),
-                )
-            except Exception:
-                pass
-
-        if hasattr(self, '_preview_btn_row'):
-            try:
-                self._preview_btn_row.configure(fg_color="transparent", bg_color=frame_bg)
-            except Exception:
-                pass
-        for btn in [getattr(self, '_btn_preview_play', None), getattr(self, '_btn_preview_stop', None)]:
+        for btn in [self.btn_folder, self.btn_file, self.btn_add, self.btn_add_below,
+                    getattr(self, "_btn_preview_play", None),
+                    getattr(self, "_btn_preview_stop", None)]:
             if btn is not None:
-                try:
-                    btn.configure(fg_color=btn_bg, text_color=btn_fg, hover_color=btn_hover, bg_color=frame_bg)
-                except Exception:
-                    pass
+                btn.configure(bg=btn_bg, fg=btn_fg,
+                               activebackground=btn_hover, canvas_bg=bg)
 
-        # Update hover tag color last to ensure it takes precedence
-        hover_bg = self.theme.palette.get("hover_bg", "#2A2A2A")
-        self.tree.tag_configure("hover", background=hover_bg)
+        if hasattr(self, "_center_frame"):
+            self._center_frame.configure(bg=bg)
+        if hasattr(self, "_preview_btn_row"):
+            self._preview_btn_row.configure(bg=bg)
 
-        self.scrollbar_canvas.config(bg=self.theme.palette.get("bg", "#121212"))
-        self.scrollbar_canvas.itemconfig(
-            self.scroll_track,
-            fill=self.theme.palette.get("scrollbar_track", "#282828")
-        )
-        self.scrollbar_canvas.itemconfig(
-            self.scroll_thumb,
-            fill=self.theme.palette.get("scrollbar_thumb", "#535353")
-        )
+        self.tree.tag_configure("hover", background=p.get("hover_bg", "#2A2A2A"))
+
+        self.scrollbar_canvas.config(bg=bg)
+        self.scrollbar_canvas.itemconfig(self.scroll_track, fill=p.get("scrollbar_track", "#282828"))
+        self.scrollbar_canvas.itemconfig(self.scroll_thumb, fill=p.get("scrollbar_thumb", "#535353"))
 
         self.drag_tooltip_label.config(
-            bg=self.theme.palette.get("tooltip_bg", "#2D2D2D"),
-            fg=self.theme.palette.get("tooltip_fg", "#FFFFFF")
+            bg=p.get("tooltip_bg", "#2D2D2D"),
+            fg=p.get("tooltip_fg", "#FFFFFF")
         )
 
     def set_playlist_view(self, playlist_view):
@@ -816,7 +838,7 @@ class BrowserView(ttk.Frame):
             self._set_preview_controls_state("disabled")
         else:
             names = [name for _, name in devices]
-            self._preview_device_menu.configure(values=names, state="normal")
+            self._preview_device_menu.configure(values=names, state="readonly")
             if self._preview_device_var.get() not in names:
                 self._preview_device_var.set(names[0])
             self._set_preview_controls_state("normal")

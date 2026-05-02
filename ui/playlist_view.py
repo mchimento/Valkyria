@@ -1214,7 +1214,12 @@ class PlaylistView(ttk.Frame):
                 break
 
         # Click was outside search entry, remove focus if search entry has it
-        if self.search_entry == self.focus_get():
+        try:
+            focused = self.focus_get()
+        except KeyError:
+            # Transient widgets (e.g. combobox popdown) can't be resolved
+            focused = None
+        if focused is not None and self.search_entry == focused:
             self.tree.focus_set()
 
     def _on_search_focus_in(self, event):
