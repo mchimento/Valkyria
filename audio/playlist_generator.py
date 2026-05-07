@@ -5,6 +5,7 @@ import json
 import os
 import random
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -27,6 +28,7 @@ ORDER_MODES = {
     "strict": "Original order within groups",
     "shuffle_within_group": "Shuffle within groups",
     "fully_random": "Fully random",
+    "subgroup_round": "Random subgroup per round",
 }
 
 
@@ -103,7 +105,7 @@ class GeneratorRules:
     total_songs: Optional[int] = None
     total_duration_sec: Optional[int] = None
     allow_repeats: bool = False
-    order_mode: str = "shuffle_within_group"
+    order_mode: str = "subgroup_round"
 
     def to_dict(self):
         return {
@@ -226,6 +228,36 @@ def build_group_pool(group: Group, metadata_extractor) -> List[str]:
     return filtered
 
 
+def build_subgroup_pools(group: Group, metadata_extractor) -> List[List[str]]:
+    """Return one filtered pool per subgroup (preserving subgroup boundaries)."""
+    has_filters = (
+        group.filters.bpm_min is not None
+        or group.filters.bpm_max is not None
+        or (group.filters.key and group.filters.key != "Any")
+    )
+    result = []
+    for subgroup in group.subgroups:
+        seen: set = set()
+        files: List[str] = []
+        for source in subgroup.sources:
+            for f in _load_source_files(source):
+                if f not in seen:
+                    seen.add(f)
+                    files.append(f)
+        if has_filters:
+            filtered = []
+            for f in files:
+                try:
+                    meta = metadata_extractor.get_metadata(f)
+                    if _passes_filter(meta, group.filters):
+                        filtered.append(f)
+                except Exception:
+                    pass
+            files = filtered
+        result.append(files)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
@@ -282,6 +314,57 @@ def generate(template: GeneratorTemplate, metadata_extractor) -> List[str]:
             if not _can_add():
                 break
             _add(song)
+        return result
+
+    if rules.order_mode == "subgroup_round":
+        # Each round, each group picks songs_per_round tracks from one subgroup.
+        # Subgroups are cycled in a randomly shuffled order; once all are used,
+        # the cycle restarts. Groups without subgroups fall back to a single pool.
+        queues: List[deque] = []
+        for i, g in enumerate(groups):
+            if g.subgroups:
+                sub_pools = build_subgroup_pools(g, metadata_extractor)
+            else:
+                sub_pools = [pools[i]]
+            entries = []
+            for sp in sub_pools:
+                p = sp[:]
+                random.shuffle(p)
+                if p:
+                    entries.append([p, 0])  # [pool, current_position]
+            random.shuffle(entries)
+            queues.append(deque(entries))
+
+        exhausted: set = set()
+        while len(exhausted) < len(groups) and _can_add():
+            made_progress = False
+            for i, g in enumerate(groups):
+                if i in exhausted:
+                    continue
+                if not _can_add():
+                    break
+                q = queues[i]
+                if not q:
+                    exhausted.add(i)
+                    continue
+                entry = q.popleft()
+                pool, pos = entry[0], entry[1]
+                picked = 0
+                while picked < g.songs_per_round and pos < len(pool):
+                    if not _can_add():
+                        break
+                    song = pool[pos]
+                    pos += 1
+                    if _add(song):
+                        picked += 1
+                        made_progress = True
+                entry[1] = pos
+                if pos < len(pool):
+                    q.append(entry)
+                if not q:
+                    exhausted.add(i)
+            if not made_progress:
+                break
         return result
 
     # Round-robin across groups — use indices so duplicate group names don't collide

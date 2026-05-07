@@ -5,7 +5,7 @@ then generate a playlist from your music library.
 import copy
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, simpledialog, messagebox
+from tkinter import ttk, filedialog
 import customtkinter as ctk
 
 from audio.playlist_generator import (
@@ -69,6 +69,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._position_centered(master, 960, 680)
         self.update_idletasks()  # ensure outer HWND is linked before DWM coloring
         apply_theme_titlebar(self, self.palette)
+        self.bind("<Configure>", self._on_configure)
         self.deiconify()
 
     def _position_centered(self, parent, w: int, h: int):
@@ -80,6 +81,10 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         x = max(0, px + (pw - w) // 2)
         y = max(0, py + (ph - h) // 2)
         self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _on_configure(self, event):
+        if event.widget is self:
+            apply_theme_titlebar(self, self.palette)
 
     # ------------------------------------------------------------------
     # Build UI
@@ -102,7 +107,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._template_combo.pack(side="left", padx=(0, 8))
         self._template_combo.bind("<<ComboboxSelected>>", self._on_template_selected)
 
-        for text, cmd in [("Load", self._on_load_template), ("Save", self._on_save_template),
+        for text, cmd in [("Save", self._on_save_template),
                           ("Save As…", self._on_save_as_template), ("Delete", self._on_delete_template)]:
             self._make_btn(bar, text, cmd, width=74, side="left", padx=(0, 4))
 
@@ -173,7 +178,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._var_total_duration = tk.StringVar()
         self._var_total_duration_unlimited = tk.BooleanVar(value=True)
         self._var_allow_repeats = tk.BooleanVar(value=False)
-        self._var_order_mode = tk.StringVar(value=_ORDER_MODE_LABELS[1])
+        self._var_order_mode = tk.StringVar(value=ORDER_MODES["subgroup_round"])
 
         self._total_songs_entry, self._total_songs_unlimited_cb = self._make_limit_row(
             self._global_frame, "Total songs:", self._var_total_songs,
@@ -283,6 +288,102 @@ class PlaylistGeneratorWindow(tk.Toplevel):
     # Widget helpers
     # ------------------------------------------------------------------
 
+    def _show_info(self, title: str, message: str) -> None:
+        self._themed_dialog(title, message, buttons=[("OK", True)])
+
+    def _show_error(self, title: str, message: str) -> None:
+        self._themed_dialog(title, message, buttons=[("OK", True)], error=True)
+
+    def _ask_yesno(self, title: str, message: str) -> bool:
+        return bool(self._themed_dialog(title, message, buttons=[("Yes", True), ("No", False)]))
+
+    def _themed_dialog(self, title: str, message: str, buttons: list, error: bool = False):
+        """Generic themed modal dialog. Returns the value of the clicked button."""
+        result = [None]
+        p = self.palette
+        bg = p.get("bg", "#1e1e1e")
+        fg = p.get("error", "#ff6b6b") if error else p.get("fg", "#ffffff")
+
+        dlg = tk.Toplevel(self, bg=bg)
+        dlg.title(title)
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        tk.Label(dlg, text=message, bg=bg, fg=fg,
+                 font=(p.get("ui_font", "Segoe UI"), 11),
+                 wraplength=340, justify="left").pack(padx=24, pady=(20, 16))
+
+        btn_row = tk.Frame(dlg, bg=bg)
+        btn_row.pack(padx=24, pady=(0, 18))
+
+        def _pick(val):
+            result[0] = val
+            dlg.destroy()
+
+        for i, (label, val) in enumerate(buttons):
+            self._make_btn(btn_row, label, lambda v=val: _pick(v),
+                           width=80, side="left", padx=(0, 8) if i < len(buttons) - 1 else 0)
+
+        dlg.bind("<Return>", lambda _: _pick(buttons[0][1]))
+        dlg.bind("<Escape>", lambda _: _pick(buttons[-1][1]))
+
+        dlg.update_idletasks()
+        apply_theme_titlebar(dlg, self.palette)
+        x = self.winfo_rootx() + (self.winfo_width() - dlg.winfo_width()) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        self.wait_window(dlg)
+        return result[0]
+
+    def _ask_string(self, title: str, prompt: str, initial: str = "") -> "str | None":
+        """Themed single-line text entry dialog matching the generator window palette."""
+        result = [None]
+        p = self.palette
+        bg = p.get("bg", "#1e1e1e")
+        fg = p.get("fg", "#ffffff")
+
+        dlg = tk.Toplevel(self, bg=bg)
+        dlg.title(title)
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        tk.Label(dlg, text=prompt, bg=bg, fg=fg,
+                 font=(p.get("ui_font", "Segoe UI"), 11)).pack(padx=24, pady=(18, 6))
+
+        var = tk.StringVar(value=initial)
+        entry = ttk.Entry(dlg, textvariable=var, width=32)
+        entry.pack(padx=24, pady=(0, 14))
+        entry.focus_set()
+        if initial:
+            entry.select_range(0, tk.END)
+
+        btn_row = tk.Frame(dlg, bg=bg)
+        btn_row.pack(padx=24, pady=(0, 18))
+
+        def _ok(_event=None):
+            result[0] = var.get()
+            dlg.destroy()
+
+        def _cancel(_event=None):
+            dlg.destroy()
+
+        self._make_btn(btn_row, "OK", _ok, width=80, side="left", padx=(0, 8))
+        self._make_btn(btn_row, "Cancel", _cancel, width=80, side="left")
+        dlg.bind("<Return>", _ok)
+        dlg.bind("<Escape>", _cancel)
+
+        dlg.update_idletasks()
+        apply_theme_titlebar(dlg, self.palette)
+        x = self.winfo_rootx() + (self.winfo_width() - dlg.winfo_width()) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        self.wait_window(dlg)
+        return result[0]
+
     def _make_btn(self, parent, text, command, width=90, height=28, side=None, padx=0):
         p = self.palette
         btn = ctk.CTkButton(
@@ -322,15 +423,10 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._template_combo.configure(values=names)
         if self._selected_template_name in names:
             self._template_var.set(self._selected_template_name)
-        elif names:
-            self._template_var.set(names[0])
         else:
             self._template_var.set("")
 
     def _on_template_selected(self, _event=None):
-        pass  # selection is read on Load click
-
-    def _on_load_template(self):
         name = self._template_var.get()
         if not name:
             return
@@ -362,12 +458,12 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._template_var.set(name)
 
     def _on_save_as_template(self):
-        name = simpledialog.askstring("Save Template", "Template name:", parent=self)
+        name = self._ask_string("Save Template", "Template name:")
         if not name or not name.strip():
             return
         name = name.strip()
         if any(t.name == name for t in self._templates):
-            if not messagebox.askyesno("Overwrite", f'Template "{name}" already exists. Overwrite?', parent=self):
+            if not self._ask_yesno("Overwrite", f'Template "{name}" already exists. Overwrite?'):
                 return
             self._templates = [t for t in self._templates if t.name != name]
         self._template.name = name
@@ -382,7 +478,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         name = self._template_var.get()
         if not name:
             return
-        if not messagebox.askyesno("Delete Template", f'Delete template "{name}"?', parent=self):
+        if not self._ask_yesno("Delete Template", f'Delete template "{name}"?'):
             return
         self._templates = [t for t in self._templates if t.name != name]
         save_templates(self._templates_path, self._templates)
@@ -496,7 +592,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _on_add_group(self):
-        name = simpledialog.askstring("Add Group", "Group name:", parent=self)
+        name = self._ask_string("Add Group", "Group name:")
         if not name or not name.strip():
             return
         self._template.groups.append(Group(name=name.strip()))
@@ -505,51 +601,48 @@ class PlaylistGeneratorWindow(tk.Toplevel):
     def _on_add_subgroup(self):
         group = self._get_selected_group()
         if group is None:
-            messagebox.showinfo("Add Subgroup", "Select a group first.", parent=self)
+            self._show_info("Add Subgroup", "Select a group first.")
             return
-        name = simpledialog.askstring("Add Subgroup", "Subgroup name:", parent=self)
+        name = self._ask_string("Add Subgroup", "Subgroup name:")
         if not name or not name.strip():
             return
         group.subgroups.append(Subgroup(name=name.strip()))
         self._render_tree()
 
     def _on_load_files(self):
-        subgroup = self._get_or_create_subgroup()
-        if subgroup is None:
-            messagebox.showinfo("Load Files", "Select a group or subgroup first.", parent=self)
-            return
         paths = filedialog.askopenfilenames(
             parent=self, title="Select Audio File(s)",
             filetypes=[("Audio files", "*.mp3 *.wav *.flac *.ogg *.m4a"), ("All files", "*.*")]
         )
+        if not paths:
+            return
+        subgroup = self._resolve_load_target()
         for p in paths:
             subgroup.sources.append(Source(type="file", path=str(p)))
-        if paths:
-            self._render_tree()
+        self._render_tree()
+        self._reselect_item(subgroup)
 
     def _on_load_m3u(self):
-        subgroup = self._get_or_create_subgroup()
-        if subgroup is None:
-            messagebox.showinfo("Load M3U", "Select a group or subgroup first.", parent=self)
-            return
         paths = filedialog.askopenfilenames(
             parent=self, title="Select M3U Playlist(s)",
             filetypes=[("M3U Playlists", "*.m3u *.m3u8"), ("All files", "*.*")]
         )
+        if not paths:
+            return
+        subgroup = self._resolve_load_target()
         for p in paths:
             subgroup.sources.append(Source(type="playlist", path=str(p)))
-        if paths:
-            self._render_tree()
+        self._render_tree()
+        self._reselect_item(subgroup)
 
     def _on_load_folder(self):
-        subgroup = self._get_or_create_subgroup()
-        if subgroup is None:
-            messagebox.showinfo("Load Folder", "Select a group or subgroup first.", parent=self)
-            return
         path = filedialog.askdirectory(parent=self, title="Select Music Folder")
-        if path:
-            subgroup.sources.append(Source(type="directory", path=str(path)))
-            self._render_tree()
+        if not path:
+            return
+        subgroup = self._resolve_load_target()
+        subgroup.sources.append(Source(type="directory", path=str(path)))
+        self._render_tree()
+        self._reselect_item(subgroup)
 
     def _on_move_up(self):
         sel = self.tree.selection()
@@ -618,7 +711,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             return
         obj = data[1] if kind == "group" else data[2]
         current = obj.name
-        new_name = simpledialog.askstring("Rename", "New name:", initialvalue=current, parent=self)
+        new_name = self._ask_string("Rename", "New name:", initial=current)
         if new_name and new_name.strip() and new_name.strip() != current:
             obj.name = new_name.strip()
             self._render_tree()
@@ -685,25 +778,49 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             return data[2]
         return None
 
-    def _get_or_create_subgroup(self):
-        """Return selected subgroup, or auto-create one under the selected group."""
+    def _resolve_load_target(self) -> "Subgroup":
+        """
+        Return the subgroup that newly loaded sources should go into.
+
+        - No selection        → new auto-numbered Group N + Default subgroup
+        - Group, no subgroups → Default subgroup (auto-created inside that group)
+        - Group, has subgroups→ new auto-numbered Subgroup N inside that group
+        - Subgroup selected   → that subgroup (extend it)
+        - Source selected     → parent subgroup (extend it)
+        """
         sel = self.tree.selection()
-        if not sel:
-            return None
-        data = self._tree_map.get(sel[0])
+        data = self._tree_map.get(sel[0]) if sel else None
+
         if data is None:
-            return None
+            # No selection — auto-create a new top-level group
+            n = 1
+            existing = {g.name for g in self._template.groups}
+            while f"Group {n}" in existing:
+                n += 1
+            grp = Group(name=f"Group {n}")
+            self._template.groups.append(grp)
+            sg = Subgroup(name="Default")
+            grp.subgroups.append(sg)
+            return sg
+
         if data[0] in ("subgroup", "source"):
             return data[2]
-        if data[0] == "group":
-            group = data[1]
-            if group.subgroups:
-                return group.subgroups[0]
-            subgroup = Subgroup(name="Default")
-            group.subgroups.append(subgroup)
-            self._render_tree()
-            return subgroup
-        return None
+
+        # Group selected
+        grp = data[1]
+        if not grp.subgroups:
+            sg = Subgroup(name="Default")
+            grp.subgroups.append(sg)
+            return sg
+
+        # Group already has subgroups → new numbered subgroup
+        n = 1
+        existing = {sg.name for sg in grp.subgroups}
+        while f"Subgroup {n}" in existing:
+            n += 1
+        sg = Subgroup(name=f"Subgroup {n}")
+        grp.subgroups.append(sg)
+        return sg
 
     # ------------------------------------------------------------------
     # Rules UI ↔ template sync
@@ -731,7 +848,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             self._total_duration_entry.configure(state="normal")
 
         self._var_allow_repeats.set(r.allow_repeats)
-        label = ORDER_MODES.get(r.order_mode, _ORDER_MODE_LABELS[1])
+        label = ORDER_MODES.get(r.order_mode, ORDER_MODES["subgroup_round"])
         self._var_order_mode.set(label)
         self._updating = False
 
@@ -818,17 +935,16 @@ class PlaylistGeneratorWindow(tk.Toplevel):
 
     def _on_generate(self):
         if not self._template.groups:
-            messagebox.showinfo("Generate", "Add at least one group with sources first.", parent=self)
+            self._show_info("Generate", "Add at least one group with sources first.")
             return
 
         empty = [g.name for g in self._template.groups
                  if not any(sg.sources for sg in g.subgroups)]
         if empty:
             names = "\n".join(f"  • {n}" for n in empty)
-            if not messagebox.askyesno(
+            if not self._ask_yesno(
                 "Groups Without Sources",
                 f"These groups have no sources and will contribute no songs:\n{names}\n\nContinue anyway?",
-                parent=self,
             ):
                 return
 
@@ -841,7 +957,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
                 songs = generate(self._template, metadata_extractor)
             except Exception as e:
                 songs = []
-                self.after(0, lambda: messagebox.showerror("Error", str(e), parent=self))
+                self.after(0, lambda err=e: self._show_error("Error", str(err)))
             self.after(0, lambda: self._on_generate_done(songs))
 
         threading.Thread(target=_run, daemon=True).start()
@@ -902,6 +1018,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             self._make_btn(btn_row, text, lambda v=val: _pick(v), width=148, side="left", padx=(0, 6))
 
         dlg.update_idletasks()
+        apply_theme_titlebar(dlg, self.palette)
         x = self.winfo_rootx() + (self.winfo_width() - dlg.winfo_width()) // 2
         y = self.winfo_rooty() + (self.winfo_height() - dlg.winfo_height()) // 2
         dlg.geometry(f"+{max(0, x)}+{max(0, y)}")

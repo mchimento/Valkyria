@@ -24,7 +24,7 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
-from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence, set_win32_icon, make_window_independent
+from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence, set_win32_icon, make_window_independent, apply_theme_titlebar
 from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
@@ -117,6 +117,10 @@ class MainWindow:
 
         # Ensure player stopped on exit and save geometry
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
+
+        self._generator_win = None
+        self.root.bind_all("<FocusIn>", self._on_root_focus_in, add="+")
+        self.root.bind("<Configure>", self._on_root_configure, add="+")
 
     # ---------- Build UI ----------
     def _setup_resize(self):
@@ -993,15 +997,69 @@ class MainWindow:
             logger.error(f"Failed to open playback features: {e}", exc_info=True)
 
     def open_playlist_generator(self):
-        """Open the Playlist Generator window."""
+        """Open the Playlist Generator window, or raise it if already open."""
+        if self._generator_win is not None:
+            try:
+                self._generator_win.lift()
+                self._generator_win.focus_force()
+                return
+            except tk.TclError:
+                self._generator_win = None
         try:
-            PlaylistGeneratorWindow(
+            win = PlaylistGeneratorWindow(
                 self.root, self.theme,
                 on_generate=self._on_playlist_generated,
                 templates_path=str(get_generator_templates_path()),
             )
+            self._generator_win = win
+            win.protocol("WM_DELETE_WINDOW", self._on_generator_win_closed)
         except Exception as e:
             logger.error(f"Failed to open playlist generator: {e}", exc_info=True)
+
+    def _on_generator_win_closed(self):
+        if self._generator_win is not None:
+            try:
+                self._generator_win.destroy()
+            except tk.TclError:
+                pass
+            self._generator_win = None
+
+    def _on_root_focus_in(self, event):
+        try:
+            if event.widget.winfo_toplevel() is not self.root:
+                return
+        except Exception:
+            return
+        if self._generator_win is not None:
+            self.root.after(1, self._lift_generator)
+
+    def _lift_generator(self):
+        if self._generator_win is None:
+            return
+        try:
+            # Win32: raise window in Z-order without activating it
+            hwnd = ctypes.windll.user32.GetParent(self._generator_win.winfo_id())
+            if not hwnd:
+                hwnd = self._generator_win.winfo_id()
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_NOACTIVATE = 0x0010
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        except Exception:
+            pass
+        try:
+            self._generator_win.lift()
+        except tk.TclError:
+            self._generator_win = None
+
+    def _on_root_configure(self, event):
+        if event.widget is not self.root:
+            return
+        if self._generator_win is not None:
+            try:
+                apply_theme_titlebar(self._generator_win, self.theme.palette)
+            except Exception:
+                pass
 
     def _on_playlist_generated(self, songs: list, mode: str):
         """Receive generated songs and route them to the playlist or browser."""
@@ -1658,8 +1716,6 @@ class MainWindow:
         Tracks selection but does NOT update current_index since that's for playing state.
         Does NOT start playback — double-click or menu actions do that.
         """
-        # Selection is already tracked in the playlist view via state.selected_indices
-        # No need to update current_index here as that represents the playing song
 
     # ---------- Context Menu Callbacks ----------
     def _on_context_play_song(self, index):
