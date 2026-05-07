@@ -13,7 +13,7 @@ from audio.playlist_generator import (
     generate, load_templates, save_templates, MUSICAL_KEYS, ORDER_MODES,
 )
 from audio.metadata import metadata_extractor
-from ui.utils import apply_rounded_corners, apply_theme_titlebar
+from ui.utils import apply_rounded_corners, apply_theme_titlebar, make_window_independent
 from ui.custom_menu_bar import CustomMenuBar
 
 _ORDER_MODE_LABELS = list(ORDER_MODES.values())
@@ -53,7 +53,6 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self.title("Playlist Generator")
         self.minsize(720, 520)
         self.resizable(True, True)
-        self.transient(master)
         self.overrideredirect(True)
 
         bg = _bg
@@ -77,6 +76,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
 
         self._position_centered(master, 960, 680)
         self.update_idletasks()
+        make_window_independent(self)
         apply_rounded_corners(self)
         self.deiconify()
 
@@ -91,7 +91,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _minimize(self):
-        self.withdraw()
+        self.iconify()
 
     def _on_close(self):
         if self._on_close_cb:
