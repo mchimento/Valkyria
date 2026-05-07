@@ -13,7 +13,7 @@ from audio.playlist_generator import (
     generate, load_templates, save_templates, MUSICAL_KEYS, ORDER_MODES,
 )
 from audio.metadata import metadata_extractor
-from ui.utils import apply_rounded_corners
+from ui.utils import apply_rounded_corners, apply_theme_titlebar
 from ui.custom_menu_bar import CustomMenuBar
 
 _ORDER_MODE_LABELS = list(ORDER_MODES.values())
@@ -153,20 +153,18 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-Button-1>", self._on_tree_double_click)
 
-        # Button rows
-        row1 = tk.Frame(left, bg=bg)
-        row1.pack(fill="x", pady=(8, 2))
-        row2 = tk.Frame(left, bg=bg)
-        row2.pack(fill="x")
-
-        for text, cmd in [("+ Group", self._on_add_group), ("+ Subgroup", self._on_add_subgroup),
-                          ("Load Files", self._on_load_files), ("Load M3U", self._on_load_m3u),
-                          ("Load Folder", self._on_load_folder)]:
-            self._make_btn(row1, text, cmd, width=73, side="left", padx=(0, 3))
-
-        for text, cmd in [("↑ Up", self._on_move_up), ("↓ Down", self._on_move_down),
-                          ("Rename", self._on_rename), ("Remove", self._on_remove)]:
-            self._make_btn(row2, text, cmd, width=86, side="left", padx=(0, 3))
+        # Button rows — 3×3 grid, all buttons the same size
+        _W = 124
+        _btn_rows = [
+            [("+ Group", self._on_add_group), ("+ Subgroup", self._on_add_subgroup), ("Remove", self._on_remove)],
+            [("Load Files", self._on_load_files), ("Load M3U", self._on_load_m3u), ("Load Folder", self._on_load_folder)],
+            [("↑ Up", self._on_move_up), ("↓ Down", self._on_move_down), ("Rename", self._on_rename)],
+        ]
+        for r, row_items in enumerate(_btn_rows):
+            row = tk.Frame(left, bg=bg)
+            row.pack(fill="x", pady=(8 if r == 0 else 0, 3 if r < 2 else 0))
+            for i, (text, cmd) in enumerate(row_items):
+                self._make_btn(row, text, cmd, width=_W, side="left", padx=(0, 3) if i < 2 else 0)
 
     def _build_right_panel(self, parent):
         bg = self.palette.get("bg", "#1e1e1e")
@@ -610,7 +608,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
     def _on_add_subgroup(self):
         group = self._get_selected_group()
         if group is None:
-            self._show_info("Add Subgroup", "Select a group first.")
+            self._show_info("Add Subgroup", "Select a group first")
             return
         name = self._ask_string("Add Subgroup", "Subgroup name:")
         if not name or not name.strip():
@@ -801,7 +799,6 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         data = self._tree_map.get(sel[0]) if sel else None
 
         if data is None:
-            # No selection — auto-create a new top-level group
             n = 1
             existing = {g.name for g in self._template.groups}
             while f"Group {n}" in existing:
