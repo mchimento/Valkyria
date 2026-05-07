@@ -91,7 +91,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _minimize(self):
-        self.iconify()
+        self.withdraw()
 
     def _on_close(self):
         if self._on_close_cb:
