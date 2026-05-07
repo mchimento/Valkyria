@@ -21,7 +21,7 @@ _ORDER_MODE_KEYS = list(ORDER_MODES.keys())
 
 class PlaylistGeneratorWindow(tk.Toplevel):
 
-    def __init__(self, master, theme_manager, on_generate, templates_path):
+    def __init__(self, master, theme_manager, on_generate, templates_path, on_close=None):
         # Resolve bg before creating the window so it's born with the correct
         # background color, then withdraw immediately — both steps together
         # prevent the default white Toplevel from ever being painted on screen.
@@ -33,6 +33,8 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self.palette = theme_manager.palette
         self.on_generate = on_generate
         self._templates_path = templates_path
+        self._on_close_cb = on_close
+        self._master_ref = master
 
         self._templates: list = []
         self._template: GeneratorTemplate = GeneratorTemplate(name="", groups=[], rules=GeneratorRules())
@@ -86,6 +88,15 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         if event.widget is self:
             apply_theme_titlebar(self, self.palette)
 
+    def _minimize(self):
+        self.withdraw()
+
+    def _close(self):
+        if self._on_close_cb:
+            self._on_close_cb()
+        else:
+            self.destroy()
+
     # ------------------------------------------------------------------
     # Build UI
     # ------------------------------------------------------------------
@@ -110,6 +121,9 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         for text, cmd in [("Save", self._on_save_template),
                           ("Save As…", self._on_save_as_template), ("Delete", self._on_delete_template)]:
             self._make_btn(bar, text, cmd, width=74, side="left", padx=(0, 4))
+
+        self._make_btn(bar, "✕", self._close, width=28, side="right", padx=(0, 0))
+        self._make_btn(bar, "—", self._minimize, width=28, side="right", padx=(0, 4))
 
         self._template_bar = bar
 

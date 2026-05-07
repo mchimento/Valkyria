@@ -119,7 +119,6 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
         self._generator_win = None
-        self.root.bind_all("<FocusIn>", self._on_root_focus_in, add="+")
         self.root.bind("<Configure>", self._on_root_configure, add="+")
 
     # ---------- Build UI ----------
@@ -1000,6 +999,7 @@ class MainWindow:
         """Open the Playlist Generator window, or raise it if already open."""
         if self._generator_win is not None:
             try:
+                self._generator_win.deiconify()
                 self._generator_win.lift()
                 self._generator_win.focus_force()
                 return
@@ -1010,6 +1010,7 @@ class MainWindow:
                 self.root, self.theme,
                 on_generate=self._on_playlist_generated,
                 templates_path=str(get_generator_templates_path()),
+                on_close=self._on_generator_win_closed,
             )
             self._generator_win = win
             win.protocol("WM_DELETE_WINDOW", self._on_generator_win_closed)
@@ -1022,34 +1023,6 @@ class MainWindow:
                 self._generator_win.destroy()
             except tk.TclError:
                 pass
-            self._generator_win = None
-
-    def _on_root_focus_in(self, event):
-        try:
-            if event.widget.winfo_toplevel() is not self.root:
-                return
-        except Exception:
-            return
-        if self._generator_win is not None:
-            self.root.after(1, self._lift_generator)
-
-    def _lift_generator(self):
-        if self._generator_win is None:
-            return
-        try:
-            # Win32: raise window in Z-order without activating it
-            hwnd = ctypes.windll.user32.GetParent(self._generator_win.winfo_id())
-            if not hwnd:
-                hwnd = self._generator_win.winfo_id()
-            SWP_NOSIZE = 0x0001
-            SWP_NOMOVE = 0x0002
-            SWP_NOACTIVATE = 0x0010
-            ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
-        except Exception:
-            pass
-        try:
-            self._generator_win.lift()
-        except tk.TclError:
             self._generator_win = None
 
     def _on_root_configure(self, event):
