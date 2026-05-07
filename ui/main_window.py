@@ -119,7 +119,6 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
         self._generator_win = None
-        self.root.bind("<Configure>", self._on_root_configure, add="+")
 
     # ---------- Build UI ----------
     def _setup_resize(self):

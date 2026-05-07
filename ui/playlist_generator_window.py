@@ -13,7 +13,8 @@ from audio.playlist_generator import (
     generate, load_templates, save_templates, MUSICAL_KEYS, ORDER_MODES,
 )
 from audio.metadata import metadata_extractor
-from ui.utils import apply_theme_titlebar
+from ui.utils import apply_rounded_corners
+from ui.custom_menu_bar import CustomMenuBar
 
 _ORDER_MODE_LABELS = list(ORDER_MODES.values())
 _ORDER_MODE_KEYS = list(ORDER_MODES.keys())
@@ -53,9 +54,15 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self.minsize(720, 520)
         self.resizable(True, True)
         self.transient(master)
+        self.overrideredirect(True)
 
         bg = _bg
         self.configure(bg=bg)
+
+        self._menubar = CustomMenuBar(self, theme_manager, parent_window=self)
+        self._menubar.pack(side=tk.TOP, fill=tk.X)
+        self._menubar.setup_window_controls(self._on_close, show_maximize=False)
+        self.bind("<<MinimizeRequested>>", lambda e: self._minimize())
 
         self._content = tk.Frame(self, bg=bg)
         self._content.pack(fill="both", expand=True, padx=10, pady=10)
@@ -69,9 +76,8 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._refresh_template_dropdown()
 
         self._position_centered(master, 960, 680)
-        self.update_idletasks()  # ensure outer HWND is linked before DWM coloring
-        apply_theme_titlebar(self, self.palette)
-        self.bind("<Configure>", self._on_configure)
+        self.update_idletasks()
+        apply_rounded_corners(self)
         self.deiconify()
 
     def _position_centered(self, parent, w: int, h: int):
@@ -84,22 +90,14 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         y = max(0, py + (ph - h) // 2)
         self.geometry(f"{w}x{h}+{x}+{y}")
 
-    def _on_configure(self, event):
-        if event.widget is self:
-            apply_theme_titlebar(self, self.palette)
-
     def _minimize(self):
         self.withdraw()
 
-    def _close(self):
+    def _on_close(self):
         if self._on_close_cb:
             self._on_close_cb()
         else:
             self.destroy()
-
-    # ------------------------------------------------------------------
-    # Build UI
-    # ------------------------------------------------------------------
 
     def _build_template_bar(self, parent):
         bar = tk.Frame(parent, bg=self.palette.get("bg", "#1e1e1e"))
@@ -121,9 +119,6 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         for text, cmd in [("Save", self._on_save_template),
                           ("Save As…", self._on_save_as_template), ("Delete", self._on_delete_template)]:
             self._make_btn(bar, text, cmd, width=74, side="left", padx=(0, 4))
-
-        self._make_btn(bar, "✕", self._close, width=28, side="right", padx=(0, 0))
-        self._make_btn(bar, "—", self._minimize, width=28, side="right", padx=(0, 4))
 
         self._template_bar = bar
 

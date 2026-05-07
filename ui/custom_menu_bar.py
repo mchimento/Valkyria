@@ -151,10 +151,11 @@ class CustomMenuBar(ctk.CTkFrame):
         if hasattr(self, '_btn_close'):
             self._btn_close.configure(fg_color=menubar_bg, hover_color="#C42B1C", text_color=text_color, bg_color=menubar_bg)
 
-    def setup_window_controls(self, close_callback):
-        """Add ─ □ ✕ buttons and a draggable title spacer.
+    def setup_window_controls(self, close_callback, show_maximize=True):
+        """Add ─ [□] ✕ buttons and a draggable title spacer.
 
         Call this after all add_menu() calls so the controls sit on the right.
+        Pass show_maximize=False to omit the maximise button.
         """
         menubar_bg = self._get_menubar_bg()
         hover      = self._get_hover_color()
@@ -170,15 +171,16 @@ class CustomMenuBar(ctk.CTkFrame):
         )
         self._btn_close.pack(side=tk.RIGHT, padx=0, pady=0)
 
-        # Maximise
-        self._btn_max = ctk.CTkButton(
-            self, text="□", width=46, height=30,
-            fg_color=menubar_bg, hover_color=hover,
-            text_color=text, corner_radius=0, border_width=0,
-            font=("Segoe UI", 12),
-            command=self._toggle_maximize,
-        )
-        self._btn_max.pack(side=tk.RIGHT, padx=0, pady=0)
+        # Maximise (optional)
+        if show_maximize:
+            self._btn_max = ctk.CTkButton(
+                self, text="□", width=46, height=30,
+                fg_color=menubar_bg, hover_color=hover,
+                text_color=text, corner_radius=0, border_width=0,
+                font=("Segoe UI", 12),
+                command=self._toggle_maximize,
+            )
+            self._btn_max.pack(side=tk.RIGHT, padx=0, pady=0)
 
         # Minimise
         self._btn_min = ctk.CTkButton(
