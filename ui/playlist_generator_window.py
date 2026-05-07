@@ -185,6 +185,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._var_total_duration = tk.StringVar()
         self._var_total_duration_unlimited = tk.BooleanVar(value=True)
         self._var_allow_repeats = tk.BooleanVar(value=False)
+        self._var_skip_short_subgroups = tk.BooleanVar(value=False)
         self._var_order_mode = tk.StringVar(value=ORDER_MODES["subgroup_round"])
 
         self._total_songs_entry, self._total_songs_unlimited_cb = self._make_limit_row(
@@ -203,6 +204,12 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             command=self._on_allow_repeats_change
         )
         self._allow_repeats_cb.pack(side="left")
+        self._skip_short_cb = ttk.Checkbutton(
+            rep_row, text="Skip subgroups with insufficient songs",
+            variable=self._var_skip_short_subgroups,
+            command=self._on_skip_short_change
+        )
+        self._skip_short_cb.pack(side="left", padx=(16, 0))
 
         order_row = tk.Frame(self._global_frame, bg=bg)
         order_row.pack(fill="x", pady=3)
@@ -854,6 +861,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             self._total_duration_entry.configure(state="normal")
 
         self._var_allow_repeats.set(r.allow_repeats)
+        self._var_skip_short_subgroups.set(r.skip_short_subgroups)
         label = ORDER_MODES.get(r.order_mode, ORDER_MODES["subgroup_round"])
         self._var_order_mode.set(label)
         self._updating = False
@@ -904,6 +912,11 @@ class PlaylistGeneratorWindow(tk.Toplevel):
             return
         self._template.rules.allow_repeats = self._var_allow_repeats.get()
 
+    def _on_skip_short_change(self):
+        if self._updating:
+            return
+        self._template.rules.skip_short_subgroups = self._var_skip_short_subgroups.get()
+
     def _on_order_mode_change(self, _event=None):
         if self._updating:
             return
@@ -941,7 +954,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
 
     def _on_generate(self):
         if not self._template.groups:
-            self._show_info("Generate", "Add at least one group with sources first.")
+            self._show_info("Generate", "Add at least one group with sources first")
             return
 
         empty = [g.name for g in self._template.groups

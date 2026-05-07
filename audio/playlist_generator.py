@@ -105,6 +105,7 @@ class GeneratorRules:
     total_songs: Optional[int] = None
     total_duration_sec: Optional[int] = None
     allow_repeats: bool = False
+    skip_short_subgroups: bool = False
     order_mode: str = "subgroup_round"
 
     def to_dict(self):
@@ -112,6 +113,7 @@ class GeneratorRules:
             "total_songs": self.total_songs,
             "total_duration_sec": self.total_duration_sec,
             "allow_repeats": self.allow_repeats,
+            "skip_short_subgroups": self.skip_short_subgroups,
             "order_mode": self.order_mode,
         }
 
@@ -121,6 +123,7 @@ class GeneratorRules:
             total_songs=d.get("total_songs"),
             total_duration_sec=d.get("total_duration_sec"),
             allow_repeats=d.get("allow_repeats", False),
+            skip_short_subgroups=d.get("skip_short_subgroups", False),
             order_mode=d.get("order_mode", "shuffle_within_group"),
         )
 
@@ -349,6 +352,10 @@ def generate(template: GeneratorTemplate, metadata_extractor) -> List[str]:
                     continue
                 entry = q.popleft()
                 pool, pos = entry[0], entry[1]
+                if rules.skip_short_subgroups and (len(pool) - pos) < g.songs_per_round:
+                    if not q:
+                        exhausted.add(i)
+                    continue
                 picked = 0
                 while picked < g.songs_per_round and pos < len(pool):
                     if not _can_add():
