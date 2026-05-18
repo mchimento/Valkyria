@@ -1188,7 +1188,7 @@ class MainWindow:
         # Description
         desc_label = ctk.CTkLabel(
             content_frame,
-            text="A modern audio player with with playback features for music enthusiasts and DJs",
+            text="A modern audio player with playback features for music enthusiasts and DJs",
             font=("Segoe UI", 13),
             text_color=fg_color,
             wraplength=350
