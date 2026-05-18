@@ -41,13 +41,9 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         self._template: GeneratorTemplate = GeneratorTemplate(name="", groups=[], rules=GeneratorRules())
         self._selected_template_name: str = ""
 
-        # Maps tree iid → ("group"|"subgroup"|"source", *objects)
         self._tree_map: dict = {}
-
-        # Currently selected Group object for the right-panel rules
         self._selected_group: "Group | None" = None
 
-        # Guards against feedback loops when programmatically setting vars
         self._updating = False
 
         self.title("Playlist Generator")
@@ -138,7 +134,7 @@ class PlaylistGeneratorWindow(tk.Toplevel):
         left.pack(side="left", fill="both", padx=(0, 10))
         left.pack_propagate(False)
 
-        tk.Label(left, text="Groups & Sources", bg=bg, fg=fg,
+        tk.Label(left, text="Playlist Canvas", bg=bg, fg=fg,
                  font=(self.palette.get("ui_font", "Segoe UI"), 11, "bold")).pack(anchor="w", pady=(0, 4))
 
         tree_frame = tk.Frame(left, bg=bg)

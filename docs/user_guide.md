@@ -4,7 +4,7 @@
 
 # Valkyria User Guide
 
-Welcome to **Valkyria**, a modern audio player with advanced features for music enthusiasts and DJs.
+Welcome to **Valkyria**, modern audio player with with playback features for music enthusiasts and DJs.
 
 ## Table of Contents
 
