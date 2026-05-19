@@ -678,9 +678,17 @@ class BrowserView(ttk.Frame):
             return
         sel_indices = sorted([self.tree.index(s) for s in sels])
         files_to_add = [self.state.browser_files[i] for i in sel_indices if 0 <= i < len(self.state.browser_files)]
-        # insert position after current_index or end if none
+
+        # Prefer the last selected playlist item; fall back to playing track; then end
         insert_pos = len(self.state.playlist)
-        if self.state.current_index is not None and 0 <= self.state.current_index < len(self.state.playlist):
+        if self.playlist_view:
+            pl_sels = self.playlist_view.tree.selection()
+            if pl_sels:
+                pl_indices = [self.playlist_view.tree.index(s) for s in pl_sels]
+                insert_pos = max(pl_indices) + 1
+            elif self.state.current_index is not None and 0 <= self.state.current_index < len(self.state.playlist):
+                insert_pos = self.state.current_index + 1
+        elif self.state.current_index is not None and 0 <= self.state.current_index < len(self.state.playlist):
             insert_pos = self.state.current_index + 1
 
         added = 0
