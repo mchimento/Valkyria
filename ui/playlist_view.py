@@ -400,7 +400,8 @@ class PlaylistView(ttk.Frame):
         if uncached:
             # Rows are inserted by the background thread as metadata becomes ready,
             # so each row appears with all columns complete — no empty-column flash.
-            self._start_progressive_insert(display_tracks, load_id)
+            self._start_progressive_insert(display_tracks, load_id,
+                                           selected_indices if preserve_selection else [])
         else:
             self._insert_rows_with_metadata(display_tracks)
             if preserve_selection:
@@ -451,7 +452,7 @@ class PlaylistView(ttk.Frame):
                 tags=tuple(tags) + (f"index_{actual_index}",)
             )
 
-    def _start_progressive_insert(self, display_tracks, load_id):
+    def _start_progressive_insert(self, display_tracks, load_id, restore_indices=None):
         """Insert rows into the treeview progressively as metadata is loaded.
 
         Each row appears only once all its columns are ready, so there is never
@@ -493,6 +494,11 @@ class PlaylistView(ttk.Frame):
                 root.after(10, drain)
                 return
             if batch is None:
+                if restore_indices:
+                    children = self.tree.get_children()
+                    for idx in restore_indices:
+                        if idx < len(children):
+                            self.tree.selection_add(children[idx])
                 return
             self._insert_rows_batch(batch, load_id)
             root.after(1, drain)

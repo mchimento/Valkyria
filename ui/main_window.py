@@ -454,7 +454,8 @@ class MainWindow:
                 self._set_temporary_status("No new files added to playlist (duplicates skipped)")
         elif event_type == "added_to_playlist_below":
             if count > 0:
-                self.refresh_all()
+                self.playlist_view.refresh(preserve_selection=True)
+                self._update_menu_state()
                 self._set_temporary_status(f"Added {count} file(s) below current track in playlist")
             else:
                 self._set_temporary_status("No new songs were added to playlist (duplicates skipped)")
