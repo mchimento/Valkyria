@@ -12,7 +12,7 @@ a = Analysis(
         ('audio/audio_effects_config.json', 'audio'),
         ('docs/user_guide.md', 'docs'),
         ('docs/bpm_analysis.md', 'docs'),
-        ('assets/app-icon.png', 'assets'),
+        ('assets/app-icon.ico', 'assets'),
         ('assets/logo-no-background.png', 'assets'),
         ('assets/icon-small.png', 'assets'),
     ],

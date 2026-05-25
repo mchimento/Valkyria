@@ -64,3 +64,12 @@ def get_docs_path() -> Path:
         Path: Absolute path to the docs/ directory.
     """
     return get_app_base_path() / "docs"
+
+def get_generator_templates_path() -> Path:
+    """
+    Get the path to the playlist generator templates JSON file.
+
+    Returns:
+        Path: Writable path for generator_templates.json in user data dir.
+    """
+    return get_user_data_path() / "generator_templates.json"

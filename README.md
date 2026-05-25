@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-no-background.png" alt="Valkyria" width="240"/>
+  <img src="assets/logo.png" alt="Valkyria" width="240"/>
 </p>
 
 A simple audio player which supports playlist management and browsing

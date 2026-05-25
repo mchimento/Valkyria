@@ -24,14 +24,15 @@ from ui.preferences_window import PreferencesWindow
 from ui.tooltips import TooltipManager
 from ui.media_info_window import MediaInfoWindow
 from ui.booklet_viewer import BookletViewer
-from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence, set_win32_icon, make_window_independent
+from ui.utils import center_window, apply_rounded_corners, force_taskbar_presence, set_win32_icon, make_window_independent, apply_theme_titlebar
 from ui.custom_menu_bar import CustomMenuBar
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui.audio_effects_window import AudioEffectsWindow
 from ui.playback_features_view import PlaybackFeaturesView
 from ui.time_limit_dialog import TimeLimitDialog
 from ui.mini_player import MiniPlayer
-from app.paths import get_resource_path
+from ui.playlist_generator_window import PlaylistGeneratorWindow
+from app.paths import get_resource_path, get_generator_templates_path
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,8 @@ class MainWindow:
 
         # Ensure player stopped on exit and save geometry
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
+
+        self._generator_win = None
 
     # ---------- Build UI ----------
     def _setup_resize(self):
@@ -303,6 +306,8 @@ class MainWindow:
             {"label": "Audio Effects and Filters", "command": self.open_audio_effects, "accelerator": "F7"},
             {"label": "Playback features", "command": self.open_playback_features, "accelerator": "F8"},
             {"separator": True},
+            {"label": "Playlist Generator", "command": self.open_playlist_generator, "accelerator": "F6"},
+            {"separator": True},
             {"label": "Preferences", "command": self.open_preferences, "accelerator": "Ctrl+P"}
         ]
         self.menubar.add_menu("Tools", tools_items)
@@ -449,7 +454,8 @@ class MainWindow:
                 self._set_temporary_status("No new files added to playlist (duplicates skipped)")
         elif event_type == "added_to_playlist_below":
             if count > 0:
-                self.refresh_all()
+                self.playlist_view.refresh(preserve_selection=True)
+                self._update_menu_state()
                 self._set_temporary_status(f"Added {count} file(s) below current track in playlist")
             else:
                 self._set_temporary_status("No new songs were added to playlist (duplicates skipped)")
@@ -989,6 +995,64 @@ class MainWindow:
         except Exception as e:
             logger.error(f"Failed to open playback features: {e}", exc_info=True)
 
+    def open_playlist_generator(self):
+        """Open the Playlist Generator window, or raise it if already open."""
+        if self._generator_win is not None:
+            try:
+                self._generator_win.deiconify()
+                self._generator_win.lift()
+                self._generator_win.focus_force()
+                return
+            except tk.TclError:
+                self._generator_win = None
+        try:
+            win = PlaylistGeneratorWindow(
+                self.root, self.theme,
+                on_generate=self._on_playlist_generated,
+                templates_path=str(get_generator_templates_path()),
+                on_close=self._on_generator_win_closed,
+            )
+            self._generator_win = win
+            win.protocol("WM_DELETE_WINDOW", self._on_generator_win_closed)
+        except Exception as e:
+            logger.error(f"Failed to open playlist generator: {e}", exc_info=True)
+
+    def _on_generator_win_closed(self):
+        if self._generator_win is not None:
+            try:
+                self._generator_win.destroy()
+            except tk.TclError:
+                pass
+            self._generator_win = None
+
+    def _on_root_configure(self, event):
+        if event.widget is not self.root:
+            return
+        if self._generator_win is not None:
+            try:
+                apply_theme_titlebar(self._generator_win, self.theme.palette)
+            except Exception:
+                pass
+
+    def _on_playlist_generated(self, songs: list, mode: str):
+        """Receive generated songs and route them to the playlist or browser."""
+        if not songs:
+            return
+        if mode == "browser":
+            self.state.browser_files.clear()
+            self.state.browser_files.extend(songs)
+            self.browser_view.refresh()
+            return
+        if mode == "replace":
+            self.state.playlist.clear()
+            self.state.current_index = None
+            self.player.stop()
+        for path in songs:
+            self.state.playlist.append(path)
+        if mode == "replace" and self.state.playlist:
+            self.state.current_index = 0
+        self.refresh_all()
+
     def open_audio_effects(self):
         """Open the Audio Effects window."""
         AudioEffectsWindow(self.root, self.player, self.theme)
@@ -1125,7 +1189,7 @@ class MainWindow:
         # Description
         desc_label = ctk.CTkLabel(
             content_frame,
-            text="A modern audio player with custom themes and intuitive controls.",
+            text="A modern audio player with playback features for music enthusiasts and DJs",
             font=("Segoe UI", 13),
             text_color=fg_color,
             wraplength=350
@@ -1625,8 +1689,6 @@ class MainWindow:
         Tracks selection but does NOT update current_index since that's for playing state.
         Does NOT start playback — double-click or menu actions do that.
         """
-        # Selection is already tracked in the playlist view via state.selected_indices
-        # No need to update current_index here as that represents the playing song
 
     # ---------- Context Menu Callbacks ----------
     def _on_context_play_song(self, index):
@@ -1833,6 +1895,7 @@ class MainWindow:
         # Tools menu accelerators
         self.root.bind_all("<Control-p>", lambda e: self.open_preferences())
         # Use bind_all for function keys so accelerators work regardless of focus
+        self.root.bind_all("<F6>", lambda e: self.open_playlist_generator())
         self.root.bind_all("<F7>", lambda e: self.open_audio_effects())
         self.root.bind_all("<F8>", lambda e: self.open_playback_features())
 
