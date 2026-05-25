@@ -2,11 +2,11 @@
   <img src="../assets/logo-no-background.png" alt="Valkyria" width="240"/>
 </p>
 
-# Valkyria User Guide
+# User Guide
 
-Welcome to **Valkyria**, modern audio player with playback features for music enthusiasts and DJs.
+Welcome to **Valkyria**, a modern audio player with playback features for music enthusiasts and DJs.
 
-## Table of Contents
+## Table of Content
 
 * [Getting Started](#getting-started)
   * [Opening Audio Files](#opening-audio-files)
@@ -19,6 +19,10 @@ Welcome to **Valkyria**, modern audio player with playback features for music en
   * [Adding Songs](#adding-songs)
   * [Organizing Your Playlist](#organizing-your-playlist)
   * [Saving Playlists](#saving-playlists)
+* [Browser View](#browser-view)
+  * [Navigation](#navigation)
+  * [Adding to Playlist](#adding-to-playlist)
+  * [Song Preview](#song-preview)
 * [Live Audio Analysis Panel](#live-audio-analysis-panel)
   * [LUFS (Loudness Units relative to Full Scale)](#lufs-loudness-units-relative-to-full-scale)
   * [LUFS Overall](#lufs-overall)
@@ -40,11 +44,18 @@ Welcome to **Valkyria**, modern audio player with playback features for music en
   * [Play After Current Song](#play-after-current-song)
   * [Play on Double-Click](#play-on-double-click)
   * [Play For Time](#play-for-time)
+* [Playlist Generator](#playlist-generator)
+  * [Concepts](#concepts)
+  * [Building the Structure](#building-the-structure)
+  * [Group Rules](#group-rules)
+  * [Global Rules](#global-rules)
+  * [Order Modes](#order-modes)
+  * [Templates](#templates)
+  * [Generating](#generating)
+  * [Tips](#tips)
 * [Themes](#themes)
 * [Keyboard Shortcuts](#keyboard-shortcuts)
 * [Audio Devices](#audio-devices)
-* [Browser View](#browser-view)
-  * [Song Preview](#song-preview)
 * [Tips & Tricks](#tips--tricks)
 * [Troubleshooting](#troubleshooting)
 
@@ -145,6 +156,52 @@ Playlists can be saved and loaded for later use:
 * **M3U8 Format**: Playlists are saved in the widely-compatible M3U8 format (UTF-8 encoded M3U), which can be opened in most media players and DJ software.
 
 Playlist files store file paths (absolute by default) and can be edited in any text editor. Relative paths are supported for portable playlists that can be moved between different computers.
+
+## Browser View
+
+The browser view provides a convenient file explorer integrated directly into Valkyria for browsing and adding music to your playlist.
+
+### Navigation
+
+* **Browse Folder**: Open a directory browser to navigate your music library
+* **Browse Files**: Open a file picker to select specific audio files
+* **Current Directory**: Displays the currently browsed folder path
+* **Parent Directory**: Navigate up one folder level
+
+### Adding to Playlist
+
+Once you've browsed to a folder containing audio files:
+
+* **Select Files**: Click to select individual files, Ctrl+Click for multiple selection, Shift+Click for range selection
+* **Add Button**: Adds selected files to the end of the playlist
+* **Add Below Button**: Inserts selected files after the currently selected track in the playlist. If nothing is selected in the playlist, files are inserted after the currently playing track.
+* **Double-Click**: Previews, i.e. plays in secondary audio device if available, the selected file (see [Song Preview](#song-preview) below).
+
+You can also drag songs from the browser view and drop them in the playback queue.
+
+### Song Preview
+
+The browser includes a built-in audio preview that lets you audition files through a secondary audio device without interrupting main playback.
+
+#### Preview Output Device
+
+A **Preview output** dropdown appears above the file list. It lists all available audio output devices **except** the one currently used by the main player, so preview audio is always routed to a different device.
+
+* If only one audio output device is connected, the preview controls are disabled automatically.
+* The dropdown updates whenever you change the main player's output device via **Settings → Audio Device**.
+
+#### Previewing a File
+
+* **Double-click** any file in the browser list to start previewing it. Double-clicking the same file again stops the preview.
+* The **▶** button starts (or restarts) preview playback for the currently selected file.
+* The **⏹** button stops playback immediately.
+
+Preview playback is independent from the main playlist — starting a preview does not affect the currently playing track, and stopping the preview does not pause or stop the main player.
+
+### Browser Tips
+
+* **Drag and Drop**: Drag files from the browser directly onto the playlist
+* **Quick Access**: Keep browser view visible (F10) for instant access to your music library
 
 ## Live Audio Analysis Panel
 
@@ -728,6 +785,121 @@ When a time limit is set, the Duration column displays the limit with a clock ic
 When playing a song with a time limit, the status bar shows the limit next to the duration:
 * `3:45 [⏱ 30s] • 320 kbps`
 
+## Playlist Generator
+
+The Playlist Generator builds structured playlists automatically from your music library. Open it via **Tools → Playlist Generator**.
+
+Instead of manually picking songs, you define *groups* of source material and the rules that govern how songs are selected and interleaved. The generator produces a ready-to-use playlist or populates the browser for further review.
+
+### Concepts
+
+**Groups** represent musical categories (e.g., "Tangos", "Vals", "Milongas"). The generator alternates between groups in round-robin order.
+
+**Subgroups** are subdivisions of a group — typically one per orchestra, album, or mood. They let the generator vary the source within a group from round to round.
+
+**Sources** are the actual files the generator draws from: individual audio files, folders, or M3U playlists.
+
+**Rounds** are the fundamental unit of generation. In each round, every group contributes a fixed number of songs (`Songs per round`), then the cycle repeats.
+
+### Building the Structure
+
+#### Adding Groups and Subgroups
+
+* **+ Group**: Creates a new named group. Double-click a group in the tree to rename it.
+* **+ Subgroup**: Creates a named subgroup inside the selected group. Double-click to rename.
+* **↑ Up / ↓ Down**: Reorders the selected item within its parent.
+* **Rename / Remove**: Rename or delete the selected group, subgroup, or source.
+
+#### Loading Songs
+
+Three buttons load songs into the structure. The target is determined automatically based on what is selected in the tree:
+
+| Selection | Result |
+|---|---|
+| Nothing selected | A new numbered group ("Group 1", "Group 2", …) is created with a Default subgroup |
+| Group with no subgroups | Songs go into a "Default" subgroup created inside that group |
+| Group with existing subgroups | A new numbered subgroup ("Subgroup 1", "Subgroup 2", …) is created inside the group |
+| Subgroup selected | Songs are added directly to that subgroup (extending it) |
+| Source selected | Songs are added to the source's parent subgroup |
+
+* **Load Files**: Pick one or more individual audio files (MP3, WAV, FLAC, OGG, M4A).
+* **Load Folder**: Pick a folder. All audio files are found recursively, including subdirectories.
+* **Load M3U**: Pick one or more M3U/M3U8 playlists and import their tracks.
+
+Opening the file dialog without selecting anything first automatically creates a new group, so you never need to manually add a group before loading.
+
+### Group Rules
+
+Select a group (or anything inside it) to edit its rules in the right panel.
+
+* **Songs per round**: How many songs this group contributes in each round. Default is 1.
+* **BPM range**: Leave both fields blank to accept any tempo. Fill one or both to restrict the pool to songs within that BPM window. Songs without BPM metadata are excluded when a filter is active.
+* **Key**: Filter the pool to songs in a specific musical key. Set to "Any" to disable.
+
+BPM and key filters are applied when building the pool before generation, so they work with all order modes.
+
+### Global Rules
+
+These settings apply to the entire generated playlist.
+
+* **Total songs**: The maximum number of songs to generate. Set to "Unlimited" for no cap.
+* **Total duration**: The maximum total running time in minutes. Set to "Unlimited" for no cap.
+* **Allow repeats**: When unchecked (default), each song appears at most once regardless of how many groups reference the same files.
+* **Order mode**: Controls how songs are sequenced within and across groups. See [Order Modes](#order-modes) below.
+
+### Order Modes
+
+#### Original order within groups
+Songs within each group are presented in alphabetical order by filename. The round-robin interleaving is deterministic and repeatable.
+
+#### Shuffle within groups
+Each group's full pool is shuffled once before generation begins. The round-robin interleaving pattern (e.g., 4 tangos then 1 val) is preserved, but which specific songs appear in each round is random.
+
+#### Fully random
+All groups are merged into a single pool which is then shuffled. Group boundaries, `Songs per round` settings, and subgroup structure are all ignored. Every song has an equal chance of appearing at any position.
+
+#### Random subgroup per round
+Designed for structured variety within categories. In each round, the generator picks a subgroup at random for each group, then takes `Songs per round` tracks from that subgroup. The next round uses a *different* subgroup, cycling through all available subgroups in a randomly shuffled order before repeating. Songs within each subgroup are shuffled.
+
+**Example — Tango DJ set with orchestras as subgroups:**
+
+| Round | Group "Tangos" (4 songs) | Group "Vals" (1 song) |
+|---|---|---|
+| 1 | Subgroup "D'Arienzo" | Subgroup "Canaro" |
+| 2 | Subgroup "Pugliese" | Subgroup "Di Sarli" |
+| 3 | Subgroup "Troilo" | Subgroup "Canaro" (cycles back) |
+| 4 | Subgroup "D'Arienzo" (cycles back) | Subgroup "Lomuto" |
+
+If a group has no subgroups, it behaves identically to the "Shuffle within groups" mode.
+
+### Templates
+
+Templates save and restore a complete generator configuration (groups, subgroups, sources, all rules).
+
+* **Save / Save As…**: Save the current configuration under a name.
+* **Load**: Restore the selected template from the dropdown.
+* **Delete**: Remove the selected template permanently.
+
+Templates are stored locally and persist across application restarts. Use them to maintain different configurations for different event types (milonga, practice, practica).
+
+### Generating
+
+Click **Generate Playlist** to build the playlist. Generation runs in the background; a summary (song count and total duration) appears in the status bar when complete.
+
+A dialog then asks where to send the result:
+
+* **Replace Playlist**: Clears the current playlist and fills it with the generated songs.
+* **Append to Playlist**: Adds the generated songs after the last track in the current playlist.
+* **Send to Browser**: Loads the generated songs into the browser view so you can preview and selectively add them to the playlist.
+* **Cancel**: Discards the result without changing anything.
+
+### Tips
+
+* Build one group per dance style and one subgroup per orchestra. Use "Random subgroup per round" to produce authentic tandas without manual curation.
+* Load Folder is recursive — point it at a top-level artist or genre folder and it will find all audio files inside.
+* Set a Total duration limit to generate a playlist that fills exactly one event's worth of music.
+* Save a template before experimenting so you can restore your baseline configuration.
+
 ## Track Information
 
 Access detailed track metadata from **Playback → Operations → Track Information** (Ctrl+I), or right-click a track in the playlist and select "Track Information".
@@ -866,167 +1038,6 @@ If a device doesn't appear in the list:
 * Ensure the device is properly connected and recognized by your OS
 * Restart Valkyria after connecting new audio hardware
 * Check device drivers are up to date
-
-## Browser View
-
-The browser view provides a convenient file explorer integrated directly into Valkyria for browsing and adding music to your playlist.
-
-### Navigation
-
-* **Browse Folder**: Open a directory browser to navigate your music library
-* **Browse Files**: Open a file picker to select specific audio files
-* **Current Directory**: Displays the currently browsed folder path
-* **Parent Directory**: Navigate up one folder level
-
-### Adding to Playlist
-
-Once you've browsed to a folder containing audio files:
-
-* **Select Files**: Click to select individual files, Ctrl+Click for multiple selection, Shift+Click for range selection
-* **Add Button**: Adds selected files to the end of the playlist
-* **Add Below Button**: Inserts selected files after the currently playing track
-* **Double-Click**: Previews, i.e. plays in secondary audio divice if avaialble, the selected file (see [Song Preview](#song-preview) below).
-
-You can also drag songs from the browser view and drop them in the playback queueu.
-
-### Song Preview
-
-The browser includes a built-in audio preview that lets you audition files through a secondary audio device without interrupting main playback.
-
-#### Preview Output Device
-
-A **Preview output** dropdown appears above the file list. It lists all available audio output devices **except** the one currently used by the main player, so preview audio is always routed to a different device.
-
-* If only one audio output device is connected, the preview controls are disabled automatically.
-* The dropdown updates whenever you change the main player's output device via **Settings → Audio Device**.
-
-#### Previewing a File
-
-* **Double-click** any file in the browser list to start previewing it. Double-clicking the same file again stops the preview.
-* The **▶** button starts (or restarts) preview playback for the currently selected file.
-* The **⏹** button stops playback immediately.
-
-Preview playback is independent from the main playlist — starting a preview does not affect the currently playing track, and stopping the preview does not pause or stop the main player.
-
-### Browser Tips
-
-* **Drag and Drop**: Drag files from the browser directly onto the playlist
-* **Quick Access**: Keep browser view visible (F10) for instant access to your music library
-
-## Playlist Generator
-
-The Playlist Generator builds structured playlists automatically from your music library. Open it via **Tools → Playlist Generator**.
-
-Instead of manually picking songs, you define *groups* of source material and the rules that govern how songs are selected and interleaved. The generator produces a ready-to-use playlist or populates the browser for further review.
-
-### Concepts
-
-**Groups** represent musical categories (e.g., "Tangos", "Vals", "Milongas"). The generator alternates between groups in round-robin order.
-
-**Subgroups** are subdivisions of a group — typically one per orchestra, album, or mood. They let the generator vary the source within a group from round to round.
-
-**Sources** are the actual files the generator draws from: individual audio files, folders, or M3U playlists.
-
-**Rounds** are the fundamental unit of generation. In each round, every group contributes a fixed number of songs (`Songs per round`), then the cycle repeats.
-
-### Building the Structure
-
-#### Adding Groups and Subgroups
-
-* **+ Group**: Creates a new named group. Double-click a group in the tree to rename it.
-* **+ Subgroup**: Creates a named subgroup inside the selected group. Double-click to rename.
-* **↑ Up / ↓ Down**: Reorders the selected item within its parent.
-* **Rename / Remove**: Rename or delete the selected group, subgroup, or source.
-
-#### Loading Songs
-
-Three buttons load songs into the structure. The target is determined automatically based on what is selected in the tree:
-
-| Selection | Result |
-|---|---|
-| Nothing selected | A new numbered group ("Group 1", "Group 2", …) is created with a Default subgroup |
-| Group with no subgroups | Songs go into a "Default" subgroup created inside that group |
-| Group with existing subgroups | A new numbered subgroup ("Subgroup 1", "Subgroup 2", …) is created inside the group |
-| Subgroup selected | Songs are added directly to that subgroup (extending it) |
-| Source selected | Songs are added to the source's parent subgroup |
-
-* **Load Files**: Pick one or more individual audio files (MP3, WAV, FLAC, OGG, M4A).
-* **Load Folder**: Pick a folder. All audio files are found recursively, including subdirectories.
-* **Load M3U**: Pick one or more M3U/M3U8 playlists and import their tracks.
-
-Opening the file dialog without selecting anything first automatically creates a new group, so you never need to manually add a group before loading.
-
-### Group Rules
-
-Select a group (or anything inside it) to edit its rules in the right panel.
-
-* **Songs per round**: How many songs this group contributes in each round. Default is 1.
-* **BPM range**: Leave both fields blank to accept any tempo. Fill one or both to restrict the pool to songs within that BPM window. Songs without BPM metadata are excluded when a filter is active.
-* **Key**: Filter the pool to songs in a specific musical key. Set to "Any" to disable.
-
-BPM and key filters are applied when building the pool before generation, so they work with all order modes.
-
-### Global Rules
-
-These settings apply to the entire generated playlist.
-
-* **Total songs**: The maximum number of songs to generate. Set to "Unlimited" for no cap.
-* **Total duration**: The maximum total running time in minutes. Set to "Unlimited" for no cap.
-* **Allow repeats**: When unchecked (default), each song appears at most once regardless of how many groups reference the same files.
-* **Order mode**: Controls how songs are sequenced within and across groups. See [Order Modes](#order-modes) below.
-
-### Order Modes
-
-#### Original order within groups
-Songs within each group are presented in alphabetical order by filename. The round-robin interleaving is deterministic and repeatable.
-
-#### Shuffle within groups
-Each group's full pool is shuffled once before generation begins. The round-robin interleaving pattern (e.g., 4 tangos then 1 val) is preserved, but which specific songs appear in each round is random.
-
-#### Fully random
-All groups are merged into a single pool which is then shuffled. Group boundaries, `Songs per round` settings, and subgroup structure are all ignored. Every song has an equal chance of appearing at any position.
-
-#### Random subgroup per round
-Designed for structured variety within categories. In each round, the generator picks a subgroup at random for each group, then takes `Songs per round` tracks from that subgroup. The next round uses a *different* subgroup, cycling through all available subgroups in a randomly shuffled order before repeating. Songs within each subgroup are shuffled.
-
-**Example — Tango DJ set with orchestras as subgroups:**
-
-| Round | Group "Tangos" (4 songs) | Group "Vals" (1 song) |
-|---|---|---|
-| 1 | Subgroup "D'Arienzo" | Subgroup "Canaro" |
-| 2 | Subgroup "Pugliese" | Subgroup "Di Sarli" |
-| 3 | Subgroup "Troilo" | Subgroup "Canaro" (cycles back) |
-| 4 | Subgroup "D'Arienzo" (cycles back) | Subgroup "Lomuto" |
-
-If a group has no subgroups, it behaves identically to the "Shuffle within groups" mode.
-
-### Templates
-
-Templates save and restore a complete generator configuration (groups, subgroups, sources, all rules).
-
-* **Save / Save As…**: Save the current configuration under a name.
-* **Load**: Restore the selected template from the dropdown.
-* **Delete**: Remove the selected template permanently.
-
-Templates are stored locally and persist across application restarts. Use them to maintain different configurations for different event types (milonga, practice, practica).
-
-### Generating
-
-Click **Generate Playlist** to build the playlist. Generation runs in the background; a summary (song count and total duration) appears in the status bar when complete.
-
-A dialog then asks where to send the result:
-
-* **Replace Playlist**: Clears the current playlist and fills it with the generated songs.
-* **Append to Playlist**: Adds the generated songs after the last track in the current playlist.
-* **Send to Browser**: Loads the generated songs into the browser view so you can preview and selectively add them to the playlist.
-* **Cancel**: Discards the result without changing anything.
-
-### Tips
-
-* Build one group per dance style and one subgroup per orchestra. Use "Random subgroup per round" to produce authentic tandas without manual curation.
-* Load Folder is recursive — point it at a top-level artist or genre folder and it will find all audio files inside.
-* Set a Total duration limit to generate a playlist that fills exactly one event's worth of music.
-* Save a template before experimenting so you can restore your baseline configuration.
 
 ## Tips & Tricks
 
