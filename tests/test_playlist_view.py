@@ -55,6 +55,12 @@ class TestPlaylistView(unittest.TestCase):
         self.patcher_extractor = patch('ui.playlist_view.metadata_extractor')
         self.mock_extractor = self.patcher_extractor.start()
 
+        # Make all files appear cached so refresh() takes the synchronous path.
+        # MagicMock.__contains__ returns False by default, which would make every
+        # file look uncached and trigger the async progressive-insert path — which
+        # never completes in a headless test because the Tk event loop never runs.
+        self.mock_extractor._cache.__contains__ = Mock(return_value=True)
+
         # Default return values
         self.mock_metadata.return_value = {}
         self.mock_title.return_value = "Unknown Title"
@@ -419,6 +425,12 @@ class TestPlaylistViewSearchBar(unittest.TestCase):
 
         self.patcher_extractor = patch('ui.playlist_view.metadata_extractor')
         self.mock_extractor = self.patcher_extractor.start()
+
+        # Make all files appear cached so refresh() takes the synchronous path.
+        # MagicMock.__contains__ returns False by default, which would make every
+        # file look uncached and trigger the async progressive-insert path — which
+        # never completes in a headless test because the Tk event loop never runs.
+        self.mock_extractor._cache.__contains__ = Mock(return_value=True)
 
         # Default return values
         self.mock_metadata.return_value = {}
