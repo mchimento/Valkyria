@@ -4,6 +4,7 @@ and wires them to the AppState, ThemeManager, AudioPlayer and Settings.
 """
 
 import logging
+import re
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
@@ -49,11 +50,6 @@ class MainWindow:
         self.root = tk.Tk()
         self.root.title("Valkyria")
         self._set_app_icon()
-        if self.settings.window_geometry:
-            try:
-                self.root.geometry(self.settings.window_geometry)
-            except Exception:
-                pass
 
         # Apply theme to root (styles + palette)
         self.theme.apply_to(self.root)
@@ -74,6 +70,7 @@ class MainWindow:
         # Build UI - menu first so it's at the top
         self._build_menu()
         self._build_layout()
+        self._apply_initial_geometry()
 
         # Remove the native title bar; the menu bar provides window controls
         self.root.overrideredirect(True)
@@ -172,7 +169,7 @@ class MainWindow:
             dx = event.x_root - s["x"]
             dy = event.y_root - s["y"]
             x, y, w, h = s["wx"], s["wy"], s["w"], s["h"]
-            min_w, min_h = 400, 300
+            min_w, min_h = self._min_win_w, self._min_win_h
             if on_right:
                 w = max(min_w, w + dx)
             if on_bottom:
@@ -333,9 +330,8 @@ class MainWindow:
         self._bind_keyboard_accelerators()
 
     def _build_layout(self):
-        # Main frame
+        # Main frame (playlist + browser)
         self.main_frame = ttk.Frame(self._content, padding=6, style="TFrame")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Left: Playlist view
         self.left_frame = ttk.Frame(self.main_frame, style="TFrame")
@@ -367,9 +363,8 @@ class MainWindow:
         # Link browser view to playlist view for drag and drop
         self.browser_view.set_playlist_view(self.playlist_view)
 
-        # Bottom info frames container
+        # Bottom info frames container (packed below, once controls exists)
         self.bottom_info_frame = ttk.Frame(self._content, style="TFrame")
-        self.bottom_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=(12, 12), pady=(0, 20))
 
         # DJ Frame (right-aligned)
         self.dj_view = DJFrameView(self.bottom_info_frame, self.state, self.theme, self.settings, self.player)
@@ -401,7 +396,59 @@ class MainWindow:
             on_open_effects=self.open_audio_effects
         )
         self.controls.configure(padding=(0, 0, 0, 15))
+
+        # Pack bottom-anchored rows first (see note above _build_layout) so
+        # they always keep their full requested size; main_frame goes last
+        # and yields space when the window is too small to fit everything.
+        self.bottom_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=(12, 12), pady=(0, 20))
         self.controls.pack(side=tk.BOTTOM, fill=tk.X)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+    def _apply_initial_geometry(self):
+        """Size and place the window relative to the current screen.
+
+        With no saved geometry (first run), the window gets a harmonic
+        size proportional to the screen and is centered.
+        """
+        self.root.update_idletasks()
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        chrome_h = (self.menubar.winfo_reqheight()
+                    + self.bottom_info_frame.winfo_reqheight()
+                    + self.controls.winfo_reqheight())
+        min_content_h = 220  # smallest still-usable playlist/browser strip
+        min_h = min(chrome_h + min_content_h, screen_h)
+        min_w = min(max(self.controls.winfo_reqwidth() + 40, 760), screen_w)
+        self.root.minsize(min_w, min_h)
+        self._min_win_w, self._min_win_h = min_w, min_h
+
+        geometry = self.settings.window_geometry
+        match = re.match(r"^(\d+)x(\d+)([+-]\d+)([+-]\d+)$", geometry) if geometry else None
+        if match:
+            w, h, x, y = (int(v) for v in match.groups())
+            w = max(min_w, min(w, screen_w))
+            h = max(min_h, min(h, screen_h))
+            # Keep a good chunk of the window reachable regardless of monitor layout
+            x = max(-w + 150, min(x, screen_w - 150))
+            y = max(0, min(y, screen_h - 150))
+            self.root.geometry(f"{w}x{h}+{x}+{y}")
+            return
+
+        # No usable saved geometry: pick a harmonic (golden-ratio) default
+        # sized to this screen and center it.
+        golden_ratio = 1.618
+        target_h = int(screen_h * 0.78)
+        target_w = int(target_h * golden_ratio)
+        if target_w > screen_w * 0.9:
+            target_w = int(screen_w * 0.9)
+            target_h = int(target_w / golden_ratio)
+
+        w = min(max(min_w, target_w), screen_w)
+        h = min(max(min_h, target_h), screen_h)
+        x = (screen_w - w) // 2
+        y = (screen_h - h) // 2
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
 
     # ----------- STATUS: ControlsBar event dispatcher -----------
     def _controls_status_event(self, event_type, count=0):
@@ -596,9 +643,7 @@ class MainWindow:
             self.root.focus_force()
             # Re-apply Win32 icon — deiconify resets it to the process default.
             set_win32_icon(self.root, get_resource_path("assets/app-icon.ico"))
-            # Re-trigger BPM/key analysis: update_info() skips it when the window
-            # is withdrawn (winfo_ismapped() is False). Defer by one tick so the
-            # window is mapped before is_visible() is checked.
+            # Re-trigger BPM/key analysis
             self.root.after(0, self._restore_status)
         except Exception as e:
             logger.error(f"Failed to restore main window: {e}", exc_info=True)
@@ -843,15 +888,11 @@ class MainWindow:
 
         # Update CTk appearance
         ctk.set_appearance_mode("Dark" if self.settings.theme == "dark" else "Light")
-
-        # Reload styles (standard Tkinter/TTK)
         self.theme.apply_to(self.root)
 
-        # Update palette references
         self.palette = self.theme.palette
         self.tooltip_manager.palette = self.palette
 
-        # Determine theme mode for color calculations
         is_dark = self.settings.theme.lower() == 'dark'
 
         # Force root window background update to fix corner artifacts
@@ -863,7 +904,6 @@ class MainWindow:
                 self._content.configure(bg=root_bg)
             # Use direct Tk call to ensure root background is updated everywhere
             self.root.tk.call(self.root._w, 'configure', '-bg', border_color)
-            # Also force update the root window immediately
             self.root.update_idletasks()
         except:
             pass
