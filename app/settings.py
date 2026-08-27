@@ -14,6 +14,10 @@ class Settings:
     def __init__(self) -> None:
         self.theme: str = "light"
         self.window_geometry: Optional[str] = None
+        # Separate from window_geometry: Tk's "WxH+X+Y" string format and Qt's
+        # QRect aren't interchangeable, and both UIs can coexist during the
+        # PySide6 migration.
+        self.window_geometry_qt: Optional[str] = None
         self.volume: int = 80
         self.mute: bool = False
         self.show_playlist: bool = True
@@ -66,6 +70,7 @@ class Settings:
                     data = json.load(f)
                 self.theme = data.get("theme", self.theme)
                 self.window_geometry = data.get("window_geometry", self.window_geometry)
+                self.window_geometry_qt = data.get("window_geometry_qt", self.window_geometry_qt)
                 self.volume = data.get("volume", self.volume)
                 self.mute = data.get("mute", self.mute)
                 self.show_playlist = data.get("show_playlist", self.show_playlist)
@@ -89,6 +94,7 @@ class Settings:
             data = {
                 "theme": self.theme,
                 "window_geometry": self.window_geometry,
+                "window_geometry_qt": self.window_geometry_qt,
                 "volume": self.volume,
                 "mute": self.mute,
                 "show_playlist": self.show_playlist,
