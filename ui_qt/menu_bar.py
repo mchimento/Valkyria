@@ -27,6 +27,7 @@ site — this module does not need to know about tkinter.
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import QHBoxLayout, QMenu, QMenuBar, QPushButton, QSizePolicy, QWidget
 
@@ -40,6 +41,13 @@ class CustomMenuBarQt(QWidget):
         self.parent_window = parent_window if parent_window is not None else parent
 
         self.setObjectName("MenuBarContainer")
+        # Plain QWidget only reliably paints QSS background-color when
+        # nested this deep (MainWindowQt -> here) with this attribute set —
+        # without it the area behind the transparent min/max/close buttons
+        # and the drag spacer falls through to the window's base bg instead
+        # of menubar_bg, showing as the background stopping right after the
+        # last menu item.
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFixedHeight(30)
 
         layout = QHBoxLayout(self)
@@ -162,6 +170,7 @@ class _DragSpacer(QWidget):
     def __init__(self, parent: QWidget, parent_window: QWidget):
         super().__init__(parent)
         self.setObjectName("MenuBarSpacer")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.parent_window = parent_window
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 

@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 """
 Entry point for the PySide6 build of Valkyria (migration in progress).
-
-Phase 1: app bootstrap, theme, frameless main window with a working menu
-bar. Phase 2: waveform + playback controls wired to a real AudioPlayer.
-main.py (the tkinter app) is unaffected by this file.
 """
 import signal
 import sys
