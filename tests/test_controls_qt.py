@@ -1,0 +1,130 @@
+"""Tests for ui_qt/controls.py. Additive to the tkinter test suite."""
+import threading
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+import soundfile as sf
+from PySide6.QtCore import Qt
+
+from app.settings import Settings
+from ui_qt.controls import ControlsBarQt, _format_ms
+
+PALETTE = {
+    "waveform_bg": "#1a1a1a",
+    "waveform_played": "#FF6B00",
+    "waveform_unplayed": "#404040",
+    "waveform_border": "#808080",
+    "button_fg_color": "#1E1E1E",
+    "button_bg_color": "#BB86FC",
+    "button_hover": "#985EFF",
+    "button_pressed": "#6023CB",
+}
+
+
+@pytest.fixture
+def settings():
+    with patch.object(Settings, "load"):
+        s = Settings()
+    s.volume = 80
+    s.mute = False
+    return s
+
+
+@pytest.fixture
+def mock_player():
+    player = MagicMock()
+    player.get_time.return_value = 0
+    player.get_length.return_value = 0
+    player.get_mute_state.return_value = False
+    player.trigger_fade_out.return_value = 0
+    return player
+
+
+@pytest.fixture
+def controls(qtbot, mock_player, settings):
+    bar = ControlsBarQt(mock_player, settings, PALETTE)
+    qtbot.addWidget(bar)
+    settings.save = MagicMock()  # reset call history from construction-time init
+    mock_player.reset_mock()  # clears call history only; return_values set above are preserved
+    return bar
+
+
+@pytest.fixture
+def tiny_wav(tmp_path):
+    path = tmp_path / "tone.wav"
+    sr = 8000
+    t = np.linspace(0, 0.3, int(sr * 0.3), endpoint=False)
+    data = (0.5 * np.sin(2 * np.pi * 440 * t)).astype("float32")
+    sf.write(str(path), data, sr)
+    return str(path)
+
+
+def test_format_ms():
+    assert _format_ms(0) == "--:--"
+    assert _format_ms(None) == "--:--"
+    assert _format_ms(65_000) == "01:05"
+
+
+def test_play_file_calls_player_play_and_loads_waveform(qtbot, controls, mock_player, tiny_wav):
+    controls.play_file(tiny_wav)
+    qtbot.waitUntil(lambda: mock_player.play.called, timeout=2000)
+    assert mock_player.play.call_args[0][0] == tiny_wav
+    qtbot.waitUntil(lambda: controls.waveform.current_file == tiny_wav, timeout=2000)
+
+
+def test_pause_calls_player_pause(controls, mock_player):
+    controls.btn_pause.click()
+    assert mock_player.pause.called
+
+
+def test_stop_dispatches_and_resets_ui(qtbot, controls, mock_player):
+    controls.btn_stop.click()
+    qtbot.waitUntil(lambda: mock_player.stop.called, timeout=2000)
+    qtbot.waitUntil(lambda: controls.current_time_label.text() == "--:--", timeout=2000)
+
+
+def test_volume_change_persists_and_calls_player(controls, mock_player, settings):
+    controls.volume_slider.setValue(42)
+    assert settings.volume == 42
+    assert settings.save.called
+    assert mock_player.set_volume.call_args[0][0] == 42
+    assert controls.volume_label.text() == "42%"
+
+
+def test_mute_toggle_persists_and_saves(controls, mock_player, settings):
+    controls.btn_mute.click()
+    assert mock_player.set_mute.call_args[0][0] is True
+    assert settings.mute is True
+    assert settings.save.called
+    assert controls.btn_mute.text() == "🔇"
+
+
+def test_track_ended_resets_ui(controls):
+    controls.current_time_label.setText("01:23")
+    controls.on_track_ended()
+    assert controls.current_time_label.text() == "--:--"
+    assert controls.total_time_label.text() == "--:--"
+
+
+def test_real_player_track_end_bridges_across_thread(qtbot, settings):
+    """End-to-end regression net for the cross-thread bridge: a REAL
+    AudioPlayer (not a mock) firing on_track_end from a background thread,
+    same as the sounddevice callback-finished thread would, must reach
+    ControlsBarQt.on_track_ended() on the Qt main thread."""
+    from audio.audio_player import AudioPlayer
+    from ui_qt.player_bridge import PlayerBridge
+
+    bridge = PlayerBridge()
+    player = AudioPlayer(on_track_end=bridge.track_ended.emit)
+    bar = ControlsBarQt(player, settings, PALETTE)
+    qtbot.addWidget(bar)
+    bridge.track_ended.connect(bar.on_track_ended, Qt.QueuedConnection)
+    bar.current_time_label.setText("01:23")
+
+    worker = threading.Thread(target=player._on_stream_finished, daemon=True)
+    with qtbot.waitSignal(bridge.track_ended, timeout=2000):
+        worker.start()
+    worker.join()
+
+    qtbot.waitUntil(lambda: bar.current_time_label.text() == "--:--", timeout=2000)
