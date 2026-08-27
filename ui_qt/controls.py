@@ -109,13 +109,13 @@ class ControlsBarQt(QWidget):
             logger.exception("Failed to apply initial volume")
 
     def _init_mute(self) -> None:
+        # settings.mute is the source of truth here — the player is always
+        # freshly constructed right before ControlsBarQt (see main_qt.py),
+        # so get_mute_state() would just return its constructor default
+        # (False) and silently reset a saved "muted" preference back to
+        # unmuted on every launch. Push settings' value into the player
+        # below, not the other way around.
         initial_mute = bool(getattr(self.settings, "mute", False))
-        try:
-            player_mute = self.player.get_mute_state()
-            if player_mute is not None:
-                initial_mute = bool(player_mute)
-        except Exception:
-            pass
         self._is_muted = initial_mute
         self.btn_mute.setText("🔇" if initial_mute else "🔊")
         try:

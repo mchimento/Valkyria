@@ -76,6 +76,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             # Check track info menu state through menu_item_refs
@@ -102,6 +108,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             # Check track info menu state through menu_item_refs
@@ -128,6 +140,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             # Check track info menu state through menu_item_refs
@@ -152,6 +170,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             # Prepare a cached temporary estimate on DJ view
@@ -182,6 +206,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             # Check that audio device items list has items
@@ -205,6 +235,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             device_id = '{0.0.0}.{device1}'
@@ -236,6 +272,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             main_window.handle_track_end()
@@ -259,6 +301,12 @@ class TestMainWindowMenus(unittest.TestCase):
         try:
             root = tk.Tk()
             self.root = root
+            # winfo_reqheight() on an unconfigured mock returns another
+            # mock, not an int, which _apply_initial_geometry() then tries
+            # to add/compare via min() — give it a real int like a real
+            # Tk widget would return.
+            mock_controls.return_value.winfo_reqheight.return_value = 40
+            mock_controls.return_value.winfo_reqwidth.return_value = 400
             main_window = MainWindow(self.mock_state, self.mock_theme, self.mock_player, self.mock_settings)
 
             # Ensure variable exists and reflects the setting (defaults to True)

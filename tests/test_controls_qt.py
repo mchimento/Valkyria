@@ -60,6 +60,28 @@ def tiny_wav(tmp_path):
     return str(path)
 
 
+def test_init_mute_does_not_reset_saved_preference(qtbot, settings):
+    """Regression test: a freshly-constructed AudioPlayer's get_mute_state()
+    always returns its constructor default (False), never None — a prior
+    version of _init_mute() treated that default as authoritative and
+    silently reset a saved "muted" preference back to unmuted on every
+    launch, then re-persisted the wrong value to disk."""
+    settings.mute = True
+    player = MagicMock()
+    player.get_time.return_value = 0
+    player.get_length.return_value = 0
+    player.get_mute_state.return_value = False  # fresh player's real default
+    player.trigger_fade_out.return_value = 0
+
+    bar = ControlsBarQt(player, settings, PALETTE)
+    qtbot.addWidget(bar)
+
+    assert settings.mute is True
+    assert bar._is_muted is True
+    assert bar.btn_mute.text() == "🔇"
+    assert player.set_mute.call_args[0][0] is True
+
+
 def test_format_ms():
     assert _format_ms(0) == "--:--"
     assert _format_ms(None) == "--:--"

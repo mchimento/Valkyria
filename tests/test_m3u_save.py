@@ -11,11 +11,17 @@ from audio import m3u
 class TestM3USaveLoad(unittest.TestCase):
     def test_save_and_load_playlist(self):
         """Test that playlists are saved and loaded correctly."""
-        # Test data - simulating what state.playlist should contain
+        # Test data - simulating what state.playlist should contain.
+        # Must be genuinely absolute on whatever platform the test runs on:
+        # parse_m3u resolves each entry against the M3U's own directory,
+        # which is a no-op for an already-absolute path but silently
+        # mangles a path that's only absolute on a *different* OS (e.g. a
+        # hardcoded "C:\\..." path isn't absolute per POSIX rules on Linux).
+        music_dir = Path(tempfile.mkdtemp())
         test_playlist = [
-            "C:\\Music\\song1.mp3",
-            "C:\\Music\\song2.mp3",
-            "C:\\Music\\song3.mp3"
+            str(music_dir / "song1.mp3"),
+            str(music_dir / "song2.mp3"),
+            str(music_dir / "song3.mp3"),
         ]
 
         # Use temporary file
