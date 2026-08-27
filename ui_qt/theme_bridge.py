@@ -142,6 +142,20 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {button_pressed};
     }}
 
+    QPushButton#DialogButton {{
+        background-color: {button_bg};
+        color: {button_fg};
+        border-radius: 3px;
+        padding: 5px 16px;
+        min-width: 60px;
+    }}
+    QPushButton#DialogButton:hover {{
+        background-color: {button_hover};
+    }}
+    QPushButton#DialogButton:pressed {{
+        background-color: {button_pressed};
+    }}
+
     QSlider::groove:horizontal {{
         height: 4px;
         background: {slider_bg};

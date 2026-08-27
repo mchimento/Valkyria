@@ -43,29 +43,38 @@ def test_initial_state_matches_settings(dialog):
     assert dialog.radio_bpm_raw.isChecked()
 
 
-def test_toggling_theme_previews_live(qtbot, dialog, settings, theme_signal):
+def test_toggling_theme_previews_live_without_touching_settings(qtbot, dialog, settings, theme_signal):
+    """The core fix: preview must broadcast a palette for display without
+    ever mutating the shared, persisted settings/theme objects — otherwise
+    anything else that calls settings.save() while the dialog is open
+    (volume change, mute toggle, even closing the app) would silently bake
+    the uncommitted preview into config.json."""
     with qtbot.waitSignal(theme_signal.changed, timeout=1000) as blocker:
         dialog.radio_dark.setChecked(True)
-    assert settings.theme == "dark"
-    assert blocker.args[0]["bg"] == "#1E1E1E"  # dark.json's bg
+    assert settings.theme == "light"  # unchanged — still the persisted value
+    assert blocker.args[0]["bg"] == "#1E1E1E"  # dark.json's bg, shown but not saved
 
 
-def test_reject_rolls_back_preview(qtbot, dialog, settings, theme_signal):
+def test_incidental_save_during_preview_does_not_persist_it(dialog, settings):
+    """Direct regression test for the reported bug: simulate an unrelated
+    settings.save() firing while a preview is live (e.g. the user adjusts
+    volume elsewhere) and confirm the previewed theme was never written
+    into the settings object that save() would have persisted."""
     dialog.radio_dark.setChecked(True)
-    assert settings.theme == "dark"
+    with patch.object(Settings, "save") as mock_save:
+        settings.save()
+    assert settings.theme == "light"
+    assert mock_save.called
+
+
+def test_reject_restores_committed_palette(qtbot, dialog, settings, theme, theme_signal):
+    dialog.radio_dark.setChecked(True)  # preview only, settings.theme stays "light"
 
     with qtbot.waitSignal(theme_signal.changed, timeout=1000) as blocker:
         dialog.reject()
 
     assert settings.theme == "light"
-    assert blocker.args[0]["bg"] == "#FAFAFA"  # light.json's bg
-
-
-def test_reject_without_preview_does_not_emit(qtbot, dialog, theme_signal):
-    received = []
-    theme_signal.changed.connect(lambda p: received.append(p))
-    dialog.reject()
-    assert received == []
+    assert blocker.args[0]["bg"] == "#FAFAFA"  # light.json's bg — theme.palette, unchanged this whole time
 
 
 def test_save_commits_all_fields(dialog, settings):

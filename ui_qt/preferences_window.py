@@ -14,6 +14,7 @@ this dialog the same as everything else, since it's just another QWidget
 under the app-wide stylesheet.
 """
 
+import json
 import logging
 
 from PySide6.QtCore import Qt
@@ -31,7 +32,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.paths import get_resource_path
+
 logger = logging.getLogger(__name__)
+
+
+def _load_palette(theme_name: str) -> dict:
+    """Load a theme palette by name without touching settings/ThemeManager —
+    used for live preview so nothing shared/persisted is mutated until Save
+    is actually clicked. Mirrors themes.theme_manager.ThemeManager.reload()'s
+    file-loading logic exactly, just without the settings.theme dependency."""
+    path = get_resource_path(f"themes/{theme_name}.json")
+    if not path.exists():
+        path = get_resource_path("themes/light.json")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 class _DialogTitleBar(QWidget):
@@ -84,7 +99,6 @@ class PreferencesWindowQt(QDialog):
         self.settings = settings
         self.theme = theme
         self.theme_signal = theme_signal
-        self._original_theme = settings.theme
 
         self.setObjectName("MainWindow")  # reuses the main window's QSS border treatment
         self.setWindowTitle("Preferences")
@@ -140,6 +154,14 @@ class PreferencesWindowQt(QDialog):
         layout.addWidget(bpm_group)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        # The app-wide QPushButton QSS rule is flat/transparent (it's meant
+        # for the toolbar-style menu bar and window-control buttons), which
+        # leaves ordinary dialog action buttons with no visible chrome at
+        # all. Give these the same treatment as the transport buttons.
+        for role in (QDialogButtonBox.Save, QDialogButtonBox.Cancel):
+            btn = buttons.button(role)
+            if btn is not None:
+                btn.setObjectName("DialogButton")
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -157,11 +179,18 @@ class PreferencesWindowQt(QDialog):
         self.move(x, y)
 
     def _preview_theme(self, name: str) -> None:
-        self.settings.theme = name
-        self.theme.reload()
-        self.theme_signal.changed.emit(self.theme.palette)
+        # Deliberately does not touch self.settings.theme or self.theme —
+        # those are shared, persisted objects, and anything else in the app
+        # that calls settings.save() while this preview is live (adjusting
+        # volume, toggling mute, even just closing the whole app) would
+        # otherwise silently bake the uncommitted preview into config.json.
+        # Preview only broadcasts a palette for display; nothing is
+        # committed until _on_save().
+        self.theme_signal.changed.emit(_load_palette(name))
 
     def _on_save(self) -> None:
+        self.settings.theme = "dark" if self.radio_dark.isChecked() else "light"
+        self.theme.reload()
         self.settings.mini_player_enabled = self.checkbox_mini_player.isChecked()
         self.settings.bpm_mode = "perceived" if self.radio_bpm_perceived.isChecked() else "raw"
         try:
@@ -174,8 +203,9 @@ class PreferencesWindowQt(QDialog):
         # Covers the Cancel button, the window's X close, and Escape — Qt
         # routes all three through reject(), so this one override is the
         # single rollback path (no separate close-protocol wiring needed).
-        if self.settings.theme != self._original_theme:
-            self.settings.theme = self._original_theme
-            self.theme.reload()
-            self.theme_signal.changed.emit(self.theme.palette)
+        # settings.theme/self.theme were never touched by preview, so
+        # there's nothing to roll back there — just restore the visible
+        # app to whatever theme.palette actually still says (in case a
+        # preview changed what's on screen without changing what's saved).
+        self.theme_signal.changed.emit(self.theme.palette)
         super().reject()

@@ -1,5 +1,27 @@
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _isolate_settings_config_path(tmp_path, monkeypatch):
+    """Never let a test's Settings object touch the real user config file.
+
+    app/settings.py imports get_user_data_path directly into its own
+    namespace, so Settings.config_path resolves it via
+    app.settings.get_user_data_path at call time — patching that reference
+    (not app.paths.get_user_data_path) redirects every Settings() instance
+    constructed during a test to a throwaway per-test directory, even if a
+    test forgets to mock settings.save() itself. The existing Tk test
+    suite (tests/test_settings.py) already does this per-test via
+    PropertyMock on Settings.config_path; this is the same protection
+    applied blanket so newly added tests can't regress it (confirmed they
+    had: several ui_qt tests were writing straight into the real
+    ~/.tango-studio/config.json before this fixture existed).
+    """
+    import app.settings as settings_module
+
+    monkeypatch.setattr(settings_module, "get_user_data_path", lambda: tmp_path)
+
+
 # Provide a test-level safe_after override so worker threads that post back to
 # Tk don't require a running Tk mainloop in unit tests. This keeps tests
 # deterministic without modifying production code.
