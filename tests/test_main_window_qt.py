@@ -116,7 +116,7 @@ def test_preferences_reuses_single_instance(window):
     first.close()
 
 
-def test_open_folder_menu_action_populates_playlist(window, tmp_path):
+def test_open_folder_menu_action_populates_playlist(qtbot, window, tmp_path):
     from PySide6.QtWidgets import QFileDialog
 
     (tmp_path / "song.mp3").write_bytes(b"")
@@ -127,7 +127,9 @@ def test_open_folder_menu_action_populates_playlist(window, tmp_path):
 
     assert window.state.playlist == [str(tmp_path / "song.mp3")]
     assert window.state.current_index is None
-    assert window.playlist_view._tree.topLevelItemCount() == 1
+    # Rows are only created once their metadata batch arrives — see
+    # ui_qt/playlist_view.py's refresh() docstring.
+    qtbot.waitUntil(lambda: window.playlist_view._tree.topLevelItemCount() == 1, timeout=2000)
 
 
 def test_play_index_updates_state_and_plays(qtbot, window, mock_player):
