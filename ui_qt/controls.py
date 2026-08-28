@@ -14,6 +14,7 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from ui_qt.waveform_seekbar import WaveformSeekbarQt
@@ -53,9 +54,6 @@ class ControlsBarQt(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        self.waveform = WaveformSeekbarQt(player, palette, width=360, height=40, parent=self)
-        layout.addWidget(self.waveform)
-
         row = QHBoxLayout()
         row.setSpacing(6)
 
@@ -75,10 +73,24 @@ class ControlsBarQt(QWidget):
         self.btn_stop.setToolTip("Stop (S)")
         self.btn_next.setToolTip("Next Track (→)")
 
+        # Matches ui/controls.py:165-181 exactly: current time, waveform,
+        # total time all live inline in the same row as the transport
+        # buttons ("middle" frame in the original) — not stacked above them
+        # on a row of their own.
         self.current_time_label = QLabel("--:--")
-        row.addWidget(self.current_time_label)
-        row.addWidget(QLabel("/"))
         self.total_time_label = QLabel("--:--")
+        # ui/controls.py sets width=8 (character cells) on these labels
+        # specifically to stop them reflowing the row as the text changes
+        # length every tick — without a fixed width, everything to the
+        # right (the waveform included) visibly shifts sideways as the
+        # elapsed-time text grows/shrinks digit by digit.
+        time_width = QFontMetrics(self.current_time_label.font()).horizontalAdvance("00:00") + 10
+        for label in (self.current_time_label, self.total_time_label):
+            label.setFixedWidth(time_width)
+            label.setAlignment(Qt.AlignCenter)
+        row.addWidget(self.current_time_label)
+        self.waveform = WaveformSeekbarQt(player, palette, width=360, height=40, parent=self)
+        row.addWidget(self.waveform)
         row.addWidget(self.total_time_label)
 
         row.addStretch(1)
