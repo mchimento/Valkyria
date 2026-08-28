@@ -241,14 +241,31 @@ def build_stylesheet(palette: dict) -> str:
         outline: 0;
     }}
 
-    QScrollBar:vertical, QScrollBar:horizontal {{
+    QScrollBar:vertical {{
         background: {scrollbar_track};
+        width: 10px;
+        margin: 0;
+    }}
+    QScrollBar:horizontal {{
+        background: {scrollbar_track};
+        height: 10px;
+        margin: 0;
     }}
     QScrollBar::handle {{
         background: {scrollbar_thumb};
+        border-radius: 4px;
     }}
     QScrollBar::handle:hover {{
         background: {scrollbar_hover};
+    }}
+    QScrollBar::add-line, QScrollBar::sub-line {{
+        height: 0;
+        width: 0;
+        border: none;
+        background: none;
+    }}
+    QScrollBar::add-page, QScrollBar::sub-page {{
+        background: none;
     }}
 
     QTreeWidget {{
@@ -259,6 +276,16 @@ def build_stylesheet(palette: dict) -> str:
         border-radius: 4px;
         outline: 0;
         font-size: 10pt;
+    }}
+    /* ui/playlist_view.py's own "Playlist.Treeview" ttk style intentionally
+       differs from the generic Treeview style the browser uses: no border
+       (borderwidth=0, relief=flat) and background=palette["bg"], not
+       tree_bg — it's meant to blend into the surrounding panel rather than
+       read as its own framed box. */
+    QTreeWidget#PlaylistTree {{
+        background-color: {bg};
+        border: none;
+        border-radius: 0;
     }}
     QTreeWidget::item {{
         padding: 7px 6px;
@@ -291,9 +318,12 @@ def build_stylesheet(palette: dict) -> str:
         font-size: 10pt;
     }}
 
+    /* Handle size is set via QSplitter.setHandleWidth() in
+       ui_qt/main_window.py, not here — QSS `width` on QSplitter::handle
+       is silently ignored by Qt (confirmed empirically); this rule only
+       controls its color. */
     QSplitter::handle {{
-        background-color: {border};
-        width: 3px;
+        background-color: transparent;
     }}
     QSplitter::handle:hover {{
         background-color: {menubar_hover};

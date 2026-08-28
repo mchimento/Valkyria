@@ -73,7 +73,14 @@ class MainWindowQt(QWidget):
         central_layout.setSpacing(8)
 
         splitter = QSplitter(Qt.Horizontal, self.central_area)
-        splitter.setHandleWidth(3)
+        # QSplitterHandle's size is determined via QStyle::pixelMetric, not
+        # the stylesheet box model — QSS `width` on QSplitter::handle is
+        # silently ignored (confirmed empirically). setHandleWidth() is the
+        # only thing that actually reserves this much layout space; the
+        # handle stays visually invisible (transparent background, from
+        # theme_bridge.py) until hovered, but this is what makes it a real
+        # gap between the panels rather than the two touching directly.
+        splitter.setHandleWidth(16)
         self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, parent=splitter)
         self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, player=self.player, parent=splitter)
         splitter.addWidget(self.playlist_view)
