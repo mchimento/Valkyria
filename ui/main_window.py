@@ -72,13 +72,21 @@ class MainWindow:
         self._build_layout()
         self._apply_initial_geometry()
 
-        # Remove the native title bar; the menu bar provides window controls
-        self.root.overrideredirect(True)
-        self.root.update_idletasks()
-        apply_rounded_corners(self.root)
-        force_taskbar_presence(self.root, get_resource_path("assets/app-icon.ico"))
-        self._setup_resize()
-        self.menubar.setup_window_controls(self._on_quit)
+        # Remove the native title bar; the menu bar provides window controls.
+        # On Linux, overrideredirect() fights with the window manager/compositor
+        # (most visibly under Wayland/XWayland+mutter): manual geometry() calls
+        # during drag/resize and wm "zoomed" state changes cause the window to
+        # flicker and appear to detach from its own chrome. Keep native
+        # decorations there instead and skip the custom drag/resize/control-button
+        # chrome that depends on overrideredirect being active.
+        self._use_custom_chrome = sys.platform != "linux"
+        if self._use_custom_chrome:
+            self.root.overrideredirect(True)
+            self.root.update_idletasks()
+            apply_rounded_corners(self.root)
+            force_taskbar_presence(self.root, get_resource_path("assets/app-icon.ico"))
+            self._setup_resize()
+            self.menubar.setup_window_controls(self._on_quit)
 
         # Keep the maximise icon in sync when the window state changes
         self.root.bind("<Configure>", self._on_root_configure, add="+")
@@ -124,15 +132,25 @@ class MainWindow:
         self._resize_dir = None
         self._resize_start = {}  # x, y, w, h, wx, wy
 
+        if sys.platform == "win32":
+            _CURSOR_NW_SE, _CURSOR_NE_SW = "size_nw_se", "size_ne_sw"
+            _CURSOR_WE, _CURSOR_NS = "size_we", "size_ns"
+        elif sys.platform == "darwin":
+            _CURSOR_NW_SE, _CURSOR_NE_SW = "resizenwse", "resizenesw"
+            _CURSOR_WE, _CURSOR_NS = "resizeleftright", "resizeupdown"
+        else:
+            _CURSOR_NW_SE, _CURSOR_NE_SW = "top_left_corner", "top_right_corner"
+            _CURSOR_WE, _CURSOR_NS = "sb_h_double_arrow", "sb_v_double_arrow"
+
         def _cursor_for(on_left, on_right, on_top, on_bottom):
             if (on_left and on_top) or (on_right and on_bottom):
-                return "size_nw_se"
+                return _CURSOR_NW_SE
             if (on_right and on_top) or (on_left and on_bottom):
-                return "size_ne_sw"
+                return _CURSOR_NE_SW
             if on_left or on_right:
-                return "size_we"
+                return _CURSOR_WE
             if on_top or on_bottom:
-                return "size_ns"
+                return _CURSOR_NS
             return ""
 
         def _dirs(event):
@@ -192,10 +210,6 @@ class MainWindow:
         self.root.bind("<ButtonPress-1>",   _on_press,   add="+")
         self.root.bind("<B1-Motion>",       _on_drag,    add="+")
         self.root.bind("<ButtonRelease-1>", _on_release, add="+")
-
-    def _on_root_configure(self, event):
-        if event.widget is self.root:
-            self.menubar.sync_maximize_button()
 
     def _build_menu(self):
         # Create custom menu bar and pack it at the top of the content frame
@@ -1068,7 +1082,9 @@ class MainWindow:
     def _on_root_configure(self, event):
         if event.widget is not self.root:
             return
-        if self._generator_win is not None:
+        if self._use_custom_chrome:
+            self.menubar.sync_maximize_button()
+        if getattr(self, "_generator_win", None) is not None:
             try:
                 apply_theme_titlebar(self._generator_win, self.theme.palette)
             except Exception:

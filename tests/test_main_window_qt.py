@@ -187,3 +187,107 @@ def test_track_ended_with_no_current_index_just_stops(window):
     window.state.current_index = None
 
     window._on_track_ended()  # must not raise
+
+
+def test_prev_moves_back_one(qtbot, window, mock_player):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3", "/tmp/c.mp3"]
+    window.state.current_index = 2
+
+    window.controls.btn_prev.click()
+
+    assert window.state.current_index == 1
+    qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
+    assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
+
+
+def test_prev_at_start_of_playlist_does_nothing(window, mock_player):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.state.current_index = 0
+
+    window.controls.btn_prev.click()
+
+    assert window.state.current_index == 0
+    mock_player.play.assert_not_called()
+
+
+def test_next_moves_forward_one(qtbot, window, mock_player):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3", "/tmp/c.mp3"]
+    window.state.current_index = 0
+
+    window.controls.btn_next.click()
+
+    assert window.state.current_index == 1
+    qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
+    assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
+
+
+def test_next_at_end_of_playlist_does_nothing(window, mock_player):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.state.current_index = 1
+
+    window.controls.btn_next.click()
+
+    assert window.state.current_index == 1
+    mock_player.play.assert_not_called()
+
+
+def test_repeat_toggle_cycles_none_one_all_none(window):
+    assert window.state.repeat_mode == "none"
+
+    window.controls.btn_repeat.click()
+    assert window.state.repeat_mode == "one"
+
+    window.controls.btn_repeat.click()
+    assert window.state.repeat_mode == "all"
+
+    window.controls.btn_repeat.click()
+    assert window.state.repeat_mode == "none"
+
+
+def test_repeat_toggle_updates_button_icon(window):
+    window.controls.btn_repeat.click()
+    assert window.controls.btn_repeat.text() == "🔂"
+
+    window.controls.btn_repeat.click()
+    assert window.controls.btn_repeat.text() == "🔁"
+    assert "background-color" in window.controls.btn_repeat.styleSheet()
+
+
+def test_effects_button_does_not_raise(window):
+    window.controls.btn_effects.click()  # stub — must not raise
+
+
+def test_initial_visibility_matches_settings(qtbot, settings, theme, mock_player, theme_signal):
+    settings.show_playlist = True
+    settings.show_browser = False
+    win = MainWindowQt(settings, theme, mock_player, theme_signal)
+    qtbot.addWidget(win)
+    win.show()
+    qtbot.waitExposed(win)
+
+    assert win.playlist_view.isVisible()
+    assert not win.browser_view.isVisible()
+
+
+def test_toggle_playlist_visibility(qtbot, window, settings):
+    window.show()
+    qtbot.waitExposed(window)
+    assert window.playlist_view.isVisible()
+
+    window._toggle_playlist_visibility()
+    assert not window.playlist_view.isVisible()
+    assert settings.show_playlist is False
+
+    window._toggle_playlist_visibility()
+    assert window.playlist_view.isVisible()
+    assert settings.show_playlist is True
+
+
+def test_toggle_browser_visibility(qtbot, window, settings):
+    window.show()
+    qtbot.waitExposed(window)
+    assert window.browser_view.isVisible()
+
+    window._toggle_browser_visibility()
+    assert not window.browser_view.isVisible()
+    assert settings.show_browser is False

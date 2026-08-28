@@ -75,7 +75,7 @@ class MainWindowQt(QWidget):
         splitter = QSplitter(Qt.Horizontal, self.central_area)
         splitter.setHandleWidth(3)
         self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, parent=splitter)
-        self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, parent=splitter)
+        self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, player=self.player, parent=splitter)
         splitter.addWidget(self.playlist_view)
         splitter.addWidget(self.browser_view)
         # Matches ui/main_window.py's left_frame(expand=True)/right_frame(no
@@ -85,11 +85,18 @@ class MainWindowQt(QWidget):
         splitter.setStretchFactor(1, 0)
         central_layout.addWidget(splitter, 1)
 
+        self.playlist_view.setVisible(bool(getattr(settings, "show_playlist", True)))
+        self.browser_view.setVisible(bool(getattr(settings, "show_browser", True)))
+
         self.controls = ControlsBarQt(self.player, self.settings, self.theme.palette, state=self.state, parent=self.central_area)
         central_layout.addWidget(self.controls)
         layout.addWidget(self.central_area, 1)
 
         self.playlist_view.track_activated.connect(self._play_index)
+        self.controls.prev_requested.connect(self._on_prev)
+        self.controls.next_requested.connect(self._on_next)
+        self.controls.repeat_toggle_requested.connect(self._toggle_repeat_mode)
+        self.controls.effects_requested.connect(self._on_open_audio_effects)
 
         self._apply_initial_geometry()
 
@@ -140,8 +147,8 @@ class MainWindowQt(QWidget):
         self.menubar.add_menu("Playback", playback_items)
 
         view_items = [
-            {"label": "Show Playback", "checkbutton": True, "checked": bool(getattr(self.settings, "show_playlist", True)), "accelerator": "F9"},
-            {"label": "Show Browser", "checkbutton": True, "checked": bool(getattr(self.settings, "show_browser", True)), "accelerator": "F10"},
+            {"label": "Show Playback", "checkbutton": True, "checked": bool(getattr(self.settings, "show_playlist", True)), "accelerator": "F9", "command": self._toggle_playlist_visibility},
+            {"label": "Show Browser", "checkbutton": True, "checked": bool(getattr(self.settings, "show_browser", True)), "accelerator": "F10", "command": self._toggle_browser_visibility},
             {"label": "Show Live Audio Analysis", "checkbutton": True, "checked": bool(getattr(self.settings, "show_dj", True)), "accelerator": "F11"},
             {"separator": True},
             {"label": "Always on Top", "checkbutton": True, "checked": False},
@@ -234,6 +241,35 @@ class MainWindowQt(QWidget):
 
     def _set_repeat_mode(self, mode: str) -> None:
         self.state.repeat_mode = mode
+        self.controls.set_repeat_icon(mode)
+
+    def _toggle_repeat_mode(self) -> None:
+        """Cycle none -> one -> all -> none, matching
+        ui/main_window.py's toggle_repeat_mode. The menu's radiobuttons
+        aren't re-synced to match (same known cosmetic gap noted for the
+        "repeat one" auto-reset in _on_track_ended) — functionally correct
+        either way since state.repeat_mode is the source of truth."""
+        modes = ["none", "one", "all"]
+        try:
+            idx = modes.index(self.state.repeat_mode)
+        except ValueError:
+            idx = 0
+        self._set_repeat_mode(modes[(idx + 1) % len(modes)])
+
+    def _on_prev(self) -> None:
+        if self.state.current_index is None:
+            return
+        if self.state.current_index - 1 >= 0:
+            self._play_index(self.state.current_index - 1)
+
+    def _on_next(self) -> None:
+        if self.state.current_index is None:
+            return
+        if self.state.current_index + 1 < len(self.state.playlist):
+            self._play_index(self.state.current_index + 1)
+
+    def _on_open_audio_effects(self) -> None:
+        logger.info("[ui_qt stub] Audio Effects window not ported yet")
 
     def _play_index(self, index: int) -> None:
         if not (0 <= index < len(self.state.playlist)):
@@ -256,7 +292,7 @@ class MainWindowQt(QWidget):
         repeat_mode = getattr(self.state, "repeat_mode", "none")
         if repeat_mode == "one":
             self._play_index(self.state.current_index)
-            self.state.repeat_mode = "none"
+            self._set_repeat_mode("none")
         elif repeat_mode == "all":
             next_index = self.state.current_index + 1
             if next_index >= len(self.state.playlist):
@@ -268,6 +304,24 @@ class MainWindowQt(QWidget):
                 self._play_index(next_index)
             else:
                 self.controls.on_track_ended()
+
+    def _toggle_playlist_visibility(self) -> None:
+        visible = not self.playlist_view.isVisible()
+        self.playlist_view.setVisible(visible)
+        self.settings.show_playlist = visible
+        self._save_settings_safe()
+
+    def _toggle_browser_visibility(self) -> None:
+        visible = not self.browser_view.isVisible()
+        self.browser_view.setVisible(visible)
+        self.settings.show_browser = visible
+        self._save_settings_safe()
+
+    def _save_settings_safe(self) -> None:
+        try:
+            self.settings.save()
+        except Exception:
+            logger.exception("Failed to save settings")
 
     def _on_open_preferences(self) -> None:
         if self._preferences_win is not None:

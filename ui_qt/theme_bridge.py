@@ -221,6 +221,26 @@ def build_stylesheet(palette: dict) -> str:
         color: {fg};
     }}
 
+    QComboBox {{
+        background-color: {entry_bg};
+        color: {fg};
+        border: 1px solid {border};
+        border-radius: 4px;
+        padding: 4px 8px;
+    }}
+    QComboBox:disabled {{
+        color: {fg_dim};
+    }}
+    QComboBox::drop-down {{
+        border: none;
+    }}
+    QComboBox QAbstractItemView {{
+        background-color: {dropdown_bg};
+        color: {dropdown_text};
+        selection-background-color: {dropdown_hover};
+        outline: 0;
+    }}
+
     QScrollBar:vertical, QScrollBar:horizontal {{
         background: {scrollbar_track};
     }}

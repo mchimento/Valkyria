@@ -1,7 +1,12 @@
 """
-Qt port of ui/controls.py — ControlsBar (Phase 2 scope only: Play/Pause/Stop,
-volume/mute, time labels, waveform seekbar). No Prev/Next (needs a playlist
-to navigate — not ported yet), no repeat/effects ExtrasBar.
+Qt port of ui/controls.py — ControlsBar: Play/Pause/Prev/Stop/Next,
+volume/mute, time labels, waveform seekbar, and the repeat/effects
+ExtrasBar (ui/controls.py:16-56). Prev/Next/repeat-toggle/effects-open are
+emitted as signals rather than handled here directly — the actual "which
+index is next" / "open the effects window" policy lives in MainWindowQt,
+which owns state and playlist_view (mirrors the original's split between
+ControlsBar's prev()/next() mechanism and MainWindow.toggle_repeat_mode()/
+open_audio_effects() policy).
 """
 
 import logging
@@ -31,6 +36,11 @@ class ControlsBarQt(QWidget):
     # ui_qt.player_bridge.PlayerBridge).
     _stop_finished = Signal()
 
+    prev_requested = Signal()
+    next_requested = Signal()
+    repeat_toggle_requested = Signal()
+    effects_requested = Signal()
+
     def __init__(self, player, settings, palette: dict, state=None, parent=None):
         super().__init__(parent)
         self.player = player
@@ -49,13 +59,21 @@ class ControlsBarQt(QWidget):
         row = QHBoxLayout()
         row.setSpacing(6)
 
+        # Order matches ui/controls.py: play, pause, prev, stop, next.
         self.btn_play = QPushButton("▶")
         self.btn_pause = QPushButton("⏸")
+        self.btn_prev = QPushButton("⏮")
         self.btn_stop = QPushButton("■")
-        for btn in (self.btn_play, self.btn_pause, self.btn_stop):
+        self.btn_next = QPushButton("⏭")
+        for btn in (self.btn_play, self.btn_pause, self.btn_prev, self.btn_stop, self.btn_next):
             btn.setObjectName("TransportButton")
             btn.setFixedSize(36, 28)
             row.addWidget(btn)
+        self.btn_play.setToolTip("Play (Enter)")
+        self.btn_pause.setToolTip("Pause/Resume (Space)")
+        self.btn_prev.setToolTip("Previous Track (←)")
+        self.btn_stop.setToolTip("Stop (S)")
+        self.btn_next.setToolTip("Next Track (→)")
 
         self.current_time_label = QLabel("--:--")
         row.addWidget(self.current_time_label)
@@ -64,6 +82,16 @@ class ControlsBarQt(QWidget):
         row.addWidget(self.total_time_label)
 
         row.addStretch(1)
+
+        self.btn_repeat = QPushButton("🔁")
+        self.btn_effects = QPushButton("🎚")
+        for btn in (self.btn_repeat, self.btn_effects):
+            btn.setObjectName("TransportButton")
+            btn.setFixedSize(40, 32)
+        row.addWidget(self.btn_repeat)
+        row.addWidget(self.btn_effects)
+        self.btn_repeat.setToolTip("Repeat Mode")
+        self.btn_effects.setToolTip("Audio Effects (F7)")
 
         self.btn_mute = QPushButton("🔊")
         self.btn_mute.setObjectName("TransportButton")
@@ -83,7 +111,11 @@ class ControlsBarQt(QWidget):
 
         self.btn_play.clicked.connect(self._on_play_clicked)
         self.btn_pause.clicked.connect(self._on_pause)
+        self.btn_prev.clicked.connect(self.prev_requested)
         self.btn_stop.clicked.connect(self._on_stop)
+        self.btn_next.clicked.connect(self.next_requested)
+        self.btn_repeat.clicked.connect(self.repeat_toggle_requested)
+        self.btn_effects.clicked.connect(self.effects_requested)
         self.btn_mute.clicked.connect(self._on_mute_toggle)
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
 
@@ -131,6 +163,23 @@ class ControlsBarQt(QWidget):
     def apply_palette(self, palette: dict) -> None:
         self.palette = palette
         self.waveform.apply_palette(palette)
+
+    def set_repeat_icon(self, mode: str) -> None:
+        """Called by MainWindowQt after it changes state.repeat_mode —
+        matches ui/controls.py's ExtrasBar._update_repeat_icon: 'none' is
+        the plain button, 'one' swaps to the single-repeat glyph, 'all'
+        keeps the loop glyph but both 'one'/'all' get the active
+        (button_pressed) background."""
+        pressed = self.palette.get("button_pressed", "#6023CB")
+        if mode == "one":
+            self.btn_repeat.setText("🔂")
+            self.btn_repeat.setStyleSheet(f"background-color: {pressed};")
+        elif mode == "all":
+            self.btn_repeat.setText("🔁")
+            self.btn_repeat.setStyleSheet(f"background-color: {pressed};")
+        else:
+            self.btn_repeat.setText("🔁")
+            self.btn_repeat.setStyleSheet("")
 
     # ---------- transport ----------
 
