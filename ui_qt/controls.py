@@ -31,11 +31,12 @@ class ControlsBarQt(QWidget):
     # ui_qt.player_bridge.PlayerBridge).
     _stop_finished = Signal()
 
-    def __init__(self, player, settings, palette: dict, parent=None):
+    def __init__(self, player, settings, palette: dict, state=None, parent=None):
         super().__init__(parent)
         self.player = player
         self.settings = settings
         self.palette = palette
+        self.state = state
         self._is_muted = False
 
         layout = QVBoxLayout(self)
@@ -137,6 +138,16 @@ class ControlsBarQt(QWidget):
         self._pending_path = path
         threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
         self.waveform.load_waveform(path)
+
+    def play_current(self) -> None:
+        """Play state.playlist[state.current_index] — mirrors
+        ui/controls.py's ControlsBar.play(), which reads from the playlist
+        it was constructed with rather than taking a path directly."""
+        if self.state is None or self.state.current_index is None:
+            return
+        if not (0 <= self.state.current_index < len(self.state.playlist)):
+            return
+        self.play_file(self.state.playlist[self.state.current_index])
 
     def _on_play_clicked(self) -> None:
         if self._pending_path:

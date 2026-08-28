@@ -22,6 +22,7 @@ import warnings
 from contextlib import contextmanager
 
 import numpy as np
+import shiboken6
 import soundfile as sf
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
@@ -92,6 +93,14 @@ class WaveformSeekbarQt(QWidget):
         )
         self._waveform_thread.start()
 
+    def _safe_emit_peaks(self, result) -> None:
+        # Runs on the decode thread: if the widget was destroyed while this
+        # was still decoding (e.g. the app closed, or in tests, the widget
+        # went out of scope) the underlying C++ QObject is gone and
+        # emit() raises RuntimeError rather than silently no-op'ing.
+        if shiboken6.isValid(self):
+            self.peaks_ready.emit(result)
+
     def _generate_waveform_worker(self, audio_file: str) -> None:
         try:
             with warnings.catch_warnings():
@@ -132,7 +141,7 @@ class WaveformSeekbarQt(QWidget):
                     if peaks.max() > 0:
                         peaks = peaks / peaks.max()
 
-                    self.peaks_ready.emit((peaks, (total_frames / sr) * 1000))
+                    self._safe_emit_peaks((peaks, (total_frames / sr) * 1000))
                     return
 
                 except (sf.LibsndfileError, RuntimeError, Exception):
@@ -185,11 +194,11 @@ class WaveformSeekbarQt(QWidget):
                     if peaks.max() > 0:
                         peaks = peaks / peaks.max()
 
-                    self.peaks_ready.emit((peaks, (len(y) / sr) * 1000))
+                    self._safe_emit_peaks((peaks, (len(y) / sr) * 1000))
 
         except Exception as e:
             logger.error(f"Failed to generate waveform for {audio_file}: {e}")
-            self.peaks_ready.emit((None, 0))
+            self._safe_emit_peaks((None, 0))
 
     def _on_peaks_ready(self, result) -> None:
         peaks, length_ms = result

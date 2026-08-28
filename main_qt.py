@@ -60,7 +60,7 @@ def main():
     player.set_fade_out_duration(settings.fade_out_duration)
 
     window_instance = MainWindowQt(settings, theme, player, theme_signal)
-    bridge.track_ended.connect(window_instance.controls.on_track_ended, Qt.QueuedConnection)
+    bridge.track_ended.connect(window_instance._on_track_ended, Qt.QueuedConnection)
     window_instance.show()
 
     logger.info("Valkyria (PySide6) started")

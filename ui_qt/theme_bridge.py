@@ -56,6 +56,16 @@ def build_stylesheet(palette: dict) -> str:
     slider_button = palette.get("slider_button", "#BB86FC")
     slider_hover = palette.get("slider_hover", "#985EFF")
 
+    tree_bg = palette.get("tree_bg", "#252526")
+    tree_header = palette.get("tree_header", bg)
+    select_bg = palette.get("select_bg", "#3E3E3E")
+    select_fg = palette.get("select_fg", fg)
+    hover_bg = palette.get("hover_bg", "#2A2A2A")
+    striped_bg = palette.get("striped_bg", tree_bg)
+
+    entry_bg = palette.get("entry_bg", "#2A2A2A")
+    fg_dim = palette.get("fg_dim", "#888888")
+
     return f"""
     QWidget {{
         background-color: {bg};
@@ -133,7 +143,7 @@ def build_stylesheet(palette: dict) -> str:
     QPushButton#TransportButton {{
         background-color: {button_bg};
         color: {button_fg};
-        border-radius: 3px;
+        border-radius: 8px;
     }}
     QPushButton#TransportButton:hover {{
         background-color: {button_hover};
@@ -145,9 +155,10 @@ def build_stylesheet(palette: dict) -> str:
     QPushButton#DialogButton {{
         background-color: {button_bg};
         color: {button_fg};
-        border-radius: 3px;
+        border-radius: 8px;
         padding: 5px 16px;
         min-width: 60px;
+        min-height: 32px;
     }}
     QPushButton#DialogButton:hover {{
         background-color: {button_hover};
@@ -182,6 +193,34 @@ def build_stylesheet(palette: dict) -> str:
         padding: 4px;
     }}
 
+    QLabel#PanelHeader {{
+        color: {fg};
+        font-size: 18pt;
+        font-weight: bold;
+        background: transparent;
+    }}
+
+    QLineEdit#SearchEntry {{
+        background-color: {entry_bg};
+        color: {fg};
+        border: none;
+        border-radius: 4px;
+        padding: 5px 8px;
+    }}
+    QLabel#SearchIcon {{
+        color: {fg_dim};
+        background: transparent;
+    }}
+    QPushButton#SearchClear {{
+        color: {fg_dim};
+        background: transparent;
+        border: none;
+        font-size: 11pt;
+    }}
+    QPushButton#SearchClear:hover {{
+        color: {fg};
+    }}
+
     QScrollBar:vertical, QScrollBar:horizontal {{
         background: {scrollbar_track};
     }}
@@ -190,6 +229,54 @@ def build_stylesheet(palette: dict) -> str:
     }}
     QScrollBar::handle:hover {{
         background: {scrollbar_hover};
+    }}
+
+    QTreeWidget {{
+        background-color: {tree_bg};
+        alternate-background-color: {striped_bg};
+        color: {fg};
+        border: 1px solid {border};
+        border-radius: 4px;
+        outline: 0;
+        font-size: 10pt;
+    }}
+    QTreeWidget::item {{
+        padding: 7px 6px;
+    }}
+    /* No `border` property here (even `border: none`): Qt's item delegate
+       treats specifying any box-model property on ::item as an opt-in to
+       fully custom box painting, which silently stops honoring per-item
+       Qt::BackgroundRole overrides (used for the now-playing row) — the
+       same class of surprise as WA_StyledBackground earlier in this file's
+       history, just for QAbstractItemView's item delegate instead of
+       QWidget. Confirmed empirically: with `border: none;` present, a
+       QTreeWidgetItem.setBackground() call renders as if never called. */
+    QTreeWidget::item:hover {{
+        background-color: {hover_bg};
+    }}
+    QTreeWidget::item:selected {{
+        background-color: {select_bg};
+        color: {select_fg};
+    }}
+    QTreeWidget::branch {{
+        background-color: transparent;
+    }}
+    QHeaderView::section {{
+        background-color: {tree_header};
+        color: {fg};
+        padding: 7px 6px;
+        border: none;
+        border-bottom: 2px solid {border};
+        font-weight: bold;
+        font-size: 10pt;
+    }}
+
+    QSplitter::handle {{
+        background-color: {border};
+        width: 3px;
+    }}
+    QSplitter::handle:hover {{
+        background-color: {menubar_hover};
     }}
 
     /* dropdown_shortcut is applied per-widget (QAction shortcut text color

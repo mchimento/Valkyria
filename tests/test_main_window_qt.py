@@ -114,3 +114,76 @@ def test_preferences_reuses_single_instance(window):
     window._on_open_preferences()
     assert window._preferences_win is first
     first.close()
+
+
+def test_open_folder_menu_action_populates_playlist(window, tmp_path):
+    from PySide6.QtWidgets import QFileDialog
+
+    (tmp_path / "song.mp3").write_bytes(b"")
+    (tmp_path / "notes.txt").write_bytes(b"")
+
+    with patch.object(QFileDialog, "getExistingDirectory", return_value=str(tmp_path)):
+        window._on_open_folder()
+
+    assert window.state.playlist == [str(tmp_path / "song.mp3")]
+    assert window.state.current_index is None
+    assert window.playlist_view._tree.topLevelItemCount() == 1
+
+
+def test_play_index_updates_state_and_plays(qtbot, window, mock_player):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.playlist_view.refresh()
+
+    window._play_index(1)
+
+    assert window.state.current_index == 1
+    qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
+    assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
+
+
+def test_track_ended_repeat_none_advances_to_next(window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.state.current_index = 0
+    window.state.repeat_mode = "none"
+
+    window._on_track_ended()
+
+    assert window.state.current_index == 1
+
+
+def test_track_ended_repeat_none_stops_at_end_of_playlist(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.current_index = 0
+    window.state.repeat_mode = "none"
+
+    window._on_track_ended()
+
+    assert window.state.current_index == 0  # unchanged — controls.on_track_ended() ran instead
+
+
+def test_track_ended_repeat_one_replays_and_resets_mode(window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.state.current_index = 0
+    window.state.repeat_mode = "one"
+
+    window._on_track_ended()
+
+    assert window.state.current_index == 0  # replayed the same track
+    assert window.state.repeat_mode == "none"
+
+
+def test_track_ended_repeat_all_wraps_to_start(window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.state.current_index = 1  # last track
+    window.state.repeat_mode = "all"
+
+    window._on_track_ended()
+
+    assert window.state.current_index == 0
+
+
+def test_track_ended_with_no_current_index_just_stops(window):
+    window.state.playlist = []
+    window.state.current_index = None
+
+    window._on_track_ended()  # must not raise

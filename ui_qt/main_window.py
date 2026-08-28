@@ -11,16 +11,21 @@ touched. ThemeManager.apply_to() is Tk-specific and is never called here.
 """
 
 import logging
+import os
 import re
 from typing import Optional
 
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QSplitter, QVBoxLayout, QWidget
 
 from app.paths import get_resource_path
+from app.state import AppState
+from audio import m3u as m3u_module
+from ui_qt.browser_view import BrowserViewQt
 from ui_qt.controls import ControlsBarQt
 from ui_qt.menu_bar import CustomMenuBarQt
+from ui_qt.playlist_view import PlaylistViewQt
 from ui_qt.preferences_window import PreferencesWindowQt
 from ui_qt.theme_bridge import apply_theme
 
@@ -59,13 +64,32 @@ class MainWindowQt(QWidget):
         self._build_menu()
         self.menubar.setup_window_controls(self._on_quit, show_maximize=True)
 
+        self.state = AppState(exts=tuple(getattr(settings, "supported_extensions", ()) or ()))
+
         self.central_area = QWidget(self)
         self.central_area.setObjectName("CentralArea")
         central_layout = QVBoxLayout(self.central_area)
-        central_layout.addStretch(1)  # browser/playlist/DJ view land here in later phases
-        self.controls = ControlsBarQt(self.player, self.settings, self.theme.palette, parent=self.central_area)
+        central_layout.setContentsMargins(8, 8, 8, 8)
+        central_layout.setSpacing(8)
+
+        splitter = QSplitter(Qt.Horizontal, self.central_area)
+        splitter.setHandleWidth(3)
+        self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, parent=splitter)
+        self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, parent=splitter)
+        splitter.addWidget(self.playlist_view)
+        splitter.addWidget(self.browser_view)
+        # Matches ui/main_window.py's left_frame(expand=True)/right_frame(no
+        # expand): the playlist absorbs all extra width on resize, the
+        # browser only changes size if the user drags the handle.
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        central_layout.addWidget(splitter, 1)
+
+        self.controls = ControlsBarQt(self.player, self.settings, self.theme.palette, state=self.state, parent=self.central_area)
         central_layout.addWidget(self.controls)
         layout.addWidget(self.central_area, 1)
+
+        self.playlist_view.track_activated.connect(self._play_index)
 
         self._apply_initial_geometry()
 
@@ -74,39 +98,39 @@ class MainWindowQt(QWidget):
     def _build_menu(self) -> None:
         media_items = [
             {"label": "Open File...", "command": self._on_open_file, "accelerator": "Ctrl+O"},
-            {"label": "Open Multiple Files...", "accelerator": "Ctrl+M"},
-            {"label": "Open Folder...", "accelerator": "Ctrl+F"},
-            {"label": "Open Playlist (M3U/M3U8)...", "accelerator": "Ctrl+L"},
+            {"label": "Open Multiple Files...", "command": self._on_open_files, "accelerator": "Ctrl+M"},
+            {"label": "Open Folder...", "command": self._on_open_folder, "accelerator": "Ctrl+F"},
+            {"label": "Open Playlist (M3U/M3U8)...", "command": self._on_open_playlist, "accelerator": "Ctrl+L"},
             {"separator": True},
-            {"label": "Save Playlist", "accelerator": "Ctrl+S"},
-            {"label": "Save Playlist As...", "accelerator": "Ctrl+Shift+S"},
+            {"label": "Save Playlist", "command": self._on_save_playlist, "accelerator": "Ctrl+S"},
+            {"label": "Save Playlist As...", "command": self._on_save_playlist_as, "accelerator": "Ctrl+Shift+S"},
             {"separator": True},
             {"label": "Quit", "command": self._on_quit, "accelerator": "Alt+F4"},
         ]
         self.menubar.add_menu("Media", media_items)
 
         sort_submenu = [
-            {"label": "Shuffle", "accelerator": "Ctrl+H"},
-            {"label": "Sort by Title", "accelerator": "Ctrl+T"},
-            {"label": "Sort by Artist", "accelerator": "Ctrl+R"},
+            {"label": "Shuffle", "command": lambda: self.playlist_view.shuffle(), "accelerator": "Ctrl+H"},
+            {"label": "Sort by Title", "command": lambda: self.playlist_view.sort_by_title(), "accelerator": "Ctrl+T"},
+            {"label": "Sort by Artist", "command": lambda: self.playlist_view.sort_by_artist(), "accelerator": "Ctrl+R"},
         ]
         operations_submenu = [
-            {"label": "Move Up", "accelerator": "Ctrl+Up"},
-            {"label": "Move Down", "accelerator": "Ctrl+Down"},
+            {"label": "Move Up", "command": lambda: self.playlist_view.move_up(), "accelerator": "Ctrl+Up"},
+            {"label": "Move Down", "command": lambda: self.playlist_view.move_down(), "accelerator": "Ctrl+Down"},
             {"separator": True},
-            {"label": "Play After Current Song", "accelerator": "Ctrl+N"},
+            {"label": "Play After Current Song", "command": lambda: self.playlist_view.play_after_current_selected(), "accelerator": "Ctrl+N"},
             {"label": "Play for time..."},
             {"separator": True},
-            {"label": "Remove Selected", "accelerator": "Delete"},
-            {"label": "Clear", "accelerator": "Ctrl+C"},
+            {"label": "Remove Selected", "command": lambda: self.playlist_view.remove_selected(), "accelerator": "Delete"},
+            {"label": "Clear", "command": lambda: self.playlist_view.clear(), "accelerator": "Ctrl+C"},
             {"separator": True},
             {"label": "Track Information", "accelerator": "Ctrl+I"},
             {"label": "Show Album booklet", "accelerator": "Ctrl+B"},
         ]
         repeat_submenu = [
-            {"label": "No Repeat", "radiobutton": True, "group": "repeat_mode", "checked": True},
-            {"label": "Repeat One", "radiobutton": True, "group": "repeat_mode", "checked": False},
-            {"label": "Repeat All", "radiobutton": True, "group": "repeat_mode", "checked": False},
+            {"label": "No Repeat", "radiobutton": True, "group": "repeat_mode", "checked": True, "command": lambda: self._set_repeat_mode("none")},
+            {"label": "Repeat One", "radiobutton": True, "group": "repeat_mode", "checked": False, "command": lambda: self._set_repeat_mode("one")},
+            {"label": "Repeat All", "radiobutton": True, "group": "repeat_mode", "checked": False, "command": lambda: self._set_repeat_mode("all")},
         ]
         playback_items = [
             {"label": "Sort", "submenu": sort_submenu},
@@ -151,7 +175,99 @@ class MainWindowQt(QWidget):
         pattern = " ".join(f"*{ext}" for ext in exts) or "*"
         path, _ = QFileDialog.getOpenFileName(self, "Open File", "", f"Audio Files ({pattern})")
         if path:
-            self.controls.play_file(path)
+            self._load_playlist([path])
+
+    def _on_open_files(self) -> None:
+        exts = getattr(self.settings, "supported_extensions", ()) or ()
+        pattern = " ".join(f"*{ext}" for ext in exts) or "*"
+        paths, _filter = QFileDialog.getOpenFileNames(self, "Open Multiple Files", "", f"Audio Files ({pattern})")
+        if paths:
+            self._load_playlist(list(paths))
+
+    def _on_open_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Open Folder")
+        if not folder:
+            return
+        exts = tuple(getattr(self.settings, "supported_extensions", ()) or ())
+        files = []
+        for root, _dirs, filenames in os.walk(folder):
+            for name in filenames:
+                if name.lower().endswith(exts):
+                    files.append(os.path.join(root, name))
+        files.sort()
+        self._load_playlist(files)
+
+    def _on_open_playlist(self) -> None:
+        path, _filter = QFileDialog.getOpenFileName(self, "Open Playlist", "", "M3U Playlist (*.m3u *.m3u8)")
+        if not path:
+            return
+        try:
+            items = m3u_module.parse_m3u(path)
+        except Exception:
+            logger.exception("Failed to parse M3U playlist: %s", path)
+            return
+        self._load_playlist(items)
+        self.state.current_playlist_path = path
+
+    def _load_playlist(self, paths) -> None:
+        self.state.playlist = paths
+        self.state.current_index = None
+        self.playlist_view.refresh()
+
+    def _on_save_playlist(self) -> None:
+        if self.state.current_playlist_path:
+            self._write_playlist(self.state.current_playlist_path)
+        else:
+            self._on_save_playlist_as()
+
+    def _on_save_playlist_as(self) -> None:
+        path, _filter = QFileDialog.getSaveFileName(self, "Save Playlist As", "", "M3U Playlist (*.m3u)")
+        if path:
+            self._write_playlist(path)
+
+    def _write_playlist(self, path: str) -> None:
+        try:
+            m3u_module.write_m3u(path, self.state.playlist)
+            self.state.current_playlist_path = path
+        except Exception:
+            logger.exception("Failed to write M3U playlist: %s", path)
+
+    def _set_repeat_mode(self, mode: str) -> None:
+        self.state.repeat_mode = mode
+
+    def _play_index(self, index: int) -> None:
+        if not (0 <= index < len(self.state.playlist)):
+            return
+        self.state.current_index = index
+        self.controls.play_file(self.state.playlist[index])
+        self.playlist_view.refresh_highlight()
+
+    def _on_track_ended(self) -> None:
+        """Connected to PlayerBridge.track_ended (see main_qt.py) in place
+        of controls.on_track_ended directly, now that there's a playlist to
+        advance through. Ports ui/main_window.py's handle_track_end's
+        repeat-mode branching; advancing calls _play_index directly rather
+        than the full stop/reset path so moving between tracks doesn't
+        visibly flash to a stopped state."""
+        if self.state.current_index is None or not self.state.playlist:
+            self.controls.on_track_ended()
+            return
+
+        repeat_mode = getattr(self.state, "repeat_mode", "none")
+        if repeat_mode == "one":
+            self._play_index(self.state.current_index)
+            self.state.repeat_mode = "none"
+        elif repeat_mode == "all":
+            next_index = self.state.current_index + 1
+            if next_index >= len(self.state.playlist):
+                next_index = 0
+            self._play_index(next_index)
+        else:
+            next_index = self.state.current_index + 1
+            if next_index < len(self.state.playlist):
+                self._play_index(next_index)
+            else:
+                self.controls.on_track_ended()
 
     def _on_open_preferences(self) -> None:
         if self._preferences_win is not None:
@@ -169,6 +285,7 @@ class MainWindowQt(QWidget):
         if app is not None:
             apply_theme(app, palette)
         self.controls.apply_palette(palette)
+        self.playlist_view.apply_palette(palette)
 
     # ---------- geometry persistence ----------
 
@@ -204,6 +321,10 @@ class MainWindowQt(QWidget):
             self.player.stop()
         except Exception:
             logger.exception("Failed to stop player on close")
+        try:
+            self.browser_view.shutdown()
+        except Exception:
+            logger.exception("Failed to shut down browser preview player on close")
         self._save_geometry()
         try:
             self.settings.save()
