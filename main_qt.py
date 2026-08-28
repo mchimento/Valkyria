@@ -63,7 +63,7 @@ def main():
     bridge.track_ended.connect(window_instance._on_track_ended, Qt.QueuedConnection)
     window_instance.show()
 
-    logger.info("Valkyria (PySide6) started")
+    logger.info("Valkyria started")
     sys.exit(app.exec())
 
 
