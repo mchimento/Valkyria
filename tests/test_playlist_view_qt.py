@@ -228,7 +228,7 @@ def test_clearing_search_restores_all_rows(qtbot):
     view.search_entry.setText("alpha")
     qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 1, timeout=2000)
 
-    view.search_clear.click()
+    view.search_entry.clear()
     qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 2, timeout=2000)
 
 

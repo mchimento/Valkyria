@@ -211,15 +211,6 @@ def build_stylesheet(palette: dict) -> str:
         color: {fg_dim};
         background: transparent;
     }}
-    QPushButton#SearchClear {{
-        color: {fg_dim};
-        background: transparent;
-        border: none;
-        font-size: 11pt;
-    }}
-    QPushButton#SearchClear:hover {{
-        color: {fg};
-    }}
 
     QComboBox {{
         background-color: {entry_bg};

@@ -39,7 +39,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
-    QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -131,11 +130,6 @@ class PlaylistViewQt(QWidget):
         self.search_entry.setPlaceholderText("Search")
         self.search_entry.setFixedWidth(180)
         search_row.addWidget(self.search_entry)
-        self.search_clear = QPushButton("✕")
-        self.search_clear.setObjectName("SearchClear")
-        self.search_clear.setFixedSize(20, 20)
-        self.search_clear.setCursor(Qt.PointingHandCursor)
-        search_row.addWidget(self.search_clear)
         layout.addLayout(search_row)
 
         self._tree = _PlaylistTree(self)
@@ -191,7 +185,6 @@ class PlaylistViewQt(QWidget):
         layout.addWidget(self._tree)
 
         self.search_entry.textChanged.connect(self._on_search_text_changed)
-        self.search_clear.clicked.connect(self.search_entry.clear)
 
         self.metadata_batch_ready.connect(self._on_metadata_batch, Qt.QueuedConnection)
         header.sectionResized.connect(self._on_section_resized)
