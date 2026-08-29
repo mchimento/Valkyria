@@ -65,7 +65,7 @@ class ControlsBarQt(QWidget):
         self.btn_next = QPushButton("⏭")
         for btn in (self.btn_play, self.btn_pause, self.btn_prev, self.btn_stop, self.btn_next):
             btn.setObjectName("TransportButton")
-            btn.setFixedSize(36, 28)
+            btn.setFixedSize(44, 36)
             row.addWidget(btn)
         self.btn_play.setToolTip("Play (Enter)")
         self.btn_pause.setToolTip("Pause/Resume (Space)")
@@ -99,7 +99,7 @@ class ControlsBarQt(QWidget):
         self.btn_effects = QPushButton("🎚")
         for btn in (self.btn_repeat, self.btn_effects):
             btn.setObjectName("TransportButton")
-            btn.setFixedSize(40, 32)
+            btn.setFixedSize(48, 40)
         row.addWidget(self.btn_repeat)
         row.addWidget(self.btn_effects)
         self.btn_repeat.setToolTip("Repeat Mode")
@@ -107,7 +107,7 @@ class ControlsBarQt(QWidget):
 
         self.btn_mute = QPushButton("🔊")
         self.btn_mute.setObjectName("TransportButton")
-        self.btn_mute.setFixedSize(36, 28)
+        self.btn_mute.setFixedSize(44, 36)
         row.addWidget(self.btn_mute)
 
         self.volume_slider = QSlider(Qt.Horizontal)

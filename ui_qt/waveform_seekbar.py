@@ -117,6 +117,7 @@ class WaveformSeekbarQt(QWidget):
                     samples_per_pixel = max(1, total_frames // num_pixels)
                     window = min(2048, samples_per_pixel)
                     peaks = np.zeros(num_pixels, dtype="float32")
+                    failed_reads = 0
 
                     for i in range(num_pixels):
                         start_frame = i * samples_per_pixel
@@ -128,6 +129,7 @@ class WaveformSeekbarQt(QWidget):
 
                         if data is None or len(data) == 0:
                             peaks[i] = 0.0
+                            failed_reads += 1
                         else:
                             if getattr(data, "ndim", 1) and data.ndim > 1:
                                 data = data.mean(axis=1)
@@ -137,6 +139,29 @@ class WaveformSeekbarQt(QWidget):
                         sf_f.close()
                     except Exception:
                         pass
+
+                    if failed_reads > 0:
+                        # A handful of libsndfile MP3 decoders can seek()
+                        # successfully near the end of a file but then
+                        # silently return empty/short reads instead of
+                        # raising — total_frames (from len(sf_f)) can look
+                        # entirely accurate (matching the player's own
+                        # reported length almost exactly) while individual
+                        # seeks past some internal point still fail, so
+                        # this can't be caught by validating total_frames
+                        # up front. Confirmed via a real report: 74 of 360
+                        # peaks (the last ~20%) came back as a solid run of
+                        # exact zeros — implausible as genuine silence for
+                        # a ~60-second stretch, and reproduced no failures
+                        # at all on a short synthetic test file, matching a
+                        # seek-position-dependent failure rather than a
+                        # general soundfile/MP3 incompatibility. Falling
+                        # through to the sequential (non-seeking) fallback
+                        # below — the same one already used when this
+                        # block raises an exception — avoids the seek
+                        # dependency entirely instead of silently shipping
+                        # a partially-blank waveform.
+                        raise RuntimeError(f"{failed_reads} of {num_pixels} seek-based peak reads returned empty")
 
                     if peaks.max() > 0:
                         peaks = peaks / peaks.max()

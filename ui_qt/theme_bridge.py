@@ -144,6 +144,7 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {button_bg};
         color: {button_fg};
         border-radius: 8px;
+        font-size: 13pt;
     }}
     QPushButton#TransportButton:hover {{
         background-color: {button_hover};
@@ -164,6 +165,29 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {button_hover};
     }}
     QPushButton#DialogButton:pressed {{
+        background-color: {button_pressed};
+    }}
+
+    /* Same visual style as #DialogButton, but a separate objectName so its
+       wider min-width doesn't also widen Preferences' Save/Cancel buttons
+       (which share #DialogButton) — QSS box-model properties like
+       min-width override a widget's own setMinimumWidth() call entirely
+       once the stylesheet is applied, so the width has to be set here,
+       not in Python (confirmed empirically — "Add Below"'s label stayed
+       clipped despite btn.setMinimumWidth(140) in browser_view.py, because
+       the shared #DialogButton rule's min-width: 60px silently won). */
+    QPushButton#BrowserActionButton {{
+        background-color: {button_bg};
+        color: {button_fg};
+        border-radius: 8px;
+        padding: 4px 10px;
+        min-width: 100px;
+        min-height: 28px;
+    }}
+    QPushButton#BrowserActionButton:hover {{
+        background-color: {button_hover};
+    }}
+    QPushButton#BrowserActionButton:pressed {{
         background-color: {button_pressed};
     }}
 

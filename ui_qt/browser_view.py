@@ -125,8 +125,13 @@ class BrowserViewQt(QWidget):
         self.btn_add = QPushButton("➕ Add")
         self.btn_add_below = QPushButton("⬇ Add Below")
         for btn in (self.btn_open_folder, self.btn_open_files, self.btn_add, self.btn_add_below):
-            btn.setObjectName("DialogButton")
-            btn.setMinimumWidth(110)
+            # BrowserActionButton, not the shared DialogButton: its wider
+            # min-width (needed so "⬇ Add Below" isn't clipped) is set in
+            # theme_bridge.py's QSS, not via setMinimumWidth() here — QSS
+            # box-model properties on a styled widget override a Python-
+            # side setMinimumWidth() call entirely once the stylesheet is
+            # applied, so setting it here would have had no effect.
+            btn.setObjectName("BrowserActionButton")
             button_col.addWidget(btn)
 
         button_col.addSpacing(8)
@@ -136,7 +141,7 @@ class BrowserViewQt(QWidget):
         self.btn_preview_stop = QPushButton("⏹")
         for btn in (self.btn_preview_play, self.btn_preview_stop):
             btn.setObjectName("TransportButton")
-            btn.setFixedSize(36, 28)
+            btn.setFixedSize(44, 36)  # matches ControlsBarQt's transport buttons
             preview_row.addWidget(btn)
         button_col.addLayout(preview_row)
 
