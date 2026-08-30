@@ -39,7 +39,6 @@ import logging
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QGroupBox,
@@ -51,16 +50,18 @@ from PySide6.QtWidgets import (
 )
 
 from ui_qt.preferences_window import _DialogTitleBar
+from ui_qt.toggle_switch import ToggleSwitch
 
 logger = logging.getLogger(__name__)
 
 
 class PlaybackFeaturesWindowQt(QDialog):
-    def __init__(self, parent, state, settings, player):
+    def __init__(self, parent, state, settings, player, palette: dict):
         super().__init__(parent)
         self.state = state
         self.settings = settings
         self.player = player
+        self.palette = palette
 
         self.setObjectName("MainWindow")
         self.setWindowTitle("Playback Features")
@@ -103,10 +104,10 @@ class PlaybackFeaturesWindowQt(QDialog):
             fade_out_enabled_default = bool(getattr(player, "fade_out_enabled", fade_out_enabled_default))
             fade_out_duration_default = int(getattr(player, "fade_out_duration", fade_out_duration_default))
 
-        self.checkbox_play_on_double = QCheckBox("Play on double-click")
-        self.checkbox_play_on_double.setChecked(bool(getattr(state, "play_on_double", True)))
-        self.checkbox_play_on_double.toggled.connect(self._on_play_on_double_toggle)
-        general_layout.addWidget(self.checkbox_play_on_double)
+        self.checkbox_play_on_double = self._add_toggle_row(
+            general_layout, "Play on double-click", bool(getattr(state, "play_on_double", True)),
+            on_toggle=self._on_play_on_double_toggle,
+        )
 
         self.checkbox_fade_in, self.slider_fade_in, self.label_fade_in = self._add_toggle_slider_row(
             general_layout, "Fade In", fade_in_enabled_default, fade_in_duration_default, minimum=0, maximum=10,
@@ -135,10 +136,10 @@ class PlaybackFeaturesWindowQt(QDialog):
             on_toggle=self._on_crossfade_toggle, on_change=self._on_crossfade_change,
         )
 
-        self.checkbox_silence = QCheckBox("Silence Detection")
-        self.checkbox_silence.setChecked(bool(getattr(state, "silence_detection_enabled", False)))
-        self.checkbox_silence.toggled.connect(self._on_silence_toggle)
-        advance_layout.addWidget(self.checkbox_silence)
+        self.checkbox_silence = self._add_toggle_row(
+            advance_layout, "Silence Detection", bool(getattr(state, "silence_detection_enabled", False)),
+            on_toggle=self._on_silence_toggle,
+        )
 
         layout.addWidget(advance_group)
 
@@ -168,13 +169,32 @@ class PlaybackFeaturesWindowQt(QDialog):
 
         self._center_on_parent()
 
-    # ---------- construction helper ----------
+    # ---------- construction helpers ----------
+
+    def _add_toggle_row(self, parent_layout, label, enabled_default, on_toggle):
+        """A ToggleSwitch + its text label, matching CTkSwitch's own
+        combined look (ui/playback_features_view.py's switches always pair
+        a switch with a label right next to it) — QCheckBox bundled the
+        label into the same widget, ToggleSwitch doesn't draw text at all,
+        so this pairs them in a small row instead."""
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        switch = ToggleSwitch(self.palette)
+        switch.setChecked(enabled_default)
+        row.addWidget(switch)
+        row.addWidget(QLabel(label))
+        row.addStretch(1)
+        parent_layout.addLayout(row)
+        switch.toggled.connect(on_toggle)
+        return switch
 
     def _add_toggle_slider_row(self, parent_layout, label, enabled_default, value_default, minimum, maximum, on_toggle, on_change):
         row = QHBoxLayout()
-        checkbox = QCheckBox(label)
-        checkbox.setChecked(enabled_default)
-        row.addWidget(checkbox)
+        row.setSpacing(8)
+        switch = ToggleSwitch(self.palette)
+        switch.setChecked(enabled_default)
+        row.addWidget(switch)
+        row.addWidget(QLabel(label))
 
         slider = QSlider(Qt.Horizontal)
         slider.setMinimum(minimum)
@@ -188,9 +208,9 @@ class PlaybackFeaturesWindowQt(QDialog):
 
         parent_layout.addLayout(row)
 
-        checkbox.toggled.connect(on_toggle)
+        switch.toggled.connect(on_toggle)
         slider.valueChanged.connect(on_change)
-        return checkbox, slider, value_label
+        return switch, slider, value_label
 
     def _center_on_parent(self) -> None:
         self.adjustSize()

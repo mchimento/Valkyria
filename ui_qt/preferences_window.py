@@ -21,7 +21,6 @@ import audio.metadata as metadata_module
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QGroupBox,
@@ -34,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.paths import get_resource_path
+from ui_qt.toggle_switch import ToggleSwitch
 
 logger = logging.getLogger(__name__)
 
@@ -134,9 +134,14 @@ class PreferencesWindowQt(QDialog):
 
         misc_group = QGroupBox("General")
         misc_layout = QVBoxLayout(misc_group)
-        self.checkbox_mini_player = QCheckBox("Enable mini player")
+        mini_player_row = QHBoxLayout()
+        mini_player_row.setSpacing(8)
+        self.checkbox_mini_player = ToggleSwitch(theme.palette)
         self.checkbox_mini_player.setChecked(bool(getattr(settings, "mini_player_enabled", True)))
-        misc_layout.addWidget(self.checkbox_mini_player)
+        mini_player_row.addWidget(self.checkbox_mini_player)
+        mini_player_row.addWidget(QLabel("Enable mini player"))
+        mini_player_row.addStretch(1)
+        misc_layout.addLayout(mini_player_row)
         layout.addWidget(misc_group)
 
         bpm_group = QGroupBox("BPM Mode")

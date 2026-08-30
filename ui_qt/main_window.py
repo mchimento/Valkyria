@@ -539,7 +539,7 @@ class MainWindowQt(QWidget):
             self._playback_features_win.raise_()
             self._playback_features_win.activateWindow()
             return
-        win = PlaybackFeaturesWindowQt(self, self.state, self.settings, self.player)
+        win = PlaybackFeaturesWindowQt(self, self.state, self.settings, self.player, self.theme.palette)
         win.finished.connect(lambda _: setattr(self, "_playback_features_win", None))
         self._playback_features_win = win
         win.show()
