@@ -89,6 +89,20 @@ def test_audio_device_menu_drops_alsa_plugin_aliases(window):
     ]
 
 
+def test_audio_device_menu_labels_default_with_live_bluetooth_name(window):
+    # Regression test: sounddevice/PortAudio can't see what "Default"
+    # actually reaches once it's a Bluetooth sink, so the menu used to
+    # just say "(system default)" with no indication Bluetooth was even
+    # in use. get_default_output_info() resolves this via WirePlumber.
+    window.player.get_audio_devices.return_value = [
+        ("__DEFAULT__", "Default Audio Device"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+    ]
+    window.player.get_default_output_info.return_value = (None, "TWS-D2500")
+    labels = [item["label"] for item in window._build_audio_device_items()]
+    assert labels[0] == "Default Audio Device (currently: TWS-D2500)"
+
+
 def test_menu_bar_top_level_labels(window):
     labels = [action.text() for action in window.menubar._menubar.actions()]
     assert labels == ["&Media", "&Playback", "&View", "&Tools", "&Help"]

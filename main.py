@@ -8,7 +8,6 @@ import logging
 from app.application import ValkyriaApp
 from app.logging_config import setup_logging
 
-# Global reference to app for signal handling
 app_instance = None
 
 logger = logging.getLogger(__name__)

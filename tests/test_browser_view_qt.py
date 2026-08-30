@@ -279,13 +279,16 @@ def test_main_player_device_excluded_from_preview_list(qtbot, state, settings, m
     assert "HDA Intel HDMI: 0 (hw:1,3)" in names
 
 
-def test_main_player_on_secondary_card_reoffers_default_and_aliases(qtbot, state, settings, mock_preview_player):
+def test_main_player_on_secondary_card_reoffers_default(qtbot, state, settings, mock_preview_player):
     # Regression test: an earlier version excluded every non-hw:-suffixed
     # name (Default, sysdefault, ...) unconditionally, even when the main
-    # player was pinned to a card those aliases don't actually reach. If
-    # the main player is on a *secondary* card, Default/its aliases (which
-    # resolve to the primary card) are genuinely separate hardware and
-    # must be offered, not hidden.
+    # player was pinned to a card those names don't actually reach. If
+    # the main player is on a *secondary* card, "Default Audio Device"
+    # (which resolves to the primary card) is genuinely separate hardware
+    # and must be offered, not hidden. Its ALSA plugin aliases (sysdefault,
+    # front, pipewire, ...) are filtered out entirely up front by
+    # filter_selectable_audio_devices — same as the Tools menu — so they
+    # never reach this list as redundant duplicates of Default itself.
     main_player = MagicMock()
     main_player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default"),
@@ -301,8 +304,60 @@ def test_main_player_on_secondary_card_reoffers_default_and_aliases(qtbot, state
     names = [v.preview_device_combo.itemText(i) for i in range(v.preview_device_combo.count())]
     assert "Default" in names
     assert "HDA Intel PCH: Analog (hw:0,0)" in names
-    assert "sysdefault" in names
+    assert "sysdefault" not in names
     assert "HDA Intel HDMI: 0 (hw:1,3)" not in names
+
+
+def test_main_player_on_bluetooth_default_reoffers_laptop_speakers(qtbot, state, settings, mock_preview_player):
+    # Regression test (found via a real Bluetooth headset): sounddevice/
+    # PortAudio can't see that "Default" now routes to a non-ALSA sink,
+    # so the old "assume Default == first hw: entry's card" heuristic
+    # wrongly excluded the laptop's own real speakers too. When
+    # get_default_output_info() reports a known non-ALSA default (alsa
+    # card None, a description present), every real hw:CARD,DEV device
+    # must still be offered -- none of them can be the same physical
+    # sink as a Bluetooth headset -- while Default/its aliases (which
+    # *are* that same Bluetooth sink) must not be.
+    main_player = MagicMock()
+    main_player.get_audio_devices.return_value = [
+        ("__DEFAULT__", "Default Audio Device"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
+        ("2", "sysdefault"),
+    ]
+    main_player._device_id = None  # main uses Default, which is now Bluetooth
+    main_player.get_default_output_info.return_value = (None, "TWS-D2500")
+
+    v = BrowserViewQt(state, settings, player=main_player)
+    qtbot.addWidget(v)
+
+    names = [v.preview_device_combo.itemText(i) for i in range(v.preview_device_combo.count())]
+    assert "HDA Intel PCH: Analog (hw:0,0)" in names
+    assert "HDA Intel HDMI: 0 (hw:1,3)" in names
+    assert "Default Audio Device" not in names
+
+
+def test_default_entry_shows_live_bluetooth_name_when_offered(qtbot, state, settings, mock_preview_player):
+    # When Default *is* offered (main player pinned elsewhere), its label
+    # should say what it currently resolves to, same as the Tools menu —
+    # otherwise a Bluetooth headset set as the system default is
+    # invisible everywhere in the UI even though it's genuinely
+    # selectable as a preview target here.
+    main_player = MagicMock()
+    main_player.get_audio_devices.return_value = [
+        ("__DEFAULT__", "Default Audio Device"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
+    ]
+    main_player._device_id = "1"  # main pinned to HDMI, not Default
+    main_player.get_default_output_info.return_value = (None, "TWS-D2500")
+
+    v = BrowserViewQt(state, settings, player=main_player)
+    qtbot.addWidget(v)
+
+    names = [v.preview_device_combo.itemText(i) for i in range(v.preview_device_combo.count())]
+    assert "Default Audio Device (currently: TWS-D2500)" in names
+    assert "sysdefault" not in names
 
 
 def test_preview_play_sets_resolved_device_before_playing(qtbot, state, settings, mock_preview_player):

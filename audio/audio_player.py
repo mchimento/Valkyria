@@ -7,6 +7,8 @@ Provides a simple, stable API to play/pause/stop and emits callbacks when a trac
 import logging
 import threading
 import json
+import re
+import subprocess
 import time
 import os
 import sys
@@ -45,6 +47,29 @@ def suppress_c_stderr():
     except Exception:
         # If anything goes wrong (e.g. no fileno), just execute code
         yield
+
+
+def filter_selectable_audio_devices(devices: list) -> list:
+    """
+    Keeps two kinds of entry: "Default Audio Device" itself
+    (device_id == '__DEFAULT__') and anything with a raw
+    "(hw:CARD,DEV)" suffix (genuine physical hardware — the laptop's
+    analog output, HDMI, etc). '__DEFAULT__' has to stay even though it
+    isn't itself physical hardware: with only the ALSA hostapi
+    available, a Bluetooth headset or other dynamically-connected output
+    never gets its own named entry in this list at all — it only
+    becomes reachable by becoming whatever the system default (i.e.
+    PipeWire's active sink) points to, which is exactly what
+    '__DEFAULT__' selects. Dropping it would remove the only way to
+    reach Bluetooth outputs, not just declutter aliases.
+    """
+    def is_selectable(device_id: str, name: str) -> bool:
+        if device_id == "__DEFAULT__":
+            return True
+        return re.search(r"\(hw:\d+,\d+\)", name) is not None
+
+    return [(did, name) for did, name in devices if is_selectable(did, name)]
+
 
 class AudioBuffer:
     """
@@ -1074,6 +1099,56 @@ class AudioPlayer:
         except Exception as e:
             logger.error(f"Failed to get audio devices: {e}")
             return [('__DEFAULT__', 'Default Audio Device')]
+
+    def get_default_output_info(self):
+        """
+        Best-effort resolution of what '__DEFAULT__' (and ALSA's
+        "default"/"pipewire"/etc. alias devices) actually reaches right
+        now. sounddevice/PortAudio only sees the ALSA hostapi's fixed
+        device list (raw hw:CARD,DEV entries plus ALSA's own alias
+        plugin names) and has zero visibility into what PipeWire's
+        active default *sink* currently is — confirmed on a real system
+        via sd.query_hostapis() showing only an "ALSA" hostapi, no
+        native PipeWire/Pulse one. That list is also static: it doesn't
+        change when the user connects a Bluetooth headset and PipeWire
+        switches its default sink to it, so callers that assumed
+        "default routes to the first hw: card" (a reasonable guess when
+        it's true) went silently wrong the moment it wasn't. On a
+        PipeWire+WirePlumber system (this app's primary target),
+        `wpctl inspect @DEFAULT_AUDIO_SINK@` is the only way to actually
+        know, so this shells out to it.
+
+        Returns (alsa_card, description):
+          - alsa_card is the ALSA card number (e.g. "0") when the
+            current default sink is backed by real ALSA hardware, else
+            None.
+          - description is the sink's live human-readable name (e.g.
+            "TWS-D2500" for a Bluetooth headset) when it could be
+            determined, else None.
+          (None, None) means "unknown" (wpctl missing, command failed,
+          unexpected output) — callers should fall back to their own
+          best-effort default rather than treating it as "non-ALSA."
+          (None, "some name") means "known, and definitely not ALSA
+          hardware" (e.g. Bluetooth) — no hw:CARD,DEV entry can be the
+          same device as this.
+        """
+        try:
+            result = subprocess.run(
+                ["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"],
+                capture_output=True, text=True, timeout=2,
+            )
+            if result.returncode != 0:
+                return None, None
+            output = result.stdout
+            desc_match = re.search(r'node\.description = "([^"]+)"', output)
+            description = desc_match.group(1) if desc_match else None
+            api_match = re.search(r'device\.api = "([^"]+)"', output)
+            if api_match is None or api_match.group(1) != "alsa":
+                return None, description
+            card_match = re.search(r'alsa\.card = "(\d+)"', output)
+            return (card_match.group(1) if card_match else None), description
+        except Exception:
+            return None, None
 
     def set_audio_device(self, device_id):
         """

@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from audio.audio_player import AudioPlayer
+from audio.audio_player import AudioPlayer, filter_selectable_audio_devices
 
 logger = logging.getLogger(__name__)
 
@@ -298,27 +298,49 @@ class BrowserViewQt(QWidget):
         So this compares *cards*, not raw device identity, and treats
         every name without an explicit "(hw:CARD,DEV)" suffix (Default,
         pipewire, sysdefault, dmix, front, surroundNN) as aliasing
-        whichever card the first raw hw: entry in the list names — that's
-        always the system's primary/onboard card, since
-        get_audio_devices() enumerates in sounddevice's native order and
-        none of those alias names route anywhere else on a normal
-        desktop. A device (aliased or raw) is offered only when its
-        effective card differs from the main player's effective card —
+        whatever the system's actual current default output is. A device
+        (aliased or raw) is offered only when it's genuinely not that —
         an earlier version excluded every alias unconditionally
         regardless of which card it actually pointed to, which both hid
-        genuinely-safe options (Default Audio Device when the main
-        player was pinned to a *different*, non-primary card) and made
-        the browser's list look arbitrarily smaller than the Tools menu's
-        full device list. If the system has no second sound card, preview
-        has nothing safe to offer and correctly comes back empty (see
-        _refresh_preview_devices, which disables preview entirely rather
-        than showing a device that isn't real separation)."""
+        genuinely-safe options and made the browser's list arbitrarily
+        smaller than the Tools menu's full device list.
+
+        A third bug (found via a real Bluetooth headset) went the other
+        way: an even earlier version of this *card-matching* logic
+        assumed every alias resolves to whichever card the first raw
+        hw: entry names — true on a system with no PipeWire routing
+        surprises, but wrong the moment the user's actual default sink
+        becomes something sounddevice/PortAudio can't see at all
+        (confirmed via sd.query_hostapis(): only an "ALSA" hostapi
+        exists here, no native PipeWire/Pulse one, so a Bluetooth sink
+        never gets its own hw:CARD,DEV entry or hostapi). With that
+        wrong assumption, once the user's real default became a
+        Bluetooth headset, this still treated the main player's "Default"
+        selection as if it were sitting on the primary ALSA card, which
+        both wrongly excluded the laptop's own real speakers (genuinely
+        a different device from the Bluetooth headset) and had no way to
+        surface the Bluetooth headset itself. Fixed by asking WirePlumber
+        directly (get_default_output_info(), the only component with
+        actual visibility into PipeWire's active default sink) instead
+        of guessing from the static ALSA device list. If the system has
+        no second sound card, preview has nothing safe to offer and
+        correctly comes back empty (see _refresh_preview_devices, which
+        disables preview entirely rather than showing a device that
+        isn't real separation)."""
         if self._main_player is None:
             return []
         try:
             all_devices = self._main_player.get_audio_devices()
         except Exception:
             return []
+        # Same alias-collapsing the Tools menu applies (filter_selectable_
+        # audio_devices) — without this, sysdefault/front/surroundNN/
+        # pipewire/dmix/"default" all carry the *same* effective card as
+        # "Default Audio Device" itself (see below), so whenever Default
+        # was offered, all ~7 of its aliases were offered right alongside
+        # it as redundant duplicates. The two lists must show the same
+        # set of "real" devices.
+        all_devices = filter_selectable_audio_devices(all_devices)
 
         def hw_card(name: str) -> Optional[str]:
             # "HDA Intel PCH: ... (hw:0,0)" -> "0"; None for anything
@@ -326,25 +348,53 @@ class BrowserViewQt(QWidget):
             match = re.search(r"\(hw:(\d+),\d+\)", name)
             return match.group(1) if match else None
 
-        # The system's primary card: whichever card the first raw hw:
-        # entry names. Every alias without its own hw:CARD,DEV suffix is
-        # assumed to resolve to this same card.
-        default_card = next((hw_card(name) for _did, name in all_devices if hw_card(name) is not None), None)
+        try:
+            default_alsa_card, default_description = self._main_player.get_default_output_info()
+        except Exception:
+            default_alsa_card, default_description = None, None
+
+        # Only used when get_default_output_info() itself couldn't
+        # determine anything (wpctl missing/failed) — best-effort guess,
+        # same as the old (known-imperfect) heuristic.
+        fallback_card = next((hw_card(name) for _did, name in all_devices if hw_card(name) is not None), None)
+
+        # A sentinel distinct from any real card number string (those
+        # are always plain digits) — marks "known to be non-ALSA
+        # hardware" (e.g. Bluetooth) so it never accidentally matches a
+        # real card and never gets confused with "unknown."
+        NON_ALSA = "non-alsa-default"
+
+        def default_effective_card() -> Optional[str]:
+            if default_alsa_card is not None:
+                return default_alsa_card
+            if default_description is not None:
+                return NON_ALSA
+            return fallback_card
 
         def effective_card(name: str) -> Optional[str]:
             card = hw_card(name)
-            return card if card is not None else default_card
+            return card if card is not None else default_effective_card()
 
         main_id = getattr(self._main_player, "_device_id", None)
         if main_id is not None:
             main_card = next(
-                (effective_card(name) for did, name in all_devices if did == main_id), default_card
+                (effective_card(name) for did, name in all_devices if did == main_id),
+                default_effective_card(),
             )
         else:
-            main_card = default_card
+            main_card = default_effective_card()
+
+        def displayed_name(device_id: str, name: str) -> str:
+            # Mirrors main_window.py's Tools menu: sounddevice/PortAudio
+            # can't see what "Default" actually reaches once it's a
+            # non-ALSA sink (Bluetooth), so surface WirePlumber's live
+            # resolution on the label instead of the plain static name.
+            if device_id == "__DEFAULT__" and default_description:
+                return f"{name} (currently: {default_description})"
+            return name
 
         return [
-            (did, name) for did, name in all_devices
+            (did, displayed_name(did, name)) for did, name in all_devices
             if effective_card(name) != main_card
         ]
 
