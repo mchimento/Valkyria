@@ -122,8 +122,15 @@ class PlaybackFeaturesWindowQt(QDialog):
         advance_group = QGroupBox("Advance")
         advance_layout = QVBoxLayout(advance_group)
 
+        # Visible label only — "Crossfade" was misleading (no real audio
+        # blending happens, see _check_crossfade in controls.py), renamed
+        # to describe what actually happens: an early advance to the next
+        # track. Internal names (checkbox_crossfade, state.crossfade_enabled/
+        # crossfade_duration, settings fields) are left as-is deliberately —
+        # renaming those too would touch saved-config compatibility for a
+        # cosmetic change with no functional benefit.
         self.checkbox_crossfade, self.slider_crossfade, self.label_crossfade = self._add_toggle_slider_row(
-            advance_layout, "Crossfade", bool(getattr(state, "crossfade_enabled", False)),
+            advance_layout, "Early Track Advance", bool(getattr(state, "crossfade_enabled", False)),
             int(getattr(state, "crossfade_duration", 5)), minimum=1, maximum=12,
             on_toggle=self._on_crossfade_toggle, on_change=self._on_crossfade_change,
         )
