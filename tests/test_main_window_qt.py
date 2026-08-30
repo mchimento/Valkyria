@@ -61,7 +61,7 @@ def test_is_frameless(window):
 
 def test_menu_bar_top_level_labels(window):
     labels = [action.text() for action in window.menubar._menubar.actions()]
-    assert labels == ["Media", "Playback", "View", "Tools", "Help"]
+    assert labels == ["&Media", "&Playback", "&View", "&Tools", "&Help"]
 
 
 def test_window_controls_wired(window):
@@ -197,8 +197,11 @@ def test_prev_moves_back_one(qtbot, window, mock_player):
 
     window.controls.btn_prev.click()
 
-    assert window.state.current_index == 1
+    # _on_prev routes through _fade_then_play, which triggers the fade-out
+    # and switches tracks on a background thread + queued connection (see
+    # main_window.py:385-401) rather than updating state synchronously.
     qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
+    assert window.state.current_index == 1
     assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
 
 
@@ -218,8 +221,10 @@ def test_next_moves_forward_one(qtbot, window, mock_player):
 
     window.controls.btn_next.click()
 
-    assert window.state.current_index == 1
+    # See test_prev_moves_back_one: _on_next also routes through the
+    # threaded/queued _fade_then_play sequence, not a synchronous update.
     qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
+    assert window.state.current_index == 1
     assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
 
 

@@ -1,10 +1,12 @@
 """Tests for ui_qt/playlist_view.py. Additive to the tkinter test suite."""
 import logging
 
+from unittest.mock import patch
+
 import pytest
 from PySide6.QtCore import Qt, QMimeData, QPointF, QUrl
 from PySide6.QtGui import QDragMoveEvent, QDropEvent
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel, QMessageBox
 
 from app.state import AppState
 from ui_qt.playlist_view import PlaylistViewQt
@@ -133,10 +135,21 @@ def test_play_after_current_selected(view, state):
 
 
 def test_clear(view, state):
-    view.clear()
+    # clear() confirms via QMessageBox.question before wiping the
+    # playlist (see playlist_view.py:468-490) — stub it to the Yes
+    # button, same as a user confirming the dialog.
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+        view.clear()
     assert state.playlist == []
     assert state.current_index is None
     assert view._tree.topLevelItemCount() == 0
+
+
+def test_clear_cancelled_leaves_playlist_unchanged(view, state):
+    original = list(state.playlist)
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.No):
+        view.clear()
+    assert state.playlist == original
 
 
 def test_sort_by_title_falls_back_to_basename(qtbot):

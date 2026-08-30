@@ -34,8 +34,29 @@ def settings():
 
 
 @pytest.fixture
-def view(qtbot, state, settings, mock_preview_player):
-    v = BrowserViewQt(state, settings)
+def main_player():
+    # Two distinct sound cards (hw:0,* and hw:1,*), matching a real
+    # multi-card system — _get_preview_devices() only offers devices on a
+    # *different* card than whatever the main player uses, so tests need
+    # at least two to exercise anything beyond the "nothing available"
+    # case. BrowserViewQt is never constructed without a real player in
+    # production (main_qt.py always passes one), so tests default to
+    # having one too — test_no_main_player_has_no_preview_devices covers
+    # the player=None edge case explicitly instead.
+    player = MagicMock()
+    player.get_audio_devices.return_value = [
+        ("__DEFAULT__", "Default Audio Device"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
+        ("2", "sysdefault"),
+    ]
+    player._device_id = None  # main player using the system default (card 0)
+    return player
+
+
+@pytest.fixture
+def view(qtbot, state, settings, mock_preview_player, main_player):
+    v = BrowserViewQt(state, settings, player=main_player)
     qtbot.addWidget(v)
     return v
 
@@ -222,50 +243,86 @@ def test_add_without_playlist_view_does_not_raise(qtbot, settings, mock_preview_
 
 # ---------- preview output device ----------
 
-def test_no_main_player_falls_back_to_default_device(view):
-    # No main player reference means no device to conflict with — preview
-    # should still work through the system default, not be disabled.
-    assert view.preview_device_combo.count() == 1
-    assert view.preview_device_combo.currentText() == "Default"
-    assert view.preview_device_combo.isEnabled()
-    assert view.btn_preview_play.isEnabled()
+def test_no_main_player_has_no_preview_devices(state, settings, mock_preview_player):
+    # With no main player reference, there's no way to know what card it
+    # occupies, so no device can be confirmed as genuinely separate —
+    # preview correctly has nothing safe to offer, matching
+    # ui/browser_view.py's own `if self._main_player is None: return []`.
+    v = BrowserViewQt(state, settings)  # no player
+    assert v.preview_device_combo.count() == 1
+    assert v.preview_device_combo.currentText() == "No device available"
+    assert not v.preview_device_combo.isEnabled()
+    assert not v.btn_preview_play.isEnabled()
 
 
 def test_main_player_device_excluded_from_preview_list(qtbot, state, settings, mock_preview_player):
     main_player = MagicMock()
     main_player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default"),
-        ("dev1", "Speakers"),
-        ("dev2", "Headphones"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
+        ("2", "sysdefault"),
     ]
-    main_player._device_id = "dev1"  # main player using Speakers
+    main_player._device_id = "0"  # main player pinned directly to card 0
 
     v = BrowserViewQt(state, settings, player=main_player)
     qtbot.addWidget(v)
 
     names = [v.preview_device_combo.itemText(i) for i in range(v.preview_device_combo.count())]
-    assert "Speakers" not in names
+    # Same card as main (even by a different, non-hw-suffixed name) or any
+    # device with no hw:CARD,DEV suffix at all (ambiguous which card it
+    # actually reaches) must never be offered — only a genuinely different
+    # card counts as real separation.
+    assert "HDA Intel PCH: Analog (hw:0,0)" not in names
+    assert "Default" not in names
+    assert "sysdefault" not in names
+    assert "HDA Intel HDMI: 0 (hw:1,3)" in names
+
+
+def test_main_player_on_secondary_card_reoffers_default_and_aliases(qtbot, state, settings, mock_preview_player):
+    # Regression test: an earlier version excluded every non-hw:-suffixed
+    # name (Default, sysdefault, ...) unconditionally, even when the main
+    # player was pinned to a card those aliases don't actually reach. If
+    # the main player is on a *secondary* card, Default/its aliases (which
+    # resolve to the primary card) are genuinely separate hardware and
+    # must be offered, not hidden.
+    main_player = MagicMock()
+    main_player.get_audio_devices.return_value = [
+        ("__DEFAULT__", "Default"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
+        ("2", "sysdefault"),
+    ]
+    main_player._device_id = "1"  # main player pinned to the secondary card (1)
+
+    v = BrowserViewQt(state, settings, player=main_player)
+    qtbot.addWidget(v)
+
+    names = [v.preview_device_combo.itemText(i) for i in range(v.preview_device_combo.count())]
     assert "Default" in names
-    assert "Headphones" in names
+    assert "HDA Intel PCH: Analog (hw:0,0)" in names
+    assert "sysdefault" in names
+    assert "HDA Intel HDMI: 0 (hw:1,3)" not in names
 
 
 def test_preview_play_sets_resolved_device_before_playing(qtbot, state, settings, mock_preview_player):
     main_player = MagicMock()
     main_player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default"),
-        ("dev2", "Headphones"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
     ]
-    main_player._device_id = None  # main player using default -> excludes "__DEFAULT__"
+    main_player._device_id = None  # main player using the system default (card 0)
 
     v = BrowserViewQt(state, settings, player=main_player)
     qtbot.addWidget(v)
-    v.preview_device_combo.setCurrentText("Headphones")
+    v.preview_device_combo.setCurrentText("HDA Intel HDMI: 0 (hw:1,3)")
 
     v._tree.setCurrentItem(v._tree.topLevelItem(0))
     v._on_preview_play_clicked()
 
     qtbot.waitUntil(lambda: mock_preview_player.play.called, timeout=1000)
-    assert mock_preview_player.set_audio_device.call_args[0][0] == "dev2"
+    assert mock_preview_player.set_audio_device.call_args[0][0] == "1"
 
 
 def test_changing_device_while_previewing_stops_it(qtbot, view, mock_preview_player):

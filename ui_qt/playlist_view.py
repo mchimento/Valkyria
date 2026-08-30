@@ -108,6 +108,14 @@ class PlaylistViewQt(QWidget):
     # MainWindowQt uses it to keep playlist-dependent menu items' enabled
     # state in sync (ui/main_window.py:670-699's _update_menu_state).
     playlist_changed = Signal()
+    # Fired right after this view calls player.stop() itself (clearing/
+    # removing the currently-playing track) — MainWindowQt relays this to
+    # ControlsBarQt.stopped so the waveform/time labels actually reset,
+    # the same cleanup Stop-button/Stop-shortcut already gets. Calling
+    # player.stop() alone (what this view used to do) stops the audio but
+    # leaves the waveform showing the now-stopped track's stale position,
+    # since that reset lives in ControlsBarQt, not here.
+    playback_stopped = Signal()
 
     def __init__(self, state, palette: dict, player=None, parent=None):
         super().__init__(parent)
@@ -478,6 +486,7 @@ class PlaylistViewQt(QWidget):
                 self.player.stop()
             except Exception:
                 logger.exception("player.stop() failed while clearing playlist")
+            self.playback_stopped.emit()
         self.refresh()
 
     def _stop_if_current_cleared(self, new_index: Optional[int]) -> None:
@@ -489,6 +498,7 @@ class PlaylistViewQt(QWidget):
                 self.player.stop()
             except Exception:
                 logger.exception("player.stop() failed after removing current track")
+            self.playback_stopped.emit()
 
     def sort_by_title(self) -> None:
         self.state.playlist, self.state.current_index = playback.sort_playlist_by_title(self.state.playlist, self.state.current_index)

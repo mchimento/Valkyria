@@ -22,8 +22,9 @@ player currently has selected, resolved the same way the original does.
 
 import logging
 import os
+import re
 import threading
-from typing import List
+from typing import List, Optional
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtWidgets import (
@@ -271,42 +272,81 @@ class BrowserViewQt(QWidget):
     # ---------- preview output device ----------
 
     def _get_preview_devices(self) -> List[tuple]:
-        """(id, name) pairs available for preview, excluding whatever
-        device the main player currently has selected — matches
-        ui/browser_view.py:811-833, including reaching into the player's
-        private _device_id (not our own design choice, just what the
-        original already does). Deviates from the original in one place:
-        with no main player reference there's no device to conflict with,
-        so preview falls back to the system default instead of being
-        disabled outright (the original ties preview availability to
-        having a main player at all, since it never constructs
-        BrowserView without one in practice — this fallback just makes the
-        same code path work standalone too, e.g. under test)."""
+        """(id, name) pairs available for preview: only devices that are
+        genuinely *separate physical hardware* from whatever the main
+        player is using (e.g. a second sound card feeding headphones,
+        while the main player plays to speakers) — never anything that
+        shares the main player's actual output, even if it wouldn't
+        technically crash.
+
+        This went through two wrong designs before landing here. First,
+        an index-based exclusion (matching ui/browser_view.py:811-833's
+        own logic, so this gap is pre-existing there too) only excluded
+        the one specific device the main player was using, leaving every
+        *other* entry offered — including a raw "hw:X,Y" alias of the
+        *same* card, which really did collide with the main player
+        ("AlsaOpen" failing). Second, an allowlist of "known-safe" shared
+        paths (the system default and an explicit "pipewire" entry, both
+        of which route through PipeWire's own mixing and don't crash)
+        stopped the crashes, but was still wrong: it let preview and the
+        main playlist end up audibly mixed onto the *same* output, which
+        defeats the actual point of a preview feature — cueing up a track
+        before it goes to the main output, not blending it in. A real
+        report confirmed exactly that: "it is still possible to play both
+        lists from the same output."
+
+        So this compares *cards*, not raw device identity, and treats
+        every name without an explicit "(hw:CARD,DEV)" suffix (Default,
+        pipewire, sysdefault, dmix, front, surroundNN) as aliasing
+        whichever card the first raw hw: entry in the list names — that's
+        always the system's primary/onboard card, since
+        get_audio_devices() enumerates in sounddevice's native order and
+        none of those alias names route anywhere else on a normal
+        desktop. A device (aliased or raw) is offered only when its
+        effective card differs from the main player's effective card —
+        an earlier version excluded every alias unconditionally
+        regardless of which card it actually pointed to, which both hid
+        genuinely-safe options (Default Audio Device when the main
+        player was pinned to a *different*, non-primary card) and made
+        the browser's list look arbitrarily smaller than the Tools menu's
+        full device list. If the system has no second sound card, preview
+        has nothing safe to offer and correctly comes back empty (see
+        _refresh_preview_devices, which disables preview entirely rather
+        than showing a device that isn't real separation)."""
         if self._main_player is None:
-            return [("__DEFAULT__", "Default")]
+            return []
         try:
             all_devices = self._main_player.get_audio_devices()
         except Exception:
             return []
-        try:
-            import sounddevice as sd
 
-            default_idx = sd.default.device[1]
-            default_id = str(default_idx) if default_idx is not None and default_idx >= 0 else None
-        except Exception:
-            default_id = None
+        def hw_card(name: str) -> Optional[str]:
+            # "HDA Intel PCH: ... (hw:0,0)" -> "0"; None for anything
+            # without an explicit hw:CARD,DEV suffix.
+            match = re.search(r"\(hw:(\d+),\d+\)", name)
+            return match.group(1) if match else None
+
+        # The system's primary card: whichever card the first raw hw:
+        # entry names. Every alias without its own hw:CARD,DEV suffix is
+        # assumed to resolve to this same card.
+        default_card = next((hw_card(name) for _did, name in all_devices if hw_card(name) is not None), None)
+
+        def effective_card(name: str) -> Optional[str]:
+            card = hw_card(name)
+            return card if card is not None else default_card
 
         main_id = getattr(self._main_player, "_device_id", None)
-        excluded = set()
-        if main_id is None:
-            excluded.add("__DEFAULT__")
-            if default_id is not None:
-                excluded.add(default_id)
+        if main_id is not None:
+            main_card = next(
+                (effective_card(name) for did, name in all_devices if did == main_id), default_card
+            )
         else:
-            excluded.add(main_id)
-            if main_id == default_id:
-                excluded.add("__DEFAULT__")
-        return [(did, name) for did, name in all_devices if did not in excluded]
+            main_card = default_card
+
+        return [
+            (did, name) for did, name in all_devices
+            if effective_card(name) != main_card
+        ]
 
     def _refresh_preview_devices(self) -> None:
         # Matches ui/browser_view.py:835-850: preserve the user's current

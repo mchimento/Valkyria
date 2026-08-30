@@ -143,6 +143,14 @@ class MainWindowQt(QWidget):
         self.controls.crossfade_requested.connect(self._on_track_ended)
         self._track_switch_ready.connect(self._play_index, Qt.QueuedConnection)
         self.playlist_view.playlist_changed.connect(self._update_menu_state)
+        # Relays to controls' own `stopped` signal rather than duplicating
+        # its cleanup here — this fires both ControlsBarQt's internal
+        # _finish_stop (waveform.clear() + time labels) and this class's
+        # own _on_stopped (current_index/highlight), the exact same
+        # cleanup a real Stop press gets. Without this, clearing/removing
+        # the playing track stopped the audio but left the waveform
+        # showing that track's stale playhead position indefinitely.
+        self.playlist_view.playback_stopped.connect(self.controls.stopped)
         self._update_menu_state()
 
         self._bind_transport_shortcuts()
