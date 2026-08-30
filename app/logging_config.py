@@ -12,7 +12,7 @@ def setup_logging():
 
     try:
         log_dir = get_user_data_path()
-        log_file = log_dir / 'tango_studio.log'
+        log_file = log_dir / 'valkyria.log'
         f_handler = logging.FileHandler(log_file, encoding='utf-8')
         f_handler.setLevel(logging.INFO)
         f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

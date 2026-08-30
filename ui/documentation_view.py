@@ -257,7 +257,7 @@ def open_documentation(doc_filename, theme_manager):
         # genuinely existed) and this app's own hidden data directory
         # under the user's home, since snap's home interface specifically
         # excludes dot-directories ("Access to the file was denied" from
-        # ~/.tango-studio/...). A non-hidden directory directly under the
+        # ~/.valkyria/...). A non-hidden directory directly under the
         # home directory is what's actually left in what snap's home
         # interface grants. The image stays embedded as base64 *inside*
         # the file's own content (set above) — that's not subject to any

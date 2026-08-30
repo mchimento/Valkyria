@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from app.paths import get_app_base_path, get_user_data_path, get_resource_path
@@ -29,16 +30,45 @@ class TestPaths(unittest.TestCase):
                 self.assertEqual(base_path, Path(mock_meipass))
 
     def test_get_user_data_path(self):
-        """Test user data path generation."""
-        path = get_user_data_path()
-        # Check for platform-specific directory name
+        """Test user data path generation. Mocks Path.home()/LOCALAPPDATA
+        so this never touches the real user directory (get_user_data_path
+        also does a migration check against an old-name directory next
+        to it, which would otherwise run against the real filesystem)."""
         import platform
-        if platform.system() == "Windows":
-            self.assertEqual(path.name, "TangoStudio")
-        else:
-            self.assertEqual(path.name, ".tango-studio")
-        # It should be an absolute path
-        self.assertTrue(path.is_absolute())
+        with tempfile.TemporaryDirectory() as tmp:
+            if platform.system() == "Windows":
+                with patch.dict(os.environ, {"LOCALAPPDATA": tmp}):
+                    path = get_user_data_path()
+                self.assertEqual(path.name, "Valkyria")
+            else:
+                with patch.object(Path, "home", return_value=Path(tmp)):
+                    path = get_user_data_path()
+                self.assertEqual(path.name, ".valkyria")
+            # It should be an absolute path
+            self.assertTrue(path.is_absolute())
+
+    def test_get_user_data_path_migrates_old_tango_studio_directory(self):
+        """Renaming the app must not silently drop an existing user's
+        saved settings: if the old-named directory (from when the app
+        was called Tango Studio) is present and the new one isn't yet,
+        its contents should be moved over rather than left behind."""
+        import platform
+        with tempfile.TemporaryDirectory() as tmp:
+            if platform.system() == "Windows":
+                old_dir = Path(tmp) / "TangoStudio"
+                old_dir.mkdir()
+                (old_dir / "config.json").write_text('{"theme": "dark"}')
+                with patch.dict(os.environ, {"LOCALAPPDATA": tmp}):
+                    path = get_user_data_path()
+            else:
+                old_dir = Path(tmp) / ".tango-studio"
+                old_dir.mkdir()
+                (old_dir / "config.json").write_text('{"theme": "dark"}')
+                with patch.object(Path, "home", return_value=Path(tmp)):
+                    path = get_user_data_path()
+
+            self.assertFalse(old_dir.exists())
+            self.assertEqual((path / "config.json").read_text(), '{"theme": "dark"}')
 
     def test_get_resource_path_dev(self):
         """Test resource path resolution in dev mode."""

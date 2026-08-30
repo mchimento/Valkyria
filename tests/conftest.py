@@ -15,7 +15,7 @@ def _isolate_settings_config_path(tmp_path, monkeypatch):
     PropertyMock on Settings.config_path; this is the same protection
     applied blanket so newly added tests can't regress it (confirmed they
     had: several ui_qt tests were writing straight into the real
-    ~/.tango-studio/config.json before this fixture existed).
+    ~/.valkyria/config.json before this fixture existed).
     """
     import app.settings as settings_module
 
