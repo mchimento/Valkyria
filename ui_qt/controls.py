@@ -108,6 +108,7 @@ class ControlsBarQt(QWidget):
         self.btn_mute = QPushButton("🔊")
         self.btn_mute.setObjectName("TransportButton")
         self.btn_mute.setFixedSize(44, 36)
+        self.btn_mute.setToolTip("Mute/Unmute (M)")
         row.addWidget(self.btn_mute)
 
         self.volume_slider = QSlider(Qt.Horizontal)
@@ -261,6 +262,11 @@ class ControlsBarQt(QWidget):
             self.total_time_label.setText("--:--")
 
     # ---------- volume / mute ----------
+
+    def step_volume(self, delta: int) -> None:
+        """Mirrors ui/controls.py's <plus>/<minus>-bound _volume_step —
+        setValue() clamps to the slider's 0-100 range on its own."""
+        self.volume_slider.setValue(self.volume_slider.value() + delta)
 
     def _on_volume_changed(self, value: int) -> None:
         self.volume_label.setText(f"{value}%")

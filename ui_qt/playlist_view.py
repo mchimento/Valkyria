@@ -448,11 +448,27 @@ class PlaylistViewQt(QWidget):
         self._adjust_title_column_width()
 
     def _adjust_title_column_width(self) -> None:
-        """Grow Title to absorb whatever width Artist/Album/Duration don't
-        need — called on this panel's own resize (see resizeEvent above)
-        and again once rows land (_on_metadata_batch), since a vertical
-        scrollbar appearing/disappearing changes the available width
-        without resizing the panel itself.
+        """Distribute whatever leftover width Duration doesn't need across
+        Title/Artist/Album proportionally to their current widths — called
+        on this panel's own resize (see resizeEvent above) and again once
+        rows land (_on_metadata_batch), since a vertical scrollbar
+        appearing/disappearing changes the available width without
+        resizing the panel itself.
+
+        Matches ui/playlist_view.py:160-163: Title/Artist/Album are all
+        stretch=True there, Duration alone is stretch=False — ttk
+        distributes leftover space across all three stretch columns, not
+        just one. An earlier version of this method gave 100% of the
+        leftover to Title alone; with the browser panel hidden (a lot of
+        leftover width appears all at once), that meant Title ballooned
+        into a huge mostly-empty column while Artist/Album/Duration stayed
+        pinned to their small default widths, clustered together on the
+        far right — reported directly as looking visually unbalanced.
+        Proportional-to-current-width distribution keeps their relative
+        sizes consistent as the panel grows/shrinks (matches ttk's actual
+        stretch-column behavior), rather than everything piling into one
+        column or splitting dead evenly regardless of each column's
+        existing size.
 
         Computed from self._tree.width(), NOT self._tree.viewport().width():
         confirmed empirically that at the moment resizeEvent fires here,
@@ -463,20 +479,32 @@ class PlaylistViewQt(QWidget):
         resize that triggers this method in the first place.
 
         Wrapped in the same _in_section_resize guard _on_section_resized
-        uses for its own programmatic calls: this method's setColumnWidth
-        also fires sectionResized(0, ...), and without the guard,
-        _on_section_resized would misread "the panel gained leftover
-        space, give it to Title" as "the user dragged Title's boundary,
-        steal the difference from Artist" — stealing space from Artist
-        that never came from Artist in the first place."""
-        other_width = sum(self._tree.columnWidth(c) for c in range(1, len(COLUMNS)))
+        uses for its own programmatic calls: setColumnWidth here also
+        fires sectionResized, and without the guard, _on_section_resized
+        would misread "the panel gained leftover space" as a user drag and
+        try to redistribute it again via its own chained-compensation
+        logic — the two mechanisms would fight each other."""
+        stretch_cols = (0, 1, 2)  # Title, Artist, Album
+        duration_width = self._tree.columnWidth(3)
         scrollbar = self._tree.verticalScrollBar()
         scrollbar_reserve = scrollbar.width() if scrollbar.isVisible() else 0
         frame = self._tree.frameWidth() * 2
-        available = self._tree.width() - frame - scrollbar_reserve - other_width
+        available = self._tree.width() - frame - scrollbar_reserve - duration_width
+        current_total = sum(self._tree.columnWidth(c) for c in stretch_cols)
+        if current_total <= 0 or available == current_total:
+            return
+        extra = available - current_total
         self._in_section_resize = True
         try:
-            self._tree.setColumnWidth(0, max(MIN_COLUMN_WIDTHS[0], available))
+            remaining = extra
+            for i, col in enumerate(stretch_cols):
+                if i == len(stretch_cols) - 1:
+                    share = remaining  # last column absorbs any rounding remainder
+                else:
+                    share = round(extra * (self._tree.columnWidth(col) / current_total))
+                    remaining -= share
+                new_width = max(MIN_COLUMN_WIDTHS[col], self._tree.columnWidth(col) + share)
+                self._tree.setColumnWidth(col, new_width)
         finally:
             self._in_section_resize = False
 

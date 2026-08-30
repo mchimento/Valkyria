@@ -16,7 +16,7 @@ import re
 from typing import Optional
 
 from PySide6.QtCore import Qt, QEvent
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFileDialog, QSplitter, QVBoxLayout, QWidget
 
 from app.paths import get_resource_path
@@ -105,7 +105,39 @@ class MainWindowQt(QWidget):
         self.controls.repeat_toggle_requested.connect(self._toggle_repeat_mode)
         self.controls.effects_requested.connect(self._on_open_audio_effects)
 
+        self._bind_transport_shortcuts()
         self._apply_initial_geometry()
+
+    # ---------- keyboard shortcuts ----------
+
+    def _bind_transport_shortcuts(self) -> None:
+        """Ports ui/controls.py:262-270's transport key bindings — Tk
+        binds these on a content sub-frame, not the root window; the Qt
+        equivalent is QShortcut with the default Qt.WindowShortcut context
+        (fires whenever this top-level window has focus, regardless of
+        which specific child widget inside it does — the menu bar's own
+        QAction shortcuts already rely on the same context, see
+        _build_menu, so this matches the mechanism already proven to work
+        there rather than introducing a second one).
+
+        Buttons are triggered via .click() rather than calling their
+        handler methods directly — that exercises the exact same code
+        path (and visual press feedback) a real mouse click would, and
+        avoids reaching into ControlsBarQt's underscore-prefixed
+        click-handler internals from outside the class."""
+
+        def shortcut(key: str, slot) -> None:
+            QShortcut(QKeySequence(key), self, activated=slot)
+
+        shortcut("Return", self.controls.btn_play.click)
+        shortcut("Enter", self.controls.btn_play.click)  # numpad Enter
+        shortcut("Space", self.controls.btn_pause.click)
+        shortcut("Left", self._on_prev)
+        shortcut("Right", self._on_next)
+        shortcut("S", self.controls.btn_stop.click)
+        shortcut("M", self.controls.btn_mute.click)
+        shortcut("+", lambda: self.controls.step_volume(5))
+        shortcut("-", lambda: self.controls.step_volume(-5))
 
     # ---------- menu content (stub — see ui/main_window.py._build_menu for the real items) ----------
 
@@ -121,7 +153,7 @@ class MainWindowQt(QWidget):
             {"separator": True},
             {"label": "Quit", "command": self._on_quit, "accelerator": "Alt+F4"},
         ]
-        self.menubar.add_menu("Media", media_items)
+        self.menubar.add_menu("&Media", media_items)
 
         sort_submenu = [
             {"label": "Shuffle", "command": lambda: self.playlist_view.shuffle(), "accelerator": "Ctrl+H"},
@@ -151,7 +183,7 @@ class MainWindowQt(QWidget):
             {"label": "Operations", "submenu": operations_submenu},
             {"label": "Repeat Mode", "submenu": repeat_submenu},
         ]
-        self.menubar.add_menu("Playback", playback_items)
+        self.menubar.add_menu("&Playback", playback_items)
 
         view_items = [
             {"label": "Show Playback", "checkbutton": True, "checked": bool(getattr(self.settings, "show_playlist", True)), "accelerator": "F9", "command": self._toggle_playlist_visibility},
@@ -160,7 +192,7 @@ class MainWindowQt(QWidget):
             {"separator": True},
             {"label": "Always on Top", "checkbutton": True, "checked": False},
         ]
-        self.menubar.add_menu("View", view_items)
+        self.menubar.add_menu("&View", view_items)
 
         tools_items = [
             {"label": "Audio Device", "submenu": []},
@@ -171,7 +203,7 @@ class MainWindowQt(QWidget):
             {"separator": True},
             {"label": "Preferences", "command": self._on_open_preferences, "accelerator": "Ctrl+P"},
         ]
-        self.menubar.add_menu("Tools", tools_items)
+        self.menubar.add_menu("&Tools", tools_items)
 
         documentation_submenu = [
             {"label": "User Guide"},
@@ -182,7 +214,7 @@ class MainWindowQt(QWidget):
             {"separator": True},
             {"label": "About", "accelerator": "F1"},
         ]
-        self.menubar.add_menu("Help", help_items)
+        self.menubar.add_menu("&Help", help_items)
 
     def _on_open_file(self) -> None:
         exts = getattr(self.settings, "supported_extensions", ()) or ()
