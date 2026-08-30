@@ -101,6 +101,9 @@ class PreferencesWindowQt(QDialog):
         self.settings = settings
         self.theme = theme
         self.theme_signal = theme_signal
+        # Tracks whether _preview_theme() ever actually broadcast a
+        # different palette this dialog session — see reject().
+        self._previewed = False
 
         self.setObjectName("MainWindow")  # reuses the main window's QSS border treatment
         self.setWindowTitle("Preferences")
@@ -198,6 +201,7 @@ class PreferencesWindowQt(QDialog):
         # otherwise silently bake the uncommitted preview into config.json.
         # Preview only broadcasts a palette for display; nothing is
         # committed until _on_save().
+        self._previewed = True
         self.theme_signal.changed.emit(_load_palette(name))
 
     def _on_save(self) -> None:
@@ -227,5 +231,17 @@ class PreferencesWindowQt(QDialog):
         # there's nothing to roll back there — just restore the visible
         # app to whatever theme.palette actually still says (in case a
         # preview changed what's on screen without changing what's saved).
-        self.theme_signal.changed.emit(self.theme.palette)
+        #
+        # Only actually re-broadcast if a preview really happened:
+        # theme_signal.changed -> apply_theme() -> app.setStyleSheet()
+        # re-polishes every widget in the whole app (full playlist/browser
+        # trees included), which is expensive enough on the main thread to
+        # briefly starve the GIL that the real-time sd.OutputStream audio
+        # callback needs (audio/audio_player.py's play() uses a callback-
+        # based stream, not a blocking loop) — audible as a small glitch
+        # if a track is playing. Emitting unconditionally on every close,
+        # even when the user never touched the theme radios, paid that
+        # cost for literally nothing.
+        if self._previewed:
+            self.theme_signal.changed.emit(self.theme.palette)
         super().reject()
