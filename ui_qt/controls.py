@@ -102,7 +102,6 @@ class ControlsBarQt(QWidget):
             btn.setFixedSize(48, 40)
         row.addWidget(self.btn_repeat)
         row.addWidget(self.btn_effects)
-        self.btn_repeat.setToolTip("Repeat Mode")
         self.btn_effects.setToolTip("Audio Effects (F7)")
 
         self.btn_mute = QPushButton("🔊")
@@ -136,6 +135,7 @@ class ControlsBarQt(QWidget):
 
         self._init_volume()
         self._init_mute()
+        self.set_repeat_icon(self.state.repeat_mode if self.state else "none")
 
         self._time_timer = QTimer(self)
         self._time_timer.setInterval(500)
@@ -182,7 +182,12 @@ class ControlsBarQt(QWidget):
         matches ui/controls.py's ExtrasBar._update_repeat_icon: 'none' is
         the plain button, 'one' swaps to the single-repeat glyph, 'all'
         keeps the loop glyph but both 'one'/'all' get the active
-        (button_pressed) background."""
+        (button_pressed) background.
+
+        Also updates the tooltip, matching ExtrasBar's dynamic
+        `f"Repeat Mode: {mode.title()}"` tooltip (ui/controls.py:54) — an
+        earlier version left the Qt tooltip as a static "Repeat Mode"
+        string that never reflected the current mode, unlike Tk's."""
         pressed = self.palette.get("button_pressed", "#6023CB")
         if mode == "one":
             self.btn_repeat.setText("🔂")
@@ -193,6 +198,7 @@ class ControlsBarQt(QWidget):
         else:
             self.btn_repeat.setText("🔁")
             self.btn_repeat.setStyleSheet("")
+        self.btn_repeat.setToolTip(f"Repeat Mode: {mode.title()}")
 
     # ---------- transport ----------
 
