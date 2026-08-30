@@ -384,6 +384,12 @@ class PlaylistViewQt(QWidget):
         self.refresh()
 
     def _on_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        # Matches ui/playlist_view.py:568's play_on_double gate (toggled
+        # via the Playback Features dialog) — an earlier version of this
+        # method ignored the setting entirely and always played on
+        # double-click.
+        if not getattr(self.state, "play_on_double", True):
+            return
         self.track_activated.emit(self._actual_index(item))
 
     # ---------- menu-bar-driven operations (operate on selection) ----------

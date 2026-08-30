@@ -42,6 +42,16 @@ class Settings:
         # Silence detection
         self.silence_detection_enabled: bool = False
 
+        # Playback Features dialog (ui/playback_features_view.py): these
+        # three were already being assigned onto a Settings instance by
+        # that dialog's Save button, but never included in save()'s own
+        # data dict, so they silently never persisted across restarts even
+        # when "saved" — adding them here for real, matching the pattern
+        # already used for fade in/out and silence detection.
+        self.play_on_double: bool = True
+        self.crossfade_enabled: bool = False
+        self.crossfade_duration: int = 5
+
         self.load()
 
     def _load_app_config(self) -> None:
@@ -84,6 +94,9 @@ class Settings:
                 self.fade_out_enabled = data.get("fade_out_enabled", self.fade_out_enabled)
                 self.fade_out_duration = data.get("fade_out_duration", self.fade_out_duration)
                 self.silence_detection_enabled = data.get("silence_detection_enabled", self.silence_detection_enabled)
+                self.play_on_double = data.get("play_on_double", self.play_on_double)
+                self.crossfade_enabled = data.get("crossfade_enabled", self.crossfade_enabled)
+                self.crossfade_duration = data.get("crossfade_duration", self.crossfade_duration)
 
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
@@ -106,7 +119,10 @@ class Settings:
                 "fade_in_duration": self.fade_in_duration,
                 "fade_out_enabled": self.fade_out_enabled,
                 "fade_out_duration": self.fade_out_duration,
-                "silence_detection_enabled": self.silence_detection_enabled
+                "silence_detection_enabled": self.silence_detection_enabled,
+                "play_on_double": self.play_on_double,
+                "crossfade_enabled": self.crossfade_enabled,
+                "crossfade_duration": self.crossfade_duration
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)

@@ -25,6 +25,7 @@ from audio import m3u as m3u_module
 from ui_qt.browser_view import BrowserViewQt
 from ui_qt.controls import ControlsBarQt
 from ui_qt.menu_bar import CustomMenuBarQt
+from ui_qt.playback_features_window import PlaybackFeaturesWindowQt
 from ui_qt.playlist_view import PlaylistViewQt
 from ui_qt.preferences_window import PreferencesWindowQt
 from ui_qt.theme_bridge import apply_theme
@@ -45,6 +46,7 @@ class MainWindowQt(QWidget):
         self.player = player
         self.theme_signal = theme_signal
         self._preferences_win: Optional[PreferencesWindowQt] = None
+        self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
         theme_signal.changed.connect(self._on_theme_changed)
 
         self.setObjectName("MainWindow")
@@ -65,6 +67,16 @@ class MainWindowQt(QWidget):
         self.menubar.setup_window_controls(self._on_quit, show_maximize=True)
 
         self.state = AppState(exts=tuple(getattr(settings, "supported_extensions", ()) or ()))
+        # Matches app/application.py's ValkyriaApp.__init__ (Tk) applying
+        # these same settings onto AppState at startup — silence_detection_
+        # enabled specifically is NOT also pushed onto self.player here,
+        # matching Tk exactly: the original only ever sets
+        # player.silence_detection_enabled from within the Playback
+        # Features dialog's own toggle handler, never at launch.
+        self.state.play_on_double = bool(getattr(settings, "play_on_double", True))
+        self.state.crossfade_enabled = bool(getattr(settings, "crossfade_enabled", False))
+        self.state.crossfade_duration = int(getattr(settings, "crossfade_duration", 5))
+        self.state.silence_detection_enabled = bool(getattr(settings, "silence_detection_enabled", False))
 
         self.central_area = QWidget(self)
         self.central_area.setObjectName("CentralArea")
@@ -100,6 +112,7 @@ class MainWindowQt(QWidget):
         layout.addWidget(self.central_area, 1)
 
         self.playlist_view.track_activated.connect(self._play_index)
+        self.controls.play_requested.connect(self._on_play_requested)
         self.controls.prev_requested.connect(self._on_prev)
         self.controls.next_requested.connect(self._on_next)
         self.controls.repeat_toggle_requested.connect(self._toggle_repeat_mode)
@@ -197,7 +210,7 @@ class MainWindowQt(QWidget):
         tools_items = [
             {"label": "Audio Device", "submenu": []},
             {"label": "Audio Effects and Filters", "accelerator": "F7"},
-            {"label": "Playback features", "accelerator": "F8"},
+            {"label": "Playback features", "command": self._on_open_playback_features, "accelerator": "F8"},
             {"separator": True},
             {"label": "Playlist Generator", "accelerator": "F6"},
             {"separator": True},
@@ -295,6 +308,25 @@ class MainWindowQt(QWidget):
             idx = 0
         self._set_repeat_mode(modes[(idx + 1) % len(modes)])
 
+    def _on_play_requested(self) -> None:
+        """Matches ui/controls.py's ControlsBar._on_play(from_user=True)
+        (ui/controls.py:272-278): the Play button/Enter plays whatever's
+        currently selected in the playlist — falling back to index 0 only
+        if nothing has ever played yet, or to just restarting whatever's
+        already at state.current_index if there's no selection and
+        something was already playing/loaded. An earlier version ignored
+        the playlist's selection entirely and always replayed whatever
+        ControlsBarQt had last been told to load, so selecting a different
+        track and pressing Play just repeated the current song instead of
+        switching to the one just selected."""
+        selected = self.playlist_view.get_selected_indices()
+        if selected:
+            self.state.current_index = selected[0]
+        elif self.state.playlist and self.state.current_index is None:
+            self.state.current_index = 0
+        if self.state.current_index is not None:
+            self._play_index(self.state.current_index)
+
     def _on_prev(self) -> None:
         if self.state.current_index is None:
             return
@@ -371,6 +403,17 @@ class MainWindowQt(QWidget):
         win = PreferencesWindowQt(self, self.settings, self.theme, self.theme_signal)
         win.finished.connect(lambda _: setattr(self, "_preferences_win", None))
         self._preferences_win = win
+        win.show()
+
+    def _on_open_playback_features(self) -> None:
+        if self._playback_features_win is not None:
+            self._playback_features_win.show()
+            self._playback_features_win.raise_()
+            self._playback_features_win.activateWindow()
+            return
+        win = PlaybackFeaturesWindowQt(self, self.state, self.settings, self.player)
+        win.finished.connect(lambda _: setattr(self, "_playback_features_win", None))
+        self._playback_features_win = win
         win.show()
 
     def _on_theme_changed(self, palette: dict) -> None:

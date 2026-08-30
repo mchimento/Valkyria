@@ -271,7 +271,14 @@ class WaveformSeekbarQt(QWidget):
                 unplayed_rects = []
                 for i in range(n):
                     amp = self.waveform_data[i]
-                    bar_h = amp * max_h / 2
+                    # A silent (near-zero amplitude) stretch — real trailing/
+                    # leading silence, or the tail of a track whose actual
+                    # length is shorter than the widget's playhead range —
+                    # would otherwise draw a literal zero-height rect, i.e.
+                    # nothing at all, making it look like the waveform (and
+                    # by extension the track) just stops short of the full
+                    # width rather than genuinely being silent there.
+                    bar_h = max(amp * max_h / 2, 0.5)
                     x = i * px_w
                     rect = QRectF(x, center_y - bar_h, max(px_w, 1.0), bar_h * 2)
                     if x <= self.playhead_x:

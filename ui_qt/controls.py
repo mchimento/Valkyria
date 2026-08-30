@@ -1,12 +1,15 @@
 """
 Qt port of ui/controls.py — ControlsBar: Play/Pause/Prev/Stop/Next,
 volume/mute, time labels, waveform seekbar, and the repeat/effects
-ExtrasBar (ui/controls.py:16-56). Prev/Next/repeat-toggle/effects-open are
-emitted as signals rather than handled here directly — the actual "which
-index is next" / "open the effects window" policy lives in MainWindowQt,
-which owns state and playlist_view (mirrors the original's split between
-ControlsBar's prev()/next() mechanism and MainWindow.toggle_repeat_mode()/
-open_audio_effects() policy).
+ExtrasBar (ui/controls.py:16-56). Play/Prev/Next/repeat-toggle/effects-open
+are emitted as signals rather than handled here directly — the actual
+"which track" / "which index is next" / "open the effects window" policy
+lives in MainWindowQt, which owns state and playlist_view (mirrors the
+original's split between ControlsBar's play()/prev()/next() mechanism and
+MainWindow's policy methods). Play in particular needs playlist_view's
+current selection — ui/controls.py's ControlsBar._on_play(from_user=True)
+plays whatever's selected, not just whatever was last loaded, which this
+widget alone can't determine.
 """
 
 import logging
@@ -37,6 +40,7 @@ class ControlsBarQt(QWidget):
     # ui_qt.player_bridge.PlayerBridge).
     _stop_finished = Signal()
 
+    play_requested = Signal()
     prev_requested = Signal()
     next_requested = Signal()
     repeat_toggle_requested = Signal()
@@ -121,7 +125,7 @@ class ControlsBarQt(QWidget):
 
         layout.addLayout(row)
 
-        self.btn_play.clicked.connect(self._on_play_clicked)
+        self.btn_play.clicked.connect(self.play_requested)
         self.btn_pause.clicked.connect(self._on_pause)
         self.btn_prev.clicked.connect(self.prev_requested)
         self.btn_stop.clicked.connect(self._on_stop)
@@ -141,8 +145,6 @@ class ControlsBarQt(QWidget):
         self._time_timer.setInterval(500)
         self._time_timer.timeout.connect(self._schedule_time_update)
         self._time_timer.start()
-
-        self._pending_path = None
 
     # ---------- initial state ----------
 
@@ -203,23 +205,8 @@ class ControlsBarQt(QWidget):
     # ---------- transport ----------
 
     def play_file(self, path: str) -> None:
-        self._pending_path = path
         threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
         self.waveform.load_waveform(path)
-
-    def play_current(self) -> None:
-        """Play state.playlist[state.current_index] — mirrors
-        ui/controls.py's ControlsBar.play(), which reads from the playlist
-        it was constructed with rather than taking a path directly."""
-        if self.state is None or self.state.current_index is None:
-            return
-        if not (0 <= self.state.current_index < len(self.state.playlist)):
-            return
-        self.play_file(self.state.playlist[self.state.current_index])
-
-    def _on_play_clicked(self) -> None:
-        if self._pending_path:
-            self.play_file(self._pending_path)
 
     def _on_pause(self) -> None:
         try:
