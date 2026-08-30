@@ -38,6 +38,7 @@ whatever value it was constructed with.
 import logging
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -163,6 +164,11 @@ class PlaybackFeaturesWindowQt(QDialog):
             btn = buttons.button(role)
             if btn is not None:
                 btn.setObjectName("DialogButton")
+                # Some Qt styles attach a platform icon to standard dialog
+                # buttons (a checkmark/X glyph next to the text) — cleared
+                # explicitly so the button is plain text only, regardless
+                # of style/platform.
+                btn.setIcon(QIcon())
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.close)
         layout.addWidget(buttons)

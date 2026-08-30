@@ -82,6 +82,13 @@ class ControlsBarQt(QWidget):
         self.btn_stop.setToolTip("Stop (S)")
         self.btn_next.setToolTip("Next Track (→)")
 
+        # Balances the stretch added after total_time_label below, so the
+        # time/waveform/time group sits centered in the space between the
+        # transport buttons and the repeat/effects/mute/volume group,
+        # instead of hugging the transport buttons with a large empty gap
+        # opening up before the right-hand controls.
+        row.addStretch(1)
+
         # Matches ui/controls.py:165-181 exactly: current time, waveform,
         # total time all live inline in the same row as the transport
         # buttons ("middle" frame in the original) — not stacked above them
@@ -126,6 +133,16 @@ class ControlsBarQt(QWidget):
         row.addWidget(self.volume_slider)
 
         self.volume_label = QLabel("0%")
+        # Same fix as current_time_label/total_time_label above, same root
+        # cause: this row is right-aligned via the addStretch(1) before
+        # btn_repeat, so ANY width change within this trailing group
+        # (volume_label's text going from "5%" to "100%" and back)
+        # reshuffles the stretch and visibly shifts the *whole* group —
+        # repeat/effects/mute included, not just this label — every time
+        # the volume slider moves.
+        volume_label_width = QFontMetrics(self.volume_label.font()).horizontalAdvance("100%") + 10
+        self.volume_label.setFixedWidth(volume_label_width)
+        self.volume_label.setAlignment(Qt.AlignCenter)
         row.addWidget(self.volume_label)
 
         layout.addLayout(row)
