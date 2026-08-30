@@ -491,6 +491,7 @@ class MainWindowQt(QWidget):
         except Exception:
             logger.exception("Failed to load audio devices")
             return [{"label": "Error loading devices", "state": "disabled"}]
+        devices = self._filter_selectable_devices(devices)
         if not devices:
             return [{"label": "No devices found", "state": "disabled"}]
         current_id = getattr(self.player, "_device_id", None)
@@ -506,6 +507,36 @@ class MainWindowQt(QWidget):
                 "command": lambda dev_id=device_id: self._set_audio_device(dev_id),
             })
         return items
+
+    def _filter_selectable_devices(self, devices: list) -> list:
+        """Drop ALSA's stock software/plugin aliases (sysdefault, front,
+        surroundNN, pipewire, dmix, "default") from what the menu offers.
+        sd.query_devices() lists them as separate "devices" only because
+        alsa-lib's own config (alsa.conf) defines them as named PCM
+        routes — confirmed via a direct sd.query_hostapis() check that
+        this environment has just one hostapi ("ALSA"), no native
+        PipeWire/Pulse hostapi, so every one of those aliases resolves to
+        the exact same underlying default output. Keeping all of them
+        just padded the menu with ~8 duplicate entries for one real
+        device (see the "why so many entries" report this came from).
+
+        Keeps two kinds of entry: "Default Audio Device" itself
+        (device_id == '__DEFAULT__') and anything with a raw
+        "(hw:CARD,DEV)" suffix (genuine physical hardware — the laptop's
+        analog output, HDMI, etc). '__DEFAULT__' has to stay even though
+        it isn't itself physical hardware: with only the ALSA hostapi
+        available, a Bluetooth headset or other dynamically-connected
+        output never gets its own named entry in this list at all — it
+        only becomes reachable by becoming whatever the system default
+        (i.e. PipeWire's active sink) points to, which is exactly what
+        '__DEFAULT__' selects. Dropping it would remove the only way to
+        reach Bluetooth outputs, not just declutter aliases."""
+        def is_selectable(device_id: str, name: str) -> bool:
+            if device_id == "__DEFAULT__":
+                return True
+            return re.search(r"\(hw:\d+,\d+\)", name) is not None
+
+        return [(did, name) for did, name in devices if is_selectable(did, name)]
 
     def _set_audio_device(self, device_id: str) -> None:
         try:

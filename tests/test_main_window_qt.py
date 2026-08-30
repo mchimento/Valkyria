@@ -59,6 +59,36 @@ def test_is_frameless(window):
     assert window.windowFlags() & Qt.FramelessWindowHint
 
 
+def test_audio_device_menu_drops_alsa_plugin_aliases(window):
+    # Regression test: sd.query_devices() also lists ALSA's stock
+    # software/plugin routes (sysdefault, front, surroundNN, pipewire,
+    # dmix, "default") as separate "devices" purely because alsa.conf
+    # names them — on a system with only an ALSA hostapi (no native
+    # PipeWire/Pulse hostapi) they all resolve to the same underlying
+    # output as "Default Audio Device", so they should be filtered out
+    # of the Tools > Audio Device menu rather than padding it with
+    # duplicates. Physical hw:CARD,DEV entries and "Default Audio
+    # Device" itself (the only way to reach a Bluetooth/dynamically
+    # connected output on such a system) must remain.
+    window.player.get_audio_devices.return_value = [
+        ("__DEFAULT__", "Default Audio Device"),
+        ("0", "HDA Intel PCH: Analog (hw:0,0)"),
+        ("1", "HDA Intel HDMI: 0 (hw:1,3)"),
+        ("2", "sysdefault"),
+        ("3", "front"),
+        ("4", "surround40"),
+        ("5", "pipewire"),
+        ("6", "dmix"),
+        ("7", "default"),
+    ]
+    labels = [item["label"] for item in window._build_audio_device_items()]
+    assert labels == [
+        "Default Audio Device (system default)",
+        "HDA Intel PCH: Analog (hw:0,0)",
+        "HDA Intel HDMI: 0 (hw:1,3)",
+    ]
+
+
 def test_menu_bar_top_level_labels(window):
     labels = [action.text() for action in window.menubar._menubar.actions()]
     assert labels == ["&Media", "&Playback", "&View", "&Tools", "&Help"]
