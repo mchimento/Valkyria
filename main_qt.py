@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication
 
 from app.logging_config import setup_logging
 from app.settings import Settings
+import audio.metadata as metadata_module
 from audio.audio_player import AudioPlayer
 from themes.theme_manager import ThemeManager
 from ui_qt.theme_bridge import ThemeSignal, apply_theme
@@ -58,6 +59,15 @@ def main():
     player.set_fade_in_duration(settings.fade_in_duration)
     player.set_fade_out_enabled(settings.fade_out_enabled)
     player.set_fade_out_duration(settings.fade_out_duration)
+
+    # Matches app/application.py's ValkyriaApp.__init__ — without this,
+    # audio.metadata.BPM_PREFERENCE stays stuck at its hardcoded module
+    # default ('perceived') regardless of settings.bpm_mode, silently
+    # ignoring both the saved preference and anything Preferences saves.
+    try:
+        metadata_module.set_bpm_preference(settings.bpm_mode)
+    except Exception:
+        logger.exception("Failed to apply BPM preference at startup")
 
     window_instance = MainWindowQt(settings, theme, player, theme_signal)
     bridge.track_ended.connect(window_instance._on_track_ended, Qt.QueuedConnection)

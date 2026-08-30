@@ -3,10 +3,13 @@ Documentation viewer.
 Opens markdown documentation in the default web browser.
 """
 
+import base64
+import mimetypes
+import platform
 import webbrowser
-import tempfile
 import logging
 import re
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ def open_documentation(doc_filename, theme_manager):
         doc_filename: Name of the markdown file (e.g., 'user_guide.md')
         theme_manager: ThemeManager instance with palette colors
     """
-    from app.paths import get_docs_path
+    from app.paths import get_docs_path, get_user_data_path
 
     try:
         # Import markdown library
@@ -30,14 +33,28 @@ def open_documentation(doc_filename, theme_manager):
         with open(doc_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
 
-        # Resolve relative image paths to absolute file:// URIs so the browser
-        # can load them from the temp file location.
+        # Embed referenced images as base64 data: URIs rather than
+        # resolving to a file:// path — a snap-confined browser (e.g.
+        # Ubuntu's default Firefox package) can't read arbitrary
+        # filesystem paths at all (confirmed: this failed even from the
+        # user's own home directory, since snap's home interface also
+        # excludes hidden dot-directories — there's no filesystem location
+        # guaranteed accessible), so the image has to travel inside the
+        # HTML itself instead of being referenced externally.
         docs_dir = get_docs_path()
-        markdown_content = re.sub(
-            r'src="(\.\./[^"]+)"',
-            lambda m: 'src="' + (docs_dir / m.group(1)).resolve().as_uri() + '"',
-            markdown_content
-        )
+
+        def _embed_image(match):
+            image_path = (docs_dir / match.group(1)).resolve()
+            try:
+                mime_type, _ = mimetypes.guess_type(str(image_path))
+                with open(image_path, 'rb') as img_f:
+                    encoded = base64.b64encode(img_f.read()).decode('ascii')
+                return f'src="data:{mime_type or "application/octet-stream"};base64,{encoded}"'
+            except Exception:
+                logger.exception("Failed to embed image %s", image_path)
+                return match.group(0)
+
+        markdown_content = re.sub(r'src="(\.\./[^"]+)"', _embed_image, markdown_content)
 
         # Preprocess markdown content
         lines = markdown_content.split('\n')
@@ -220,18 +237,49 @@ def open_documentation(doc_filename, theme_manager):
 </body>
 </html>"""
 
-        # Create temporary HTML file
-        temp_file = tempfile.NamedTemporaryFile(
-            mode='w',
-            delete=False,
-            suffix='.html',
-            encoding='utf-8'
-        )
-        temp_file.write(full_html)
-        temp_file.close()
-
-        # Open in default browser
-        webbrowser.open('file://' + temp_file.name)
+        # Write the HTML to a real file rather than opening it as a
+        # data: URI — tried that first, and it failed too: a data: URI
+        # embedding the doc's one ~185KB image inline came to ~430KB, and
+        # launching a browser with that as a single command-line argument
+        # failed outright with "Argument list too long". That's Linux's
+        # MAX_ARG_STRLEN, a per-argument cap of PAGE_SIZE*32 (128KB on this
+        # system) — confirmed directly, not assumed, by actually invoking
+        # `firefox <the 430KB URI>` and getting exactly that shell error.
+        # It's a much tighter limit than the ~2MB *total* argv+envp budget
+        # (getconf ARG_MAX), which is the one that looks relevant until you
+        # hit this one instead.
+        #
+        # So the image has to live in a real file after all — the fix is
+        # *where*, not avoiding a file entirely. Two locations already
+        # confirmed blocked for a snap-confined browser (e.g. Ubuntu's
+        # default Firefox package, this app's primary target platform):
+        # the system temp dir ("File not found" even though the file
+        # genuinely existed) and this app's own hidden data directory
+        # under the user's home, since snap's home interface specifically
+        # excludes dot-directories ("Access to the file was denied" from
+        # ~/.tango-studio/...). A non-hidden directory directly under the
+        # home directory is what's actually left in what snap's home
+        # interface grants. The image stays embedded as base64 *inside*
+        # the file's own content (set above) — that's not subject to any
+        # argument-length limit, only the short file:// path passed to
+        # the browser is.
+        #
+        # Snap confinement is Linux-specific — there's no equivalent
+        # sandboxing restricting a normal desktop browser's file access on
+        # Windows or macOS, so this workaround only applies there. Windows/
+        # macOS use get_user_data_path() instead, matching every other
+        # piece of user data this app writes (settings, logs) rather than
+        # introducing a new, Linux-problem-motivated folder that isn't
+        # needed on those platforms.
+        if platform.system() == "Linux":
+            docs_out_dir = Path.home() / "Valkyria"
+            docs_out_dir.mkdir(exist_ok=True)
+        else:
+            docs_out_dir = get_user_data_path()
+        out_path = docs_out_dir / f"docs_preview_{doc_filename.replace('.md', '')}.html"
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write(full_html)
+        webbrowser.open(out_path.resolve().as_uri())
 
     except FileNotFoundError:
         logger.error(f"Documentation file not found: {doc_filename}")

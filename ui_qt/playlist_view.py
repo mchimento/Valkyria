@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -102,11 +103,17 @@ class _PlaylistTree(QTreeWidget):
 class PlaylistViewQt(QWidget):
     track_activated = Signal(int)  # playlist index, from double-click
     metadata_batch_ready = Signal(int, list)  # load_id, [(path, metadata_dict), ...]
+    # Fired at the end of every refresh() — i.e. after every mutation this
+    # view makes to state.playlist (add/remove/clear/sort/shuffle/reorder).
+    # MainWindowQt uses it to keep playlist-dependent menu items' enabled
+    # state in sync (ui/main_window.py:670-699's _update_menu_state).
+    playlist_changed = Signal()
 
-    def __init__(self, state, palette: dict, parent=None):
+    def __init__(self, state, palette: dict, player=None, parent=None):
         super().__init__(parent)
         self.state = state
         self.palette = palette
+        self.player = player
         self._load_id = 0
         self._search_text = ""
         self._pending_selection: List[int] = []
@@ -249,6 +256,11 @@ class PlaylistViewQt(QWidget):
         self._pending_selection = select if select is not None else self.get_selected_indices()
         self._tree.clear()
         self._load_metadata_async(load_id)
+        # state.playlist is already updated synchronously by every caller
+        # before refresh() runs — emitted here rather than waiting for the
+        # async metadata batch, since menu-enabled state only depends on
+        # playlist length/current_index, not on rows actually being drawn.
+        self.playlist_changed.emit()
 
     def refresh_highlight(self) -> None:
         highlight = QColor(self.palette.get("highlight", self.palette.get("select_bg", "#FFF59D")))
@@ -372,6 +384,13 @@ class PlaylistViewQt(QWidget):
         menu.exec(self._tree.viewport().mapToGlobal(pos))
 
     def _context_play_after_current(self, index: int) -> None:
+        # Matches ui/main_window.py:1807-1821's _on_context_play_after_current:
+        # nothing playing means "after current" is meaningless, so tell the
+        # user instead of silently no-op'ing (which the shared
+        # playback.play_after_current already does safely on its own).
+        if self.state.current_index is None:
+            QMessageBox.information(self, "No Track Playing", "Please start playing a track first.")
+            return
         new_playlist, new_index = playback.play_after_current(self.state.playlist, [index], self.state.current_index)
         self.state.playlist = new_playlist
         self.state.current_index = new_index
@@ -381,6 +400,7 @@ class PlaylistViewQt(QWidget):
         new_playlist, new_index = playback.remove_selected_from_playlist(self.state.playlist, [index], self.state.current_index)
         self.state.playlist = new_playlist
         self.state.current_index = new_index
+        self._stop_if_current_cleared(new_index)
         self.refresh()
 
     def _on_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
@@ -398,16 +418,25 @@ class PlaylistViewQt(QWidget):
         indices = self.get_selected_indices()
         if not indices:
             return
+        # audio.playback.move_selected_up no-ops the whole move if any
+        # selected index is already at the top (min(indices) <= 0) — an
+        # earlier version here always shifted the reselect set regardless,
+        # so a blocked move (nothing actually reordered) still highlighted
+        # a different row than the one the user had selected.
+        blocked = min(indices) <= 0
         self.state.playlist = playback.move_selected_up(self.state.playlist, indices)
-        self.refresh(select=sorted({(i - 1 if i > 0 else i) for i in indices}))
+        reselect = indices if blocked else sorted({(i - 1 if i > 0 else i) for i in indices})
+        self.refresh(select=sorted(reselect))
 
     def move_down(self) -> None:
         indices = self.get_selected_indices()
         if not indices:
             return
         last = len(self.state.playlist) - 1
+        blocked = max(indices) >= last
         self.state.playlist = playback.move_selected_down(self.state.playlist, indices)
-        self.refresh(select=sorted({(i + 1 if i < last else i) for i in indices}))
+        reselect = indices if blocked else sorted({(i + 1 if i < last else i) for i in indices})
+        self.refresh(select=sorted(reselect))
 
     def remove_selected(self) -> None:
         indices = self.get_selected_indices()
@@ -416,6 +445,7 @@ class PlaylistViewQt(QWidget):
         new_playlist, new_index = playback.remove_selected_from_playlist(self.state.playlist, indices, self.state.current_index)
         self.state.playlist = new_playlist
         self.state.current_index = new_index
+        self._stop_if_current_cleared(new_index)
         self.refresh()
 
     def play_after_current_selected(self) -> None:
@@ -428,8 +458,37 @@ class PlaylistViewQt(QWidget):
         self.refresh()
 
     def clear(self) -> None:
+        # Matches ui/main_window.py:1330-1338's clear_playlist: no-op on an
+        # already-empty playlist, confirm before wiping it, and stop
+        # playback first — an earlier version skipped all three, so
+        # clearing while a track was playing left audio running with
+        # nothing in the playlist to reference it.
+        if not self.state.playlist:
+            return
+        reply = QMessageBox.question(
+            self, "Clear Playlist", "Are you sure you want to clear the playlist?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        was_playing = self.state.current_index is not None
         self.state.playlist, self.state.current_index = playback.clear_playlist()
+        if was_playing and self.player is not None:
+            try:
+                self.player.stop()
+            except Exception:
+                logger.exception("player.stop() failed while clearing playlist")
         self.refresh()
+
+    def _stop_if_current_cleared(self, new_index: Optional[int]) -> None:
+        # Matches ui/main_window.py:1359-1373/1789-1805: removing whatever
+        # was currently playing stops playback rather than leaving audio
+        # running for a track no longer in the playlist.
+        if new_index is None and self.player is not None:
+            try:
+                self.player.stop()
+            except Exception:
+                logger.exception("player.stop() failed after removing current track")
 
     def sort_by_title(self) -> None:
         self.state.playlist, self.state.current_index = playback.sort_playlist_by_title(self.state.playlist, self.state.current_index)

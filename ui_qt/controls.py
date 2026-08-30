@@ -37,14 +37,18 @@ class ControlsBarQt(QWidget):
     # Emitted from the stop-sequence worker thread once the fade-out wait
     # and player.stop() complete; Qt auto-queues delivery to the main thread
     # since this widget has main-thread affinity (same pattern as
-    # ui_qt.player_bridge.PlayerBridge).
-    _stop_finished = Signal()
+    # ui_qt.player_bridge.PlayerBridge). Public (unlike a leading-underscore
+    # name would suggest) because MainWindowQt also needs it — clearing
+    # state.current_index and the playlist's now-playing highlight on stop
+    # is policy that lives at that level, same as play/prev/next.
+    stopped = Signal()
 
     play_requested = Signal()
     prev_requested = Signal()
     next_requested = Signal()
     repeat_toggle_requested = Signal()
     effects_requested = Signal()
+    crossfade_requested = Signal()
 
     def __init__(self, player, settings, palette: dict, state=None, parent=None):
         super().__init__(parent)
@@ -53,6 +57,7 @@ class ControlsBarQt(QWidget):
         self.palette = palette
         self.state = state
         self._is_muted = False
+        self._crossfade_fired = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -111,7 +116,7 @@ class ControlsBarQt(QWidget):
         self.btn_mute = QPushButton("🔊")
         self.btn_mute.setObjectName("TransportButton")
         self.btn_mute.setFixedSize(44, 36)
-        self.btn_mute.setToolTip("Mute/Unmute (M)")
+        # Tooltip set dynamically by _init_mute()/_update_mute_tooltip() below.
         row.addWidget(self.btn_mute)
 
         self.volume_slider = QSlider(Qt.Horizontal)
@@ -135,7 +140,7 @@ class ControlsBarQt(QWidget):
         self.btn_mute.clicked.connect(self._on_mute_toggle)
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
 
-        self._stop_finished.connect(self._finish_stop, Qt.QueuedConnection)
+        self.stopped.connect(self._finish_stop, Qt.QueuedConnection)
 
         self._init_volume()
         self._init_mute()
@@ -166,6 +171,7 @@ class ControlsBarQt(QWidget):
         initial_mute = bool(getattr(self.settings, "mute", False))
         self._is_muted = initial_mute
         self.btn_mute.setText("🔇" if initial_mute else "🔊")
+        self._update_mute_tooltip()
         try:
             self.player.set_mute(initial_mute)
         except Exception:
@@ -205,6 +211,12 @@ class ControlsBarQt(QWidget):
     # ---------- transport ----------
 
     def play_file(self, path: str) -> None:
+        # Matches ui/controls.py:286-288's _on_play: reset the time labels
+        # immediately rather than leaving the previous track's stale
+        # elapsed/total time visible until the next 500ms timer tick.
+        self.current_time_label.setText("00:00")
+        self.total_time_label.setText("--:--")
+        self._crossfade_fired = False
         threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
         self.waveform.load_waveform(path)
 
@@ -227,7 +239,7 @@ class ControlsBarQt(QWidget):
             except Exception:
                 logger.exception("stop() failed")
             finally:
-                self._stop_finished.emit()
+                self.stopped.emit()
 
         threading.Thread(target=_stop_sequence, daemon=True).start()
 
@@ -250,9 +262,35 @@ class ControlsBarQt(QWidget):
         if length_ms and length_ms > 0:
             self.current_time_label.setText(_format_ms(time_ms))
             self.total_time_label.setText(_format_ms(length_ms))
+            self._check_crossfade(time_ms, length_ms)
         else:
             self.current_time_label.setText("--:--")
             self.total_time_label.setText("--:--")
+
+    def _check_crossfade(self, time_ms: int, length_ms: int) -> None:
+        """Matches ui/controls.py:567-574: once within crossfade_duration
+        of the end, request an early advance to the next track — the
+        original's "crossfade" is really just early-advance timing, not
+        real audio blending (audio/audio_player.py has no crossfade logic
+        at all), so this matches it exactly rather than under- or
+        over-implementing. state.crossfade_enabled/crossfade_duration were
+        already fully wired end-to-end by the Playback Features dialog,
+        but nothing here ever polled them, so toggling Crossfade on had no
+        actual effect until now."""
+        if self._crossfade_fired or self.state is None:
+            return
+        if not getattr(self.state, "crossfade_enabled", False):
+            return
+        try:
+            if not self.player.is_playing() or self.player.is_paused():
+                return
+        except Exception:
+            return
+        duration_ms = getattr(self.state, "crossfade_duration", 5) * 1000
+        remaining = length_ms - time_ms
+        if 0 < remaining <= duration_ms:
+            self._crossfade_fired = True
+            self.crossfade_requested.emit()
 
     # ---------- volume / mute ----------
 
@@ -278,8 +316,15 @@ class ControlsBarQt(QWidget):
             logger.exception("set_mute() failed")
         self._is_muted = new_state
         self.btn_mute.setText("🔇" if new_state else "🔊")
+        self._update_mute_tooltip()
         self.settings.mute = new_state
         self._save_settings()
+
+    def _update_mute_tooltip(self) -> None:
+        # Matches ui/controls.py's _get_mute_tooltip: "Muted (M)"/"Mute (M)"
+        # — an earlier version set this once at construction and never
+        # again, unlike the repeat button's tooltip (see set_repeat_icon).
+        self.btn_mute.setToolTip("Muted (M)" if self._is_muted else "Mute (M)")
 
     def _save_settings(self) -> None:
         try:

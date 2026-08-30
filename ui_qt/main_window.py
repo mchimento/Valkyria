@@ -13,15 +13,18 @@ touched. ThemeManager.apply_to() is Tk-specific and is never called here.
 import logging
 import os
 import re
+import threading
+import time
 from typing import Optional
 
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt, QEvent, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication, QFileDialog, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
 from app.paths import get_resource_path
 from app.state import AppState
 from audio import m3u as m3u_module
+from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui_qt.browser_view import BrowserViewQt
 from ui_qt.controls import ControlsBarQt
 from ui_qt.menu_bar import CustomMenuBarQt
@@ -34,11 +37,17 @@ logger = logging.getLogger(__name__)
 
 RESIZE_MARGIN = 6  # px from window edge that count as a resize zone
 DEFAULT_SIZE = (1280, 800)
+MIN_SIZE = (640, 480)
 
 _GEOMETRY_RE = re.compile(r"^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$")
 
 
 class MainWindowQt(QWidget):
+    # Emitted from the Prev/Next fade-out worker thread once the fade wait
+    # completes, carrying the target playlist index — Qt auto-queues
+    # delivery to the main thread (same pattern as ControlsBarQt.stopped).
+    _track_switch_ready = Signal(int)
+
     def __init__(self, settings, theme, player, theme_signal):
         super().__init__()
         self.settings = settings
@@ -65,6 +74,19 @@ class MainWindowQt(QWidget):
         layout.addWidget(self.menubar)
         self._build_menu()
         self.menubar.setup_window_controls(self._on_quit, show_maximize=True)
+
+        # Matches ui/main_window.py:670-699's _update_menu_state — an
+        # earlier version never touched these after building the menu
+        # once, so Save Playlist/Save Playlist As/Play After Current Song
+        # stayed clickable even with an empty playlist or nothing playing
+        # (the shared audio.playback functions safely no-op, but the
+        # affordance of a visibly-disabled, meaningless action was
+        # missing). Looked up by label rather than threading QAction
+        # references out of _build_menu()'s item dicts, since add_menu()
+        # only returns the top-level QMenu.
+        self._action_save_playlist = self._find_action(self.menubar._menus["&Media"], "Save Playlist")
+        self._action_save_playlist_as = self._find_action(self.menubar._menus["&Media"], "Save Playlist As...")
+        self._action_play_after_current = self._find_action(self.menubar._menus["&Playback"], "Play After Current Song")
 
         self.state = AppState(exts=tuple(getattr(settings, "supported_extensions", ()) or ()))
         # Matches app/application.py's ValkyriaApp.__init__ (Tk) applying
@@ -93,7 +115,7 @@ class MainWindowQt(QWidget):
         # theme_bridge.py) until hovered, but this is what makes it a real
         # gap between the panels rather than the two touching directly.
         splitter.setHandleWidth(16)
-        self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, parent=splitter)
+        self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, player=self.player, parent=splitter)
         self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, player=self.player, parent=splitter)
         splitter.addWidget(self.playlist_view)
         splitter.addWidget(self.browser_view)
@@ -117,6 +139,11 @@ class MainWindowQt(QWidget):
         self.controls.next_requested.connect(self._on_next)
         self.controls.repeat_toggle_requested.connect(self._toggle_repeat_mode)
         self.controls.effects_requested.connect(self._on_open_audio_effects)
+        self.controls.stopped.connect(self._on_stopped)
+        self.controls.crossfade_requested.connect(self._on_track_ended)
+        self._track_switch_ready.connect(self._play_index, Qt.QueuedConnection)
+        self.playlist_view.playlist_changed.connect(self._update_menu_state)
+        self._update_menu_state()
 
         self._bind_transport_shortcuts()
         self._apply_initial_geometry()
@@ -203,12 +230,12 @@ class MainWindowQt(QWidget):
             {"label": "Show Browser", "checkbutton": True, "checked": bool(getattr(self.settings, "show_browser", True)), "accelerator": "F10", "command": self._toggle_browser_visibility},
             {"label": "Show Live Audio Analysis", "checkbutton": True, "checked": bool(getattr(self.settings, "show_dj", True)), "accelerator": "F11"},
             {"separator": True},
-            {"label": "Always on Top", "checkbutton": True, "checked": False},
+            {"label": "Always on Top", "state": "disabled"},
         ]
         self.menubar.add_menu("&View", view_items)
 
         tools_items = [
-            {"label": "Audio Device", "submenu": []},
+            {"label": "Audio Device", "submenu": self._build_audio_device_items()},
             {"label": "Audio Effects and Filters", "accelerator": "F7"},
             {"label": "Playback features", "command": self._on_open_playback_features, "accelerator": "F8"},
             {"separator": True},
@@ -219,8 +246,8 @@ class MainWindowQt(QWidget):
         self.menubar.add_menu("&Tools", tools_items)
 
         documentation_submenu = [
-            {"label": "User Guide"},
-            {"label": "BPM Analysis"},
+            {"label": "User Guide", "command": lambda: self._open_documentation("user_guide.md")},
+            {"label": "BPM Analysis", "command": lambda: self._open_documentation("bpm_analysis.md")},
         ]
         help_items = [
             {"label": "Documentation", "submenu": documentation_submenu},
@@ -280,9 +307,17 @@ class MainWindowQt(QWidget):
             self._on_save_playlist_as()
 
     def _on_save_playlist_as(self) -> None:
-        path, _filter = QFileDialog.getSaveFileName(self, "Save Playlist As", "", "M3U Playlist (*.m3u)")
-        if path:
-            self._write_playlist(path)
+        # Matches ui/main_window.py:836-839: offers both formats and
+        # defaults to .m3u8 — an earlier version only offered *.m3u and
+        # never appended an extension for a bare filename.
+        path, _filter = QFileDialog.getSaveFileName(
+            self, "Save Playlist As", "", "M3U8 Playlist (*.m3u8);;M3U Playlist (*.m3u)"
+        )
+        if not path:
+            return
+        if not os.path.splitext(path)[1]:
+            path += ".m3u8"
+        self._write_playlist(path)
 
     def _write_playlist(self, path: str) -> None:
         try:
@@ -331,13 +366,59 @@ class MainWindowQt(QWidget):
         if self.state.current_index is None:
             return
         if self.state.current_index - 1 >= 0:
-            self._play_index(self.state.current_index - 1)
+            self._fade_then_play(self.state.current_index - 1)
 
     def _on_next(self) -> None:
         if self.state.current_index is None:
             return
         if self.state.current_index + 1 < len(self.state.playlist):
-            self._play_index(self.state.current_index + 1)
+            self._fade_then_play(self.state.current_index + 1)
+
+    def _fade_then_play(self, index: int) -> None:
+        """Matches ui/controls.py:344-358's prev()/next(): trigger a
+        fade-out and wait for it before switching tracks — same sequence
+        ControlsBarQt._on_stop already uses for Stop. An earlier version
+        called _play_index directly with no fade step, so Stop faded
+        smoothly (when Fade Out is enabled) but Prev/Next cut the audio
+        abruptly."""
+        def _sequence():
+            try:
+                wait = self.player.trigger_fade_out()
+            except Exception:
+                wait = 0
+            if wait and wait > 0:
+                time.sleep(wait)
+            self._track_switch_ready.emit(index)
+
+        threading.Thread(target=_sequence, daemon=True).start()
+
+    def _on_stopped(self) -> None:
+        # Matches ui/controls.py's stop() + ui/main_window.py's "stop"
+        # status handler: clear current_index and the playlist's
+        # now-playing highlight — an earlier version left both pointing at
+        # the stopped track indefinitely after Stop was pressed.
+        self.state.current_index = None
+        self.playlist_view.refresh_highlight()
+        self._update_menu_state()
+
+    def _find_action(self, menu, label: str):
+        for action in menu.actions():
+            if action.text() == label:
+                return action
+            if action.menu() is not None:
+                found = self._find_action(action.menu(), label)
+                if found is not None:
+                    return found
+        return None
+
+    def _update_menu_state(self) -> None:
+        has_songs = bool(self.state.playlist)
+        if self._action_save_playlist is not None:
+            self._action_save_playlist.setEnabled(has_songs)
+        if self._action_save_playlist_as is not None:
+            self._action_save_playlist_as.setEnabled(has_songs)
+        if self._action_play_after_current is not None:
+            self._action_play_after_current.setEnabled(has_songs and self.state.current_index is not None)
 
     def _on_open_audio_effects(self) -> None:
         logger.info("[ui_qt stub] Audio Effects window not ported yet")
@@ -348,6 +429,7 @@ class MainWindowQt(QWidget):
         self.state.current_index = index
         self.controls.play_file(self.state.playlist[index])
         self.playlist_view.refresh_highlight()
+        self._update_menu_state()
 
     def _on_track_ended(self) -> None:
         """Connected to PlayerBridge.track_ended (see main_qt.py) in place
@@ -388,6 +470,52 @@ class MainWindowQt(QWidget):
         self.settings.show_browser = visible
         self._save_settings_safe()
 
+    def _build_audio_device_items(self) -> list:
+        # Matches ui/main_window.py:849-878 — an earlier version left this
+        # submenu permanently empty ("submenu": []), so switching the
+        # app's actual audio output device was entirely inaccessible in
+        # the Qt build (only the browser's separate *preview* player had
+        # working device selection). Built once at menu-construction time,
+        # same as Tk (_build_audio_device_menu_items is called once from
+        # Tk's own _build_menu, not rebuilt on every menu open).
+        try:
+            devices = self.player.get_audio_devices()
+        except Exception:
+            logger.exception("Failed to load audio devices")
+            return [{"label": "Error loading devices", "state": "disabled"}]
+        if not devices:
+            return [{"label": "No devices found", "state": "disabled"}]
+        current_id = getattr(self.player, "_device_id", None)
+        items = []
+        for i, (device_id, device_name) in enumerate(devices):
+            label = device_name if i > 0 else f"{device_name} (system default)"
+            checked = (device_id == current_id) if current_id is not None else (i == 0)
+            items.append({
+                "label": label,
+                "radiobutton": True,
+                "group": "audio_device",
+                "checked": checked,
+                "command": lambda dev_id=device_id: self._set_audio_device(dev_id),
+            })
+        return items
+
+    def _set_audio_device(self, device_id: str) -> None:
+        try:
+            self.player.set_audio_device(device_id)
+            self.browser_view.refresh_preview_devices()
+        except Exception:
+            logger.exception("Failed to set audio device: %s", device_id)
+            QMessageBox.critical(self, "Error", f"Failed to set audio device: {device_id}")
+
+    def _open_documentation(self, doc_filename: str) -> None:
+        # ui/documentation_view.py has zero tkinter coupling (only touches
+        # theme_manager.palette/.settings.theme, then renders to a temp
+        # HTML file and opens it via webbrowser.open) — reused as-is here
+        # rather than duplicated, matching how app/ and audio/ are shared.
+        # An earlier version left these two menu items with no "command"
+        # at all despite this being trivially portable.
+        open_doc_in_browser(doc_filename, self.theme)
+
     def _save_settings_safe(self) -> None:
         try:
             self.settings.save()
@@ -426,17 +554,33 @@ class MainWindowQt(QWidget):
     # ---------- geometry persistence ----------
 
     def _apply_initial_geometry(self) -> None:
+        # Matches ui/main_window.py:427-449: a hard minimum size, and a
+        # restored geometry clamped to the CURRENT screen's bounds (at
+        # least 150px reachable) rather than trusted as-is. An earlier
+        # version did neither — a frameless window with no minimum could
+        # be resized down to near-zero with no recovery, and a geometry
+        # saved from a monitor layout that no longer exists (e.g. an
+        # unplugged second display) could restore fully off-screen with
+        # no native titlebar to drag it back by.
+        self.setMinimumSize(*MIN_SIZE)
+        screen = QApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen is not None else None
+
         saved = getattr(self.settings, "window_geometry_qt", None)
         if saved:
             match = _GEOMETRY_RE.match(saved)
             if match:
                 w, h, x, y = (int(v) for v in match.groups())
+                w = max(w, MIN_SIZE[0])
+                h = max(h, MIN_SIZE[1])
+                if avail is not None:
+                    x = max(avail.x() - w + 150, min(x, avail.x() + avail.width() - 150))
+                    y = max(avail.y() - h + 150, min(y, avail.y() + avail.height() - 150))
                 self.setGeometry(x, y, w, h)
                 return
+
         w, h = DEFAULT_SIZE
-        screen = QApplication.primaryScreen()
-        if screen is not None:
-            avail = screen.availableGeometry()
+        if avail is not None:
             x = avail.x() + (avail.width() - w) // 2
             y = avail.y() + (avail.height() - h) // 2
         else:

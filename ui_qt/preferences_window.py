@@ -17,6 +17,7 @@ under the app-wide stylesheet.
 import json
 import logging
 
+import audio.metadata as metadata_module
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -193,6 +194,14 @@ class PreferencesWindowQt(QDialog):
         self.theme.reload()
         self.settings.mini_player_enabled = self.checkbox_mini_player.isChecked()
         self.settings.bpm_mode = "perceived" if self.radio_bpm_perceived.isChecked() else "raw"
+        # Matches ui/preferences_window.py:400-401 — without this,
+        # audio.metadata.BPM_PREFERENCE never picks up the new choice
+        # until the next full app restart (main_qt.py only applies the
+        # startup value once), same gap as the one main_qt.py itself had.
+        try:
+            metadata_module.set_bpm_preference(self.settings.bpm_mode)
+        except Exception:
+            logger.exception("Failed to apply BPM preference")
         try:
             self.settings.save()
         except Exception:

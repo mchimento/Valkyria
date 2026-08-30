@@ -90,6 +90,16 @@ class _BrowserTree(QTreeWidget):
             return
         event.ignore()
 
+    def keyPressEvent(self, event) -> None:
+        # Matches ui/browser_view.py:279's tree.bind('<Delete>', ...) — an
+        # earlier version had no way to remove a single mistaken entry
+        # from the browser's file list at all; only re-browsing a whole
+        # folder/file selection (replacing the entire list) could change it.
+        if event.key() == Qt.Key_Delete:
+            self._owner._remove_selected_from_browser()
+            return
+        super().keyPressEvent(event)
+
 
 class BrowserViewQt(QWidget):
     _preview_ended = Signal()
@@ -203,6 +213,13 @@ class BrowserViewQt(QWidget):
             for i in range(self._tree.topLevelItemCount())
         ]
 
+    def _remove_selected_from_browser(self) -> None:
+        selected_paths = {item.data(0, Qt.UserRole) for item in self._tree.selectedItems()}
+        if not selected_paths:
+            return
+        self.state.browser_files = [p for p in self.state.browser_files if p not in selected_paths]
+        self.refresh()
+
     def _on_open_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Open Folder")
         if not folder:
@@ -292,6 +309,16 @@ class BrowserViewQt(QWidget):
         return [(did, name) for did, name in all_devices if did not in excluded]
 
     def _refresh_preview_devices(self) -> None:
+        # Matches ui/browser_view.py:835-850: preserve the user's current
+        # selection if it's still present in the refreshed list, only
+        # falling back to the first entry if it's genuinely gone. An
+        # earlier version always cleared+repopulated unconditionally,
+        # which silently reset the combo (and the device _preview_play
+        # would actually use) to the first device on every single refresh
+        # — including the one _preview_play itself triggers right before
+        # reading the selection, so a chosen non-default device was never
+        # actually used for preview playback.
+        previous_selection = self.preview_device_combo.currentText()
         devices = self._get_preview_devices()
         self._preview_devices = devices
         self.preview_device_combo.blockSignals(True)
@@ -302,7 +329,10 @@ class BrowserViewQt(QWidget):
             self.btn_preview_play.setEnabled(False)
             self.btn_preview_stop.setEnabled(False)
         else:
-            self.preview_device_combo.addItems([name for _did, name in devices])
+            names = [name for _did, name in devices]
+            self.preview_device_combo.addItems(names)
+            if previous_selection in names:
+                self.preview_device_combo.setCurrentText(previous_selection)
             self.preview_device_combo.setEnabled(True)
             self.btn_preview_play.setEnabled(True)
             self.btn_preview_stop.setEnabled(True)
