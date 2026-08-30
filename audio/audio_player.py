@@ -1101,37 +1101,6 @@ class AudioPlayer:
             return [('__DEFAULT__', 'Default Audio Device')]
 
     def get_default_output_info(self):
-        """
-        Best-effort resolution of what '__DEFAULT__' (and ALSA's
-        "default"/"pipewire"/etc. alias devices) actually reaches right
-        now. sounddevice/PortAudio only sees the ALSA hostapi's fixed
-        device list (raw hw:CARD,DEV entries plus ALSA's own alias
-        plugin names) and has zero visibility into what PipeWire's
-        active default *sink* currently is — confirmed on a real system
-        via sd.query_hostapis() showing only an "ALSA" hostapi, no
-        native PipeWire/Pulse one. That list is also static: it doesn't
-        change when the user connects a Bluetooth headset and PipeWire
-        switches its default sink to it, so callers that assumed
-        "default routes to the first hw: card" (a reasonable guess when
-        it's true) went silently wrong the moment it wasn't. On a
-        PipeWire+WirePlumber system (this app's primary target),
-        `wpctl inspect @DEFAULT_AUDIO_SINK@` is the only way to actually
-        know, so this shells out to it.
-
-        Returns (alsa_card, description):
-          - alsa_card is the ALSA card number (e.g. "0") when the
-            current default sink is backed by real ALSA hardware, else
-            None.
-          - description is the sink's live human-readable name (e.g.
-            "TWS-D2500" for a Bluetooth headset) when it could be
-            determined, else None.
-          (None, None) means "unknown" (wpctl missing, command failed,
-          unexpected output) — callers should fall back to their own
-          best-effort default rather than treating it as "non-ALSA."
-          (None, "some name") means "known, and definitely not ALSA
-          hardware" (e.g. Bluetooth) — no hw:CARD,DEV entry can be the
-          same device as this.
-        """
         try:
             result = subprocess.run(
                 ["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"],
