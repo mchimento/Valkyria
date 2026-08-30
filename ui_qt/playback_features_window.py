@@ -138,10 +138,17 @@ class PlaybackFeaturesWindowQt(QDialog):
         # Applying the loaded/saved enabled-state to the slider's disabled
         # look and to the player happens once here — same as Tk calling
         # _on_fade_in_toggle()/_on_fade_out_toggle() right after building
-        # the sliders (ui/playback_features_view.py:200-201).
+        # the sliders (ui/playback_features_view.py:200-201). Also covers
+        # checkbox_silence for the same reason, even though Tk doesn't:
+        # setChecked() above runs before .toggled.connect(), so it can't
+        # itself fire _on_silence_toggle — if the checkbox's initial value
+        # is already True (state.silence_detection_enabled was already on
+        # when this dialog was opened/reopened), that True never actually
+        # reaches self.player without this explicit call.
         self._on_fade_in_toggle(self.checkbox_fade_in.isChecked())
         self._on_fade_out_toggle(self.checkbox_fade_out.isChecked())
         self._on_crossfade_toggle(self.checkbox_crossfade.isChecked())
+        self._on_silence_toggle(self.checkbox_silence.isChecked())
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Close)
         for role in (QDialogButtonBox.Save, QDialogButtonBox.Close):

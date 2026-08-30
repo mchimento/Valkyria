@@ -59,6 +59,19 @@ def main():
     player.set_fade_in_duration(settings.fade_in_duration)
     player.set_fade_out_enabled(settings.fade_out_enabled)
     player.set_fade_out_duration(settings.fade_out_duration)
+    # Fade in/out were already applied to the player at startup from saved
+    # settings, but silence detection wasn't — state.silence_detection_enabled
+    # got the saved value (see MainWindowQt.__init__), but the actual
+    # AudioPlayer instance that plays audio never did unless the Playback
+    # Features dialog was reopened and its checkbox genuinely toggled THIS
+    # session. So a user who enabled and saved it in an earlier session saw
+    # it look enabled (state/checkbox both say so) while it silently never
+    # ran, every time, until they happened to re-toggle it. This is a
+    # pre-existing gap in the original app too (ui/app/application.py has
+    # the identical omission), not something introduced here — fixed only
+    # on the Qt side per this migration's scope, matching the fade in/out
+    # precedent right above it.
+    player.silence_detection_enabled = settings.silence_detection_enabled
 
     # Matches app/application.py's ValkyriaApp.__init__ — without this,
     # audio.metadata.BPM_PREFERENCE stays stuck at its hardcoded module
