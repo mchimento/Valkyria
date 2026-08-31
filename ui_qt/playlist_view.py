@@ -83,6 +83,8 @@ class PlaylistViewQt(QWidget):
     selection_changed = Signal()
     show_track_info_requested = Signal(int)  # actual playlist index
     show_booklet_requested = Signal(int)
+    set_time_limit_requested = Signal(int)
+    clear_time_limit_requested = Signal(int)
 
     def __init__(self, state, palette: dict, player=None, parent=None):
         super().__init__(parent)
@@ -193,6 +195,25 @@ class PlaylistViewQt(QWidget):
         self._load_metadata_async(load_id)
         self.playlist_changed.emit()
 
+    def _duration_text(self, path: str, meta: dict) -> str:
+        # Matches ui/playlist_view.py: a track with an active play_limits
+        # entry shows the limit instead of its real duration in this column.
+        if path in self.state.play_limits:
+            return f"⏱ {int(self.state.play_limits[path])}s"
+        return meta.get("duration", "")
+
+    def refresh_time_limit_display(self, index: int) -> None:
+        """Re-renders one row's Duration column after its play_limits entry
+        changes, without a full playlist reload."""
+        if not (0 <= index < len(self.state.playlist)):
+            return
+        filepath = self.state.playlist[index]
+        for i in range(self._tree.topLevelItemCount()):
+            item = self._tree.topLevelItem(i)
+            if self._actual_index(item) == index:
+                item.setText(3, self._duration_text(filepath, get_metadata(filepath)))
+                return
+
     def refresh_highlight(self) -> None:
         highlight = QColor(self.palette.get("highlight", self.palette.get("select_bg", "#FFF59D")))
         transparent = QColor(Qt.transparent)
@@ -250,7 +271,7 @@ class PlaylistViewQt(QWidget):
         wanted = set(self._pending_selection)
         for actual_index, path, meta in batch:
             title = meta.get("title") or os.path.basename(path)
-            item = QTreeWidgetItem(["", meta.get("artist", ""), meta.get("album", ""), meta.get("duration", "")])
+            item = QTreeWidgetItem(["", meta.get("artist", ""), meta.get("album", ""), self._duration_text(path, meta)])
             item.setData(0, Qt.UserRole, path)
             item.setData(0, Qt.UserRole + 1, title)
             item.setData(0, Qt.UserRole + 2, actual_index)
@@ -319,6 +340,9 @@ class PlaylistViewQt(QWidget):
         menu = QMenu(self)
         menu.addAction("Play", lambda: self.track_activated.emit(index))
         menu.addAction("Play After Current", lambda: self._context_play_after_current(index))
+        menu.addSeparator()
+        menu.addAction("Play for time...", lambda: self.set_time_limit_requested.emit(index))
+        menu.addAction("Clear time limit", lambda: self.clear_time_limit_requested.emit(index))
         menu.addSeparator()
         menu.addAction("Show Metadata", lambda: self.show_track_info_requested.emit(index))
         menu.addAction("Show Album Booklet", lambda: self.show_booklet_requested.emit(index))

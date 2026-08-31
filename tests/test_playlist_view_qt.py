@@ -196,6 +196,51 @@ def test_context_menu_show_booklet_emits_signal_with_actual_index(qtbot, view):
     assert blocker.args == [2]
 
 
+def test_context_menu_play_for_time_emits_signal_with_actual_index(qtbot, view):
+    actions = _build_context_menu_actions(view, 1)
+    with qtbot.waitSignal(view.set_time_limit_requested, timeout=1000) as blocker:
+        actions["Play for time..."]()
+    assert blocker.args == [1]
+
+
+def test_context_menu_clear_time_limit_emits_signal_with_actual_index(qtbot, view):
+    actions = _build_context_menu_actions(view, 2)
+    with qtbot.waitSignal(view.clear_time_limit_requested, timeout=1000) as blocker:
+        actions["Clear time limit"]()
+    assert blocker.args == [2]
+
+
+def test_row_shows_time_limit_instead_of_duration(qtbot, state):
+    state.play_limits["/tmp/b.mp3"] = 45.0
+    view = PlaylistViewQt(state, PALETTE)
+    qtbot.addWidget(view)
+    qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 3, timeout=2000)
+
+    row = view._tree.topLevelItem(1)
+    assert row.text(3) == "⏱ 45s"
+
+
+def test_row_shows_real_duration_without_limit(qtbot, view):
+    row = view._tree.topLevelItem(0)
+    assert "⏱" not in row.text(3)
+
+
+def test_refresh_time_limit_display_updates_row_after_setting(view, state):
+    state.play_limits["/tmp/b.mp3"] = 30.0
+    view.refresh_time_limit_display(1)
+    row = view._tree.topLevelItem(1)
+    assert row.text(3) == "⏱ 30s"
+
+
+def test_refresh_time_limit_display_updates_row_after_clearing(view, state):
+    state.play_limits["/tmp/b.mp3"] = 30.0
+    view.refresh_time_limit_display(1)
+    del state.play_limits["/tmp/b.mp3"]
+    view.refresh_time_limit_display(1)
+    row = view._tree.topLevelItem(1)
+    assert "⏱" not in row.text(3)
+
+
 def test_internal_drag_resync_reorders_and_remaps_current_index(view, state):
     state.current_index = 1  # currently playing b.mp3
 

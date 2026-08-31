@@ -51,6 +51,25 @@ def controls(qtbot, mock_player, settings):
 
 
 @pytest.fixture
+def mock_state():
+    state = MagicMock()
+    state.current_index = 0
+    state.playlist = ["/tmp/a.mp3"]
+    state.play_limits = {}
+    return state
+
+
+@pytest.fixture
+def controls_with_state(qtbot, mock_player, settings, mock_state):
+    bar = ControlsBarQt(mock_player, settings, PALETTE, state=mock_state)
+    qtbot.addWidget(bar)
+    mock_player.reset_mock()
+    mock_player.is_playing.return_value = True
+    mock_player.is_paused.return_value = False
+    return bar
+
+
+@pytest.fixture
 def tiny_wav(tmp_path):
     path = tmp_path / "tone.wav"
     sr = 8000
@@ -211,3 +230,73 @@ def test_real_player_track_end_bridges_across_thread(qtbot, settings):
     worker.join()
 
     qtbot.waitUntil(lambda: bar.current_time_label.text() == "--:--", timeout=2000)
+
+
+def test_time_limit_reached_fires_when_elapsed_exceeds_limit(controls_with_state, mock_state):
+    mock_state.play_limits["/tmp/a.mp3"] = 30  # seconds
+    received = []
+    controls_with_state.time_limit_reached.connect(lambda: received.append(True))
+
+    controls_with_state._check_time_limit(30_000)  # exactly at the limit, in ms
+
+    assert received == [True]
+    assert controls_with_state._time_limit_fired is True
+
+
+def test_time_limit_does_not_fire_before_limit_reached(controls_with_state, mock_state):
+    mock_state.play_limits["/tmp/a.mp3"] = 30
+    received = []
+    controls_with_state.time_limit_reached.connect(lambda: received.append(True))
+
+    controls_with_state._check_time_limit(29_000)
+
+    assert received == []
+    assert controls_with_state._time_limit_fired is False
+
+
+def test_time_limit_does_not_fire_without_a_limit_set(controls_with_state):
+    received = []
+    controls_with_state.time_limit_reached.connect(lambda: received.append(True))
+
+    controls_with_state._check_time_limit(999_000)
+
+    assert received == []
+
+
+def test_time_limit_does_not_fire_while_paused(controls_with_state, mock_player, mock_state):
+    mock_state.play_limits["/tmp/a.mp3"] = 10
+    mock_player.is_paused.return_value = True
+    received = []
+    controls_with_state.time_limit_reached.connect(lambda: received.append(True))
+
+    controls_with_state._check_time_limit(20_000)
+
+    assert received == []
+
+
+def test_time_limit_does_not_fire_when_not_playing(controls_with_state, mock_player, mock_state):
+    mock_state.play_limits["/tmp/a.mp3"] = 10
+    mock_player.is_playing.return_value = False
+    received = []
+    controls_with_state.time_limit_reached.connect(lambda: received.append(True))
+
+    controls_with_state._check_time_limit(20_000)
+
+    assert received == []
+
+
+def test_time_limit_only_fires_once(controls_with_state, mock_state):
+    mock_state.play_limits["/tmp/a.mp3"] = 10
+    received = []
+    controls_with_state.time_limit_reached.connect(lambda: received.append(True))
+
+    controls_with_state._check_time_limit(20_000)
+    controls_with_state._check_time_limit(21_000)
+
+    assert received == [True]
+
+
+def test_time_limit_fired_flag_resets_on_play_file(controls_with_state, tiny_wav):
+    controls_with_state._time_limit_fired = True
+    controls_with_state.play_file(tiny_wav)
+    assert controls_with_state._time_limit_fired is False

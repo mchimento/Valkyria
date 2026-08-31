@@ -511,3 +511,95 @@ def test_close_event_stops_mini_player_timer(qtbot, window, settings):
     window.close()
 
     assert not mini_player._timer.isActive()
+
+
+# ---------- Play for time / Clear time limit ----------
+
+def _mock_time_limit_dialog(result):
+    mock_dialog = MagicMock()
+    mock_dialog.exec.return_value = None
+    mock_dialog.result = result
+    mock_cls = MagicMock(return_value=mock_dialog)
+    return mock_cls, mock_dialog
+
+
+def test_set_time_limit_writes_value(window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    mock_cls, _ = _mock_time_limit_dialog(45.0)
+    with patch("ui_qt.main_window.TimeLimitDialogQt", mock_cls):
+        window._set_time_limit(1)
+    assert window.state.play_limits["/tmp/b.mp3"] == 45.0
+
+
+def test_set_time_limit_clears_on_none_result(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.play_limits["/tmp/a.mp3"] = 30.0
+    mock_cls, _ = _mock_time_limit_dialog(None)
+    with patch("ui_qt.main_window.TimeLimitDialogQt", mock_cls):
+        window._set_time_limit(0)
+    assert "/tmp/a.mp3" not in window.state.play_limits
+
+
+def test_set_time_limit_noop_on_cancel(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.play_limits["/tmp/a.mp3"] = 30.0
+    mock_cls, _ = _mock_time_limit_dialog("CANCEL")
+    with patch("ui_qt.main_window.TimeLimitDialogQt", mock_cls):
+        window._set_time_limit(0)
+    assert window.state.play_limits["/tmp/a.mp3"] == 30.0
+
+
+def test_set_time_limit_starts_status_timer_for_current_track(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.current_index = 0
+    mock_cls, _ = _mock_time_limit_dialog(20.0)
+    with patch("ui_qt.main_window.TimeLimitDialogQt", mock_cls), \
+         patch.object(window.status_view, "_start_time_limit_updates") as mock_start:
+        window._set_time_limit(0)
+    mock_start.assert_called_once_with(window.controls)
+
+
+def test_set_time_limit_does_not_start_timer_for_other_track(window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.state.current_index = 0
+    mock_cls, _ = _mock_time_limit_dialog(20.0)
+    with patch("ui_qt.main_window.TimeLimitDialogQt", mock_cls), \
+         patch.object(window.status_view, "_start_time_limit_updates") as mock_start:
+        window._set_time_limit(1)
+    mock_start.assert_not_called()
+
+
+def test_clear_time_limit_removes_entry_and_stops_timer_if_current(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.current_index = 0
+    window.state.play_limits["/tmp/a.mp3"] = 30.0
+    with patch.object(window.status_view, "_stop_time_limit_updates") as mock_stop:
+        window._clear_time_limit(0)
+    assert "/tmp/a.mp3" not in window.state.play_limits
+    mock_stop.assert_called_once()
+
+
+def test_clear_time_limit_noop_when_no_limit_set(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    with patch.object(window.status_view, "_stop_time_limit_updates") as mock_stop:
+        window._clear_time_limit(0)
+    mock_stop.assert_not_called()
+
+
+def test_play_for_time_menu_no_target_shows_message(window):
+    with patch("ui_qt.main_window.QMessageBox") as mock_box:
+        window._on_play_for_time_menu()
+    mock_box.information.assert_called_once()
+
+
+def test_play_for_time_menu_resolves_via_selection(qtbot, window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.playlist_view.refresh()
+    qtbot.waitUntil(lambda: window.playlist_view._tree.topLevelItemCount() == 2, timeout=2000)
+    window.playlist_view._select_indices([1])
+
+    mock_cls, _ = _mock_time_limit_dialog(15.0)
+    with patch("ui_qt.main_window.TimeLimitDialogQt", mock_cls):
+        window._on_play_for_time_menu()
+
+    assert window.state.play_limits["/tmp/b.mp3"] == 15.0

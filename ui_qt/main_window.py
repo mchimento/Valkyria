@@ -40,6 +40,7 @@ from ui_qt.playlist_view import PlaylistViewQt
 from ui_qt.preferences_window import PreferencesWindowQt
 from ui_qt.status_view import StatusViewQt
 from ui_qt.theme_bridge import apply_theme
+from ui_qt.time_limit_dialog import TimeLimitDialogQt
 
 logger = logging.getLogger(__name__)
 
@@ -170,12 +171,15 @@ class MainWindowQt(QWidget):
         self.controls.effects_requested.connect(self._on_open_audio_effects)
         self.controls.stopped.connect(self._on_stopped)
         self.controls.crossfade_requested.connect(self._on_track_ended)
+        self.controls.time_limit_reached.connect(self._on_track_ended)
         self.controls.paused_state_changed.connect(self._on_pause_toggled)
         self._track_switch_ready.connect(self._play_index, Qt.QueuedConnection)
         self.playlist_view.playlist_changed.connect(self._update_menu_state)
         self.playlist_view.selection_changed.connect(self._update_menu_state)
         self.playlist_view.show_track_info_requested.connect(lambda i: self._open_track_info(self.state.playlist[i]))
         self.playlist_view.show_booklet_requested.connect(lambda i: self._open_booklet(self.state.playlist[i]))
+        self.playlist_view.set_time_limit_requested.connect(self._set_time_limit)
+        self.playlist_view.clear_time_limit_requested.connect(self._clear_time_limit)
         # Relays into the same cleanup a real Stop press gets (waveform reset, etc).
         self.playlist_view.playback_stopped.connect(self.controls.stopped)
         self._update_menu_state()
@@ -240,7 +244,7 @@ class MainWindowQt(QWidget):
             {"label": "Move Down", "command": lambda: self.playlist_view.move_down(), "accelerator": "Ctrl+Down"},
             {"separator": True},
             {"label": "Play After Current Song", "command": lambda: self.playlist_view.play_after_current_selected(), "accelerator": "Ctrl+N"},
-            {"label": "Play for time..."},
+            {"label": "Play for time...", "command": self._on_play_for_time_menu},
             {"separator": True},
             {"label": "Remove Selected", "command": lambda: self.playlist_view.remove_selected(), "accelerator": "Delete"},
             {"label": "Clear", "command": lambda: self.playlist_view.clear(), "accelerator": "Ctrl+C"},
@@ -505,6 +509,47 @@ class MainWindowQt(QWidget):
         self._track_booklet_windows.append(win)
         win.finished.connect(lambda _: self._track_booklet_windows.remove(win) if win in self._track_booklet_windows else None)
         win.show()
+
+    def _on_play_for_time_menu(self) -> None:
+        index = self._resolve_track_target_index()
+        if index is None or not (0 <= index < len(self.state.playlist)):
+            QMessageBox.information(self, "No Track Selected", "No track is selected")
+            return
+        self._set_time_limit(index)
+
+    def _set_time_limit(self, index: int) -> None:
+        if not (0 <= index < len(self.state.playlist)):
+            return
+        filepath = self.state.playlist[index]
+        current = self.state.play_limits.get(filepath)
+        dialog = TimeLimitDialogQt(self, current)
+        dialog.exec()
+        result = dialog.result
+        if result == "CANCEL":
+            return
+        is_current = self.state.current_index == index
+        if result is None:
+            self.state.play_limits.pop(filepath, None)
+            self.status_view.set_temporary_status("Playback time limit cleared")
+            if is_current:
+                self.status_view._stop_time_limit_updates()
+        else:
+            self.state.play_limits[filepath] = result
+            self.status_view.set_temporary_status(f"Playback time limit set to {int(result)}s")
+            if is_current:
+                self.status_view._start_time_limit_updates(self.controls)
+        self.playlist_view.refresh_time_limit_display(index)
+
+    def _clear_time_limit(self, index: int) -> None:
+        if not (0 <= index < len(self.state.playlist)):
+            return
+        filepath = self.state.playlist[index]
+        if filepath in self.state.play_limits:
+            del self.state.play_limits[filepath]
+            self.status_view.set_temporary_status("Playback time limit cleared")
+            if self.state.current_index == index:
+                self.status_view._stop_time_limit_updates()
+            self.playlist_view.refresh_time_limit_display(index)
 
     def _on_metadata_saved(self, filepath: str) -> None:
         try:

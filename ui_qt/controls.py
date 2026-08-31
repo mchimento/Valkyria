@@ -49,6 +49,7 @@ class ControlsBarQt(QWidget):
     repeat_toggle_requested = Signal()
     effects_requested = Signal()
     crossfade_requested = Signal()
+    time_limit_reached = Signal()
     paused_state_changed = Signal(bool)
 
     def __init__(self, player, settings, palette: dict, state=None, parent=None):
@@ -59,6 +60,7 @@ class ControlsBarQt(QWidget):
         self.state = state
         self._is_muted = False
         self._crossfade_fired = False
+        self._time_limit_fired = False
         self.is_playing = False
         self.is_paused = False
 
@@ -240,6 +242,7 @@ class ControlsBarQt(QWidget):
         self.current_time_label.setText("00:00")
         self.total_time_label.setText("--:--")
         self._crossfade_fired = False
+        self._time_limit_fired = False
         threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
         self.waveform.load_waveform(path)
         self.is_playing = True
@@ -302,6 +305,7 @@ class ControlsBarQt(QWidget):
             self.current_time_label.setText(_format_ms(time_ms))
             self.total_time_label.setText(_format_ms(length_ms))
             self._check_crossfade(time_ms, length_ms)
+            self._check_time_limit(time_ms)
         else:
             self.current_time_label.setText("--:--")
             self.total_time_label.setText("--:--")
@@ -330,6 +334,26 @@ class ControlsBarQt(QWidget):
         if 0 < remaining <= duration_ms:
             self._crossfade_fired = True
             self.crossfade_requested.emit()
+
+    def _check_time_limit(self, time_ms: int) -> None:
+        """Matches ui/controls.py:553-565's enforcement check — but signals
+        MainWindowQt to advance via _on_track_ended (same repeat-mode-aware
+        path crossfade already uses above) instead of tkinter's separate
+        player.stop() + delayed _on_next() sequence."""
+        if self._time_limit_fired or self.state is None:
+            return
+        try:
+            if not self.player.is_playing() or self.player.is_paused():
+                return
+        except Exception:
+            return
+        idx = self.state.current_index
+        if idx is None or idx >= len(self.state.playlist):
+            return
+        limit_s = self.state.play_limits.get(self.state.playlist[idx])
+        if limit_s is not None and time_ms >= limit_s * 1000:
+            self._time_limit_fired = True
+            self.time_limit_reached.emit()
 
     # ---------- volume / mute ----------
 
