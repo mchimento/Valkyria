@@ -95,6 +95,10 @@ def build_stylesheet(palette: dict) -> str:
         border-radius: 6px;
     }}
 
+    QWidget#DJButtonRow {{
+        background: transparent;
+    }}
+
     QWidget#CentralArea {{
         background-color: {bg};
     }}

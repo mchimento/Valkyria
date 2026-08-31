@@ -14,6 +14,9 @@ from audio.metadata import get_display_bpm, get_metadata, key_to_camelot, metada
 
 logger = logging.getLogger(__name__)
 
+ROW_HEIGHT = 26  # fixed per-row height so both columns' rows line up and
+                 # don't shift when the save buttons show/hide.
+
 
 def _peak_color(normalized: float) -> str:
     if normalized < 0.4:
@@ -112,7 +115,7 @@ class DJViewQt(QWidget):
 
     def _build_widgets(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 12, 0, 0)
+        outer.setContentsMargins(12, 12, 0, 0)
 
         self.panel = QFrame(self)
         self.panel.setObjectName("DJPanel")
@@ -138,7 +141,16 @@ class DJViewQt(QWidget):
         self.key_title, self.key_label = self._add_value_row(right_column, "KEY", "Estimating...")
         self.energy_title, self.energy_meter = self._add_meter_row(right_column, "ENERGY", 100)
 
-        button_row = QHBoxLayout()
+        # Fixed-height container (not just a layout) so this row keeps
+        # reserving its space even when both buttons are hidden — a plain
+        # QHBoxLayout collapses to zero height with no visible children,
+        # which would shift every row above it since the column is
+        # vertically centered as a whole.
+        button_container = QWidget()
+        button_container.setObjectName("DJButtonRow")
+        button_container.setFixedHeight(ROW_HEIGHT)
+        button_row = QHBoxLayout(button_container)
+        button_row.setContentsMargins(0, 0, 0, 0)
         button_row.setSpacing(8)
         self.save_btn = QPushButton("Save BPM")
         self.save_btn.setObjectName("DJSaveButton")
@@ -151,7 +163,7 @@ class DJViewQt(QWidget):
         button_row.addWidget(self.save_btn)
         button_row.addWidget(self.save_key_btn)
         button_row.addStretch(1)
-        right_column.addLayout(button_row)
+        right_column.addWidget(button_container)
         content.addLayout(right_column, 1)
         content.setAlignment(right_column, Qt.AlignVCenter)
 
@@ -164,7 +176,8 @@ class DJViewQt(QWidget):
         title_font.setBold(True)
         title.setFont(title_font)
         title.setFixedWidth(100 if "Overall" in title_text else 60)
-        row.addWidget(title)
+        title.setFixedHeight(ROW_HEIGHT)
+        row.addWidget(title, 0, Qt.AlignVCenter)
 
         value = QLabel("-60.0" if title_text.startswith("LUFS") else "--")
         value_font = QFont()
@@ -173,7 +186,8 @@ class DJViewQt(QWidget):
         value.setFont(value_font)
         # Fixed width so "Estimating..."/short values don't reflow the row.
         value.setFixedWidth(QFontMetrics(value_font).horizontalAdvance(widest_text) + 4)
-        row.addWidget(value)
+        value.setFixedHeight(ROW_HEIGHT)
+        row.addWidget(value, 0, Qt.AlignVCenter)
         row.addStretch(1)
         parent_layout.addLayout(row)
         return title, value
@@ -187,9 +201,10 @@ class DJViewQt(QWidget):
         title_font.setBold(True)
         title.setFont(title_font)
         title.setFixedWidth(50)
-        row.addWidget(title)
+        title.setFixedHeight(ROW_HEIGHT)
+        row.addWidget(title, 0, Qt.AlignVCenter)
         meter = MeterBar(meter_width)
-        row.addWidget(meter)
+        row.addWidget(meter, 0, Qt.AlignVCenter)
         row.addStretch(1)
         parent_layout.addLayout(row)
         return title, meter

@@ -497,6 +497,12 @@ class AudioPlayer:
                     else:
                         outdata[:] *= ramp
 
+        # LUFS/peak/limiter/energy metrics reflect the track's own content,
+        # like a real DJ mixer's meters — snapshot before mute/volume (the
+        # monitor level) are applied, not after. Only copy when something's
+        # actually listening — this runs on every real-time audio callback.
+        metrics_source = outdata.copy() if self._audio_metrics_callback is not None else None
+
         if self._muted:
             outdata[:] = 0
         else:
@@ -529,7 +535,8 @@ class AudioPlayer:
                     self._silence_frames_count = 0
 
         # Calculate audio metrics if callback is registered
-        self._update_audio_metrics(outdata)
+        if metrics_source is not None:
+            self._update_audio_metrics(metrics_source)
 
     def _on_stream_finished(self):
         """Called when stream finishes (stops or ends)."""

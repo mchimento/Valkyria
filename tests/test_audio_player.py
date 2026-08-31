@@ -1,3 +1,4 @@
+import time
 import unittest
 from unittest.mock import Mock, MagicMock, patch
 import numpy as np
@@ -271,6 +272,66 @@ class TestAudioPlayerSilenceDetection(unittest.TestCase):
         )
         self._run_quiet_callbacks(player)
         self.assertFalse(player._silence_detected)
+
+
+class TestAudioPlayerMetricsVolumeIndependence(unittest.TestCase):
+    """Regression tests for LUFS/peak/limiter/energy metrics being measured
+    on the track's own content, not the volume/mute-scaled output — like a
+    real DJ mixer's meters, which don't move just because you turn down
+    the monitor."""
+
+    class ConstantLevelBuffer:
+        def __init__(self, amplitude, channels=2, samplerate=44100):
+            self.channels = channels
+            self.samplerate = samplerate
+            self.absolute_read_pos = 0
+            self.eof = False
+            self._amplitude = amplitude
+
+        def read(self, frames):
+            return np.full((frames, self.channels), self._amplitude, dtype="float32")
+
+    def _make_player(self):
+        player = AudioPlayer()
+        player.effects.process = lambda x: x
+        player._buffer = self.ConstantLevelBuffer(amplitude=0.5)
+        return player
+
+    def _capture_one_update(self, player, frames=4410):
+        received = []
+        player.set_audio_metrics_callback(lambda *args: received.append(args))
+        player._metrics_last_update = 0  # force the next callback to fire
+        outdata = np.zeros((frames, 2), dtype="float32")
+        player._stream_callback(outdata, frames, None, None)
+        deadline = time.time() + 2.0
+        while not received and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(received, "metrics callback never fired")
+        _lufs, _overall, peak_dbfs, _limiter, energy = received[-1]
+        return peak_dbfs, energy
+
+    def test_metrics_unaffected_by_volume(self):
+        player = self._make_player()
+        player._volume = 100
+        full_volume_peak, full_volume_energy = self._capture_one_update(player)
+
+        player._volume = 10
+        low_volume_peak, low_volume_energy = self._capture_one_update(player)
+
+        self.assertAlmostEqual(full_volume_peak, low_volume_peak, places=3)
+        self.assertAlmostEqual(full_volume_energy, low_volume_energy, places=3)
+
+    def test_metrics_unaffected_by_mute(self):
+        player = self._make_player()
+        player._volume = 100
+        player._muted = False
+        unmuted_peak, unmuted_energy = self._capture_one_update(player)
+
+        player._muted = True
+        muted_peak, muted_energy = self._capture_one_update(player)
+
+        self.assertAlmostEqual(unmuted_peak, muted_peak, places=3)
+        self.assertAlmostEqual(unmuted_energy, muted_energy, places=3)
 
 
 if __name__ == '__main__':

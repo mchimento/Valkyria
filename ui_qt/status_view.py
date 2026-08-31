@@ -28,7 +28,7 @@ class StatusViewQt(QWidget):
         self.setFixedHeight(150)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 12, 0, 0)
+        outer.setContentsMargins(12, 12, 0, 0)
 
         self.panel = QFrame(self)
         self.panel.setObjectName("StatusPanel")
