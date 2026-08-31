@@ -26,10 +26,13 @@ from app.state import AppState
 from audio import m3u as m3u_module
 from audio.audio_player import filter_selectable_audio_devices
 from audio.bpm import analysis_manager
+from audio.metadata import metadata_extractor
 from ui.documentation_view import open_documentation as open_doc_in_browser
+from ui_qt.booklet_viewer_window import BookletViewerWindowQt
 from ui_qt.browser_view import BrowserViewQt
 from ui_qt.controls import ControlsBarQt
 from ui_qt.dj_view import DJViewQt
+from ui_qt.media_info_window import MediaInfoWindowQt
 from ui_qt.menu_bar import CustomMenuBarQt
 from ui_qt.playback_features_window import PlaybackFeaturesWindowQt
 from ui_qt.playlist_view import PlaylistViewQt
@@ -91,6 +94,10 @@ class MainWindowQt(QWidget):
         self._action_save_playlist = self._find_action(self.menubar._menus["&Media"], "Save Playlist")
         self._action_save_playlist_as = self._find_action(self.menubar._menus["&Media"], "Save Playlist As...")
         self._action_play_after_current = self._find_action(self.menubar._menus["&Playback"], "Play After Current Song")
+        self._action_track_info = self._find_action(self.menubar._menus["&Playback"], "Track Information")
+        self._action_track_booklet = self._find_action(self.menubar._menus["&Playback"], "Show Album Booklet")
+        self._track_info_windows = []
+        self._track_booklet_windows = []
 
         self.state = AppState(exts=tuple(getattr(settings, "supported_extensions", ()) or ()))
         # Matches app/application.py's ValkyriaApp.__init__ (Tk) applying
@@ -164,6 +171,9 @@ class MainWindowQt(QWidget):
         self.controls.paused_state_changed.connect(self._on_pause_toggled)
         self._track_switch_ready.connect(self._play_index, Qt.QueuedConnection)
         self.playlist_view.playlist_changed.connect(self._update_menu_state)
+        self.playlist_view.selection_changed.connect(self._update_menu_state)
+        self.playlist_view.show_track_info_requested.connect(lambda i: self._open_track_info(self.state.playlist[i]))
+        self.playlist_view.show_booklet_requested.connect(lambda i: self._open_booklet(self.state.playlist[i]))
         # Relays into the same cleanup a real Stop press gets (waveform reset, etc).
         self.playlist_view.playback_stopped.connect(self.controls.stopped)
         self._update_menu_state()
@@ -233,8 +243,8 @@ class MainWindowQt(QWidget):
             {"label": "Remove Selected", "command": lambda: self.playlist_view.remove_selected(), "accelerator": "Delete"},
             {"label": "Clear", "command": lambda: self.playlist_view.clear(), "accelerator": "Ctrl+C"},
             {"separator": True},
-            {"label": "Track Information", "accelerator": "Ctrl+I"},
-            {"label": "Show Album booklet", "accelerator": "Ctrl+B"},
+            {"label": "Track Information", "command": self._on_open_track_info, "accelerator": "Ctrl+I"},
+            {"label": "Show Album Booklet", "command": self._on_open_booklet, "accelerator": "Ctrl+B"},
         ]
         repeat_submenu = [
             {"label": "No Repeat", "radiobutton": True, "group": "repeat_mode", "checked": True, "command": lambda: self._set_repeat_mode("none")},
@@ -453,6 +463,57 @@ class MainWindowQt(QWidget):
             self._action_save_playlist_as.setEnabled(has_songs)
         if self._action_play_after_current is not None:
             self._action_play_after_current.setEnabled(has_songs and self.state.current_index is not None)
+        has_target = self._resolve_track_target_index() is not None
+        if self._action_track_info is not None:
+            self._action_track_info.setEnabled(has_target)
+        if self._action_track_booklet is not None:
+            self._action_track_booklet.setEnabled(has_target)
+
+    def _resolve_track_target_index(self):
+        # Gates both the menu's enabled state and what a click actually
+        # opens — selection wins, falling back to whatever's current, so
+        # Track Info/Booklet always agree on what they'd act on.
+        selected = self.playlist_view.get_selected_indices()
+        if selected:
+            return selected[0]
+        return self.state.current_index
+
+    def _on_open_track_info(self) -> None:
+        index = self._resolve_track_target_index()
+        if index is None or not (0 <= index < len(self.state.playlist)):
+            QMessageBox.information(self, "No Track Selected", "No track is selected")
+            return
+        self._open_track_info(self.state.playlist[index])
+
+    def _on_open_booklet(self) -> None:
+        index = self._resolve_track_target_index()
+        if index is None or not (0 <= index < len(self.state.playlist)):
+            QMessageBox.information(self, "No Track Selected", "No track is selected")
+            return
+        self._open_booklet(self.state.playlist[index])
+
+    def _open_track_info(self, filepath: str) -> None:
+        win = MediaInfoWindowQt(self, filepath, self.theme.palette, metadata_saved_callback=self._on_metadata_saved)
+        self._track_info_windows.append(win)
+        win.finished.connect(lambda _: self._track_info_windows.remove(win) if win in self._track_info_windows else None)
+        win.show()
+
+    def _open_booklet(self, filepath: str) -> None:
+        win = BookletViewerWindowQt(self, filepath, self.theme.palette)
+        self._track_booklet_windows.append(win)
+        win.finished.connect(lambda _: self._track_booklet_windows.remove(win) if win in self._track_booklet_windows else None)
+        win.show()
+
+    def _on_metadata_saved(self, filepath: str) -> None:
+        try:
+            metadata_extractor.update_cache(filepath)
+        except Exception:
+            logger.exception("Failed to update metadata cache after save")
+        self.playlist_view.refresh()
+        idx = self.state.current_index
+        if idx is not None and 0 <= idx < len(self.state.playlist) and self.state.playlist[idx] == filepath:
+            self.status_view.restore_status()
+            self.dj_view.update_info()
 
     def _on_open_audio_effects(self) -> None:
         logger.info("[ui_qt stub] Audio Effects window not ported yet")

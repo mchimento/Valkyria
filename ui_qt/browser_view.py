@@ -96,10 +96,10 @@ class BrowserViewQt(QWidget):
         button_col.setSpacing(6)
         button_col.addStretch(1)
 
-        self.btn_open_folder = QPushButton("📂 Folder")
-        self.btn_open_files = QPushButton("🎵 File")
-        self.btn_add = QPushButton("➕ Add")
-        self.btn_add_below = QPushButton("⬇ Add Below")
+        self.btn_open_folder = QPushButton("Folder")
+        self.btn_open_files = QPushButton("File")
+        self.btn_add = QPushButton("Add")
+        self.btn_add_below = QPushButton("Add Below")
         for btn in (self.btn_open_folder, self.btn_open_files, self.btn_add, self.btn_add_below):
             # Wider min-width (vs shared DialogButton) set via QSS, not setMinimumWidth().
             btn.setObjectName("BrowserActionButton")

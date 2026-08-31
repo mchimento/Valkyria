@@ -354,3 +354,72 @@ def test_toggle_dj_visibility_registers_and_unregisters_metrics_callback(qtbot, 
     assert window.dj_view.isVisible()
     assert settings.show_dj is True
     mock_player.set_audio_metrics_callback.assert_called_with(window.dj_view._emit_metrics)
+
+
+def test_track_info_and_booklet_disabled_with_no_target(window):
+    assert not window._action_track_info.isEnabled()
+    assert not window._action_track_booklet.isEnabled()
+
+
+def test_track_info_and_booklet_enabled_by_selection(qtbot, window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.playlist_view.refresh()
+    qtbot.waitUntil(lambda: window.playlist_view._tree.topLevelItemCount() == 2, timeout=2000)
+    window.playlist_view._select_indices([1])
+    assert window._action_track_info.isEnabled()
+    assert window._action_track_booklet.isEnabled()
+
+
+def test_track_info_and_booklet_enabled_by_current_index_fallback(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.current_index = 0
+    window._update_menu_state()
+    assert window._action_track_info.isEnabled()
+
+
+def test_open_track_info_with_no_target_shows_message(window):
+    with patch("ui_qt.main_window.QMessageBox") as mock_box:
+        window._on_open_track_info()
+    mock_box.information.assert_called_once()
+
+
+def test_open_track_info_opens_dialog_for_resolved_file(qtbot, window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.playlist_view.refresh()
+    qtbot.waitUntil(lambda: window.playlist_view._tree.topLevelItemCount() == 2, timeout=2000)
+    window.playlist_view._select_indices([1])
+
+    info = {"path": "/tmp/b.mp3", "filename": "b.mp3", "size": 0, "format": "", "duration": 0,
+            "bitrate": 0, "sample_rate": 0, "channels": 0, "codec": "", "metadata": {}}
+    with patch("ui_qt.media_info_window.get_file_info", return_value=info), \
+         patch("ui_qt.media_info_window.metadata_extractor"):
+        window._on_open_track_info()
+
+    assert len(window._track_info_windows) == 1
+    assert window._track_info_windows[0].file_path == "/tmp/b.mp3"
+
+
+def test_opening_two_tracks_info_keeps_both_windows(window):
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.playlist_view.refresh()
+
+    info = {"path": "/tmp/a.mp3", "filename": "a.mp3", "size": 0, "format": "", "duration": 0,
+            "bitrate": 0, "sample_rate": 0, "channels": 0, "codec": "", "metadata": {}}
+    with patch("ui_qt.media_info_window.get_file_info", return_value=info), \
+         patch("ui_qt.media_info_window.metadata_extractor"):
+        window._open_track_info("/tmp/a.mp3")
+        window._open_track_info("/tmp/b.mp3")
+
+    assert len(window._track_info_windows) == 2
+
+
+def test_open_booklet_opens_dialog_for_resolved_file(window):
+    window.state.playlist = ["/tmp/a.mp3"]
+    window.state.current_index = 0
+    window._update_menu_state()
+
+    with patch("ui_qt.booklet_viewer_window.get_booklet_images", return_value=[]):
+        window._on_open_booklet()
+
+    assert len(window._track_booklet_windows) == 1
+    assert window._track_booklet_windows[0].file_path == "/tmp/a.mp3"

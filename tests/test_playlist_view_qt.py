@@ -170,6 +170,32 @@ def test_context_remove(view, state):
     assert state.playlist == ["/tmp/a.mp3", "/tmp/c.mp3"]
 
 
+def _build_context_menu_actions(view, row_index):
+    # QMenu.exec() blocks on a real event loop waiting for a click that
+    # will never come headlessly — mock QMenu entirely so _show_context_menu
+    # runs to completion, and capture each addAction(label, callback) call
+    # to invoke the one under test directly, same as a real click would.
+    with patch("ui_qt.playlist_view.QMenu") as mock_menu_cls:
+        mock_menu = mock_menu_cls.return_value
+        pos = view._tree.visualItemRect(view._tree.topLevelItem(row_index)).center()
+        view._show_context_menu(pos)
+    return {call.args[0]: call.args[1] for call in mock_menu.addAction.call_args_list}
+
+
+def test_context_menu_show_metadata_emits_signal_with_actual_index(qtbot, view):
+    actions = _build_context_menu_actions(view, 1)
+    with qtbot.waitSignal(view.show_track_info_requested, timeout=1000) as blocker:
+        actions["Show Metadata"]()
+    assert blocker.args == [1]
+
+
+def test_context_menu_show_booklet_emits_signal_with_actual_index(qtbot, view):
+    actions = _build_context_menu_actions(view, 2)
+    with qtbot.waitSignal(view.show_booklet_requested, timeout=1000) as blocker:
+        actions["Show Album Booklet"]()
+    assert blocker.args == [2]
+
+
 def test_internal_drag_resync_reorders_and_remaps_current_index(view, state):
     state.current_index = 1  # currently playing b.mp3
 

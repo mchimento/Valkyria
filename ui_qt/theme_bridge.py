@@ -99,6 +99,32 @@ def build_stylesheet(palette: dict) -> str:
         background: transparent;
     }}
 
+    QFrame#BookletImagePanel {{
+        background-color: {tree_bg};
+        border: 1px solid {border};
+        border-radius: 4px;
+    }}
+
+    QTabWidget::pane {{
+        border: 1px solid {border};
+        border-radius: 4px;
+        background-color: {bg};
+    }}
+    QTabBar::tab {{
+        background-color: {dropdown_bg};
+        color: {dropdown_text};
+        padding: 6px 14px;
+        border: 1px solid {dropdown_border};
+        border-bottom: none;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {bg};
+        color: {fg};
+    }}
+    QTabBar::tab:hover {{
+        background-color: {dropdown_hover};
+    }}
+
     QWidget#CentralArea {{
         background-color: {bg};
     }}

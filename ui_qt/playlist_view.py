@@ -80,6 +80,9 @@ class PlaylistViewQt(QWidget):
     playlist_changed = Signal()  # fired after every refresh(); keeps menu state in sync
     # Fired after this view stops playback itself (clear/remove current track).
     playback_stopped = Signal()
+    selection_changed = Signal()
+    show_track_info_requested = Signal(int)  # actual playlist index
+    show_booklet_requested = Signal(int)
 
     def __init__(self, state, palette: dict, player=None, parent=None):
         super().__init__(parent)
@@ -131,6 +134,7 @@ class PlaylistViewQt(QWidget):
         self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._show_context_menu)
         self._tree.itemDoubleClicked.connect(self._on_double_clicked)
+        self._tree.itemSelectionChanged.connect(self.selection_changed.emit)
         layout.addWidget(self._tree)
 
         self.search_entry.textChanged.connect(self._on_search_text_changed)
@@ -300,6 +304,9 @@ class PlaylistViewQt(QWidget):
         menu = QMenu(self)
         menu.addAction("Play", lambda: self.track_activated.emit(index))
         menu.addAction("Play After Current", lambda: self._context_play_after_current(index))
+        menu.addSeparator()
+        menu.addAction("Show Metadata", lambda: self.show_track_info_requested.emit(index))
+        menu.addAction("Show Album Booklet", lambda: self.show_booklet_requested.emit(index))
         menu.addSeparator()
         menu.addAction("Remove", lambda: self._context_remove(index))
         menu.exec(self._tree.viewport().mapToGlobal(pos))
