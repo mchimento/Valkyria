@@ -24,11 +24,11 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QDialogButtonBox,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QRadioButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -117,10 +117,21 @@ class PreferencesWindowQt(QDialog):
 
         body = QWidget(self)
         layout = QVBoxLayout(body)
+        layout.setSpacing(12)
         outer.addWidget(body, 1)
 
-        theme_group = QGroupBox("Theme")
-        theme_layout = QHBoxLayout(theme_group)
+        self.tabs = QTabWidget(body)
+        layout.addWidget(self.tabs, 1)
+
+        # ---------- Interface tab (ui/preferences_window.py's
+        # _create_interface_section: Theme + Mini Player) ----------
+        interface_tab = QWidget()
+        interface_layout = QVBoxLayout(interface_tab)
+        interface_layout.setContentsMargins(20, 20, 20, 20)
+        interface_layout.setSpacing(8)
+
+        interface_layout.addWidget(self._section_header("Theme"))
+        theme_col = QVBoxLayout()
         self.radio_light = QRadioButton("Light")
         self.radio_dark = QRadioButton("Dark")
         self._theme_buttons = QButtonGroup(self)
@@ -130,28 +141,37 @@ class PreferencesWindowQt(QDialog):
             self.radio_dark.setChecked(True)
         else:
             self.radio_light.setChecked(True)
-        theme_layout.addWidget(self.radio_light)
-        theme_layout.addWidget(self.radio_dark)
-        layout.addWidget(theme_group)
+        theme_col.addWidget(self.radio_light)
+        theme_col.addWidget(self.radio_dark)
+        interface_layout.addLayout(theme_col)
         self.radio_light.toggled.connect(lambda checked: checked and self._preview_theme("light"))
         self.radio_dark.toggled.connect(lambda checked: checked and self._preview_theme("dark"))
 
-        misc_group = QGroupBox("General")
-        misc_layout = QVBoxLayout(misc_group)
+        interface_layout.addSpacing(14)
+        interface_layout.addWidget(self._section_header("Mini Player"))
         mini_player_row = QHBoxLayout()
         mini_player_row.setSpacing(8)
         self.checkbox_mini_player = ToggleSwitch(theme.palette)
         self.checkbox_mini_player.setChecked(bool(getattr(settings, "mini_player_enabled", True)))
         mini_player_row.addWidget(self.checkbox_mini_player)
-        mini_player_row.addWidget(QLabel("Enable mini player"))
+        mini_player_row.addWidget(QLabel("Enable Mini Player"))
         mini_player_row.addStretch(1)
-        misc_layout.addLayout(mini_player_row)
-        layout.addWidget(misc_group)
+        interface_layout.addLayout(mini_player_row)
+        interface_layout.addStretch(1)
 
-        bpm_group = QGroupBox("BPM Mode")
-        bpm_layout = QHBoxLayout(bpm_group)
-        self.radio_bpm_perceived = QRadioButton("Perceived")
-        self.radio_bpm_raw = QRadioButton("Raw")
+        self.tabs.addTab(interface_tab, "Interface")
+
+        # ---------- Audio tab (ui/preferences_window.py's
+        # _create_audio_section: BPM Mode) ----------
+        audio_tab = QWidget()
+        audio_layout = QVBoxLayout(audio_tab)
+        audio_layout.setContentsMargins(20, 20, 20, 20)
+        audio_layout.setSpacing(8)
+
+        audio_layout.addWidget(self._section_header("BPM Mode"))
+        bpm_col = QVBoxLayout()
+        self.radio_bpm_perceived = QRadioButton("Perceived (50-100 BPM)")
+        self.radio_bpm_raw = QRadioButton("Raw (detected tempo)")
         self._bpm_buttons = QButtonGroup(self)
         self._bpm_buttons.addButton(self.radio_bpm_perceived)
         self._bpm_buttons.addButton(self.radio_bpm_raw)
@@ -159,11 +179,15 @@ class PreferencesWindowQt(QDialog):
             self.radio_bpm_perceived.setChecked(True)
         else:
             self.radio_bpm_raw.setChecked(True)
-        bpm_layout.addWidget(self.radio_bpm_perceived)
-        bpm_layout.addWidget(self.radio_bpm_raw)
-        layout.addWidget(bpm_group)
+        bpm_col.addWidget(self.radio_bpm_perceived)
+        bpm_col.addWidget(self.radio_bpm_raw)
+        audio_layout.addLayout(bpm_col)
+        audio_layout.addStretch(1)
+
+        self.tabs.addTab(audio_tab, "Audio")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.setCenterButtons(True)
         # The app-wide QPushButton QSS rule is flat/transparent (it's meant
         # for the toolbar-style menu bar and window-control buttons), which
         # leaves ordinary dialog action buttons with no visible chrome at
@@ -182,6 +206,11 @@ class PreferencesWindowQt(QDialog):
         layout.addWidget(buttons)
 
         self._center_on_parent()
+
+    def _section_header(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("SectionHeader")
+        return label
 
     def _center_on_parent(self) -> None:
         self.adjustSize()

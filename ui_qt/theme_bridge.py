@@ -50,6 +50,7 @@ def build_stylesheet(palette: dict) -> str:
     button_bg = palette.get("button_bg_color", "#BB86FC")
     button_hover = palette.get("button_hover", "#985EFF")
     button_pressed = palette.get("button_pressed", "#6023CB")
+    accent = palette.get("accent", "#BB86FC")
 
     slider_bg = palette.get("slider_bg", "#404040")
     slider_progress = palette.get("slider_progress", "#BB86FC")
@@ -118,11 +119,18 @@ def build_stylesheet(palette: dict) -> str:
         border-bottom: none;
     }}
     QTabBar::tab:selected {{
-        background-color: {bg};
-        color: {fg};
+        background-color: {accent};
+        color: #ffffff;
     }}
     QTabBar::tab:hover {{
-        background-color: {dropdown_hover};
+        background-color: {button_hover};
+        color: {fg};
+    }}
+
+    QLabel#SectionHeader {{
+        color: {fg};
+        font-weight: bold;
+        background: transparent;
     }}
 
     QWidget#CentralArea {{
