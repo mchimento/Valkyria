@@ -42,7 +42,7 @@ class StatusViewQt(QWidget):
         self.artwork_label = QLabel(self.panel)
         self.artwork_label.setFixedSize(ARTWORK_SIZE, ARTWORK_SIZE)
         self.artwork_label.setAlignment(Qt.AlignCenter)
-        content.addWidget(self.artwork_label, 0, Qt.AlignTop)
+        content.addWidget(self.artwork_label, 0, Qt.AlignVCenter)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(4)
@@ -76,9 +76,9 @@ class StatusViewQt(QWidget):
         meta_row.addWidget(self.time_limit_label)
         meta_row.addStretch(1)
         text_col.addLayout(meta_row)
-        text_col.addStretch(1)
 
         content.addLayout(text_col, 1)
+        content.setAlignment(text_col, Qt.AlignVCenter)
 
         self._restore_timer = QTimer(self)
         self._restore_timer.setSingleShot(True)

@@ -129,8 +129,8 @@ class DJViewQt(QWidget):
         self.overall_lufs_title, self.overall_lufs_label = self._add_value_row(left_column, "LUFS (Overall)", "-100.0")
         self.peak_title, self.peak_meter = self._add_meter_row(left_column, "PEAK", 80)
         self.limit_title, self.limiter_meter = self._add_meter_row(left_column, "LIMIT", 80)
-        left_column.addStretch(1)
         content.addLayout(left_column)
+        content.setAlignment(left_column, Qt.AlignVCenter)
 
         right_column = QVBoxLayout()
         right_column.setSpacing(3)
@@ -152,8 +152,8 @@ class DJViewQt(QWidget):
         button_row.addWidget(self.save_key_btn)
         button_row.addStretch(1)
         right_column.addLayout(button_row)
-        right_column.addStretch(1)
         content.addLayout(right_column, 1)
+        content.setAlignment(right_column, Qt.AlignVCenter)
 
     def _add_value_row(self, parent_layout, title_text, widest_text):
         row = QHBoxLayout()
