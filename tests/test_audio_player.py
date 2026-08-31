@@ -229,6 +229,9 @@ class TestAudioPlayerSilenceDetection(unittest.TestCase):
         def read(self, frames):
             return np.full((frames, self.channels), self._amplitude, dtype="float32")
 
+        def seek(self, frame_pos):
+            self.absolute_read_pos = frame_pos
+
     def _make_player(self, amplitude, total_frames, frames_played, volume=100):
         player = AudioPlayer()
         player.effects.process = lambda x: x
@@ -260,6 +263,38 @@ class TestAudioPlayerSilenceDetection(unittest.TestCase):
             amplitude=1e-4, total_frames=total_frames,
             frames_played=total_frames - 44100 * 5,
         )
+        self._run_quiet_callbacks(player)
+        self.assertTrue(player._silence_detected)
+
+    def test_long_trailing_silence_far_from_reported_end_still_triggers(self):
+        # Regression: detection used to gate on proximity to total_frames
+        # (remaining time <= 30s), so a file whose trailing silence is
+        # itself much longer than 30s never got close enough to that
+        # window to trigger — confirmed via real playback logs showing
+        # 16+ continuous seconds of true digital silence with minutes still
+        # "remaining" per total_frames. Gating on elapsed time since start
+        # instead means this triggers as soon as real silence is detected,
+        # regardless of how much of the file's reported length is left.
+        total_frames = 44100 * 600  # a file with several minutes of tail silence
+        player = self._make_player(
+            amplitude=1e-4, total_frames=total_frames, frames_played=44100 * 40,
+        )
+        self._run_quiet_callbacks(player)
+        self.assertTrue(player._silence_detected)
+
+    def test_manual_seek_into_silence_soon_after_start_still_triggers(self):
+        # Regression: set_time() (the waveform drag-to-seek handler) updated
+        # the underlying buffer's read position but never updated
+        # _frames_played to match — so seeking forward into real silence
+        # shortly after starting a track left _frames_played stuck near its
+        # pre-seek (near-zero) value, blocking the "30s of playback already
+        # elapsed" gate for up to 30 more real seconds after the seek, even
+        # though the audio being read was already genuinely silent.
+        player = self._make_player(
+            amplitude=1e-4, total_frames=44100 * 300, frames_played=44100 * 2,
+        )
+        player.set_time(200_000)  # seek to 200s, well past the elapsed-gate
+        self.assertEqual(player._frames_played, 44100 * 200)
         self._run_quiet_callbacks(player)
         self.assertTrue(player._silence_detected)
 

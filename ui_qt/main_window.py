@@ -17,7 +17,7 @@ import threading
 import time
 from typing import Optional
 
-from PySide6.QtCore import Qt, QEvent, Signal
+from PySide6.QtCore import Qt, QEvent, QTimer, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
@@ -34,6 +34,7 @@ from ui_qt.controls import ControlsBarQt
 from ui_qt.dj_view import DJViewQt
 from ui_qt.media_info_window import MediaInfoWindowQt
 from ui_qt.menu_bar import CustomMenuBarQt
+from ui_qt.mini_player_window import MiniPlayerWindowQt
 from ui_qt.playback_features_window import PlaybackFeaturesWindowQt
 from ui_qt.playlist_view import PlaylistViewQt
 from ui_qt.preferences_window import PreferencesWindowQt
@@ -63,6 +64,7 @@ class MainWindowQt(QWidget):
         self.theme_signal = theme_signal
         self._preferences_win: Optional[PreferencesWindowQt] = None
         self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
+        self.mini_player: Optional[MiniPlayerWindowQt] = None
         theme_signal.changed.connect(self._on_theme_changed)
 
         self.setObjectName("MainWindow")
@@ -736,6 +738,12 @@ class MainWindowQt(QWidget):
             analysis_manager.shutdown()
         except Exception:
             logger.exception("Failed to shut down BPM/Key analysis process on close")
+        try:
+            if self.mini_player is not None:
+                self.mini_player.stop_updates()
+                self.mini_player.close()
+        except Exception:
+            logger.exception("Failed to clean up mini player on close")
         self._save_geometry()
         try:
             self.settings.save()
@@ -746,7 +754,60 @@ class MainWindowQt(QWidget):
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.WindowStateChange:
             self.menubar.sync_maximize_button()
+            if self.isMinimized() and bool(getattr(self.settings, "mini_player_enabled", True)):
+                self._show_mini_player()
         super().changeEvent(event)
+
+    # ---------- mini player ----------
+
+    def _show_mini_player(self) -> None:
+        if self.mini_player is None:
+            self.mini_player = MiniPlayerWindowQt(self.state, self.controls, self.theme.palette)
+            self.mini_player.restore_requested.connect(self._restore_from_mini_player)
+            self.mini_player.play_pause_requested.connect(self._on_mini_player_play_pause)
+            self.mini_player.prev_requested.connect(self._on_prev)
+            self.mini_player.next_requested.connect(self._on_next)
+        self.mini_player._position_bottom_right()
+        self.mini_player.show()
+        self.mini_player.start_updates()
+
+    def _hide_mini_player(self) -> None:
+        if self.mini_player is not None:
+            self.mini_player.stop_updates()
+            self.mini_player.hide()
+
+    def _restore_from_mini_player(self) -> None:
+        # Main window was only minimized, never withdrawn/hidden (unlike
+        # tkinter's swap model), so nothing here went stale — no status/
+        # analysis refresh needed.
+        self._hide_mini_player()
+        self.showNormal()
+        # raise_()/activateWindow() are deferred a tick: some window
+        # managers (GNOME/Mutter's focus-stealing prevention, seen on
+        # Ubuntu) treat an activation request for a *different* top-level
+        # window than the one that just received the click (the mini
+        # player) as unsolicited, and substitute a "ready" notification
+        # instead of actually focusing it. Running this outside the click's
+        # own call stack is a commonly-cited mitigation, but this is a WM
+        # policy, not something app code can always fully override — needs
+        # a real-session check, this may not eliminate it completely.
+        QTimer.singleShot(0, self._focus_after_restore)
+
+    def _focus_after_restore(self) -> None:
+        self.raise_()
+        self.activateWindow()
+
+    def _on_mini_player_play_pause(self) -> None:
+        """Equivalent to ui/mini_player.py's 3-branch _on_play_pause: tkinter's
+        paused->resume and playing->pause branches both call controls._on_pause()
+        either way, collapsing into one `is_playing or is_paused` check here. The
+        third branch (nothing loaded/stopped -> start) reuses MainWindowQt's own
+        _on_play_requested, the same call the main transport bar's Play button
+        makes (selection-aware start), rather than duplicating that branching."""
+        if self.controls.is_playing or self.controls.is_paused:
+            self.controls._on_pause()
+        else:
+            self._on_play_requested()
 
     # ---------- native edge/corner resize ----------
 

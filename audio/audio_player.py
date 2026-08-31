@@ -242,7 +242,7 @@ class AudioPlayer:
         # Silence detection
         self.silence_detection_enabled = False
         self._silence_threshold = -50.0  # dB
-        self._silence_duration = 3.0  # seconds
+        self._silence_duration = 1.5  # seconds
         self._silence_frames_count = 0
         self._silence_detected = False
 
@@ -522,15 +522,17 @@ class AudioPlayer:
                     sr = self._buffer.samplerate
                     silence_duration = self._silence_frames_count / sr
 
-                    # Only trigger near the actual end of the track — this
-                    # detects trailing dead air, not a quiet intro/section.
-                    if silence_duration >= self._silence_duration:
-                        near_end = (
-                            self._total_frames <= 0
-                            or (self._total_frames - self._frames_played) <= sr * 30
-                        )
-                        if near_end:
-                            self._silence_detected = True
+                    # Requires 30s of playback already elapsed (not proximity
+                    # to the file's reported end) before allowing a trigger —
+                    # avoids mistaking a quiet intro for dead air without
+                    # capping how much trailing silence it can skip. Gating
+                    # on remaining-time-to-end instead let files with long
+                    # silent tails play out nearly the whole tail before ever
+                    # reaching that window, defeating the feature for exactly
+                    # the files it's meant to help with (confirmed via real
+                    # playback logs).
+                    if silence_duration >= self._silence_duration and self._frames_played >= sr * 30:
+                        self._silence_detected = True
                 else:
                     self._silence_frames_count = 0
 
@@ -1046,6 +1048,17 @@ class AudioPlayer:
                     self._buffer.seek(frame_pos)
                     # Reset filter state on seek to prevent artifacts
                     self.effects.reset_state()
+                    # frames_played must track the seeked-to position, not
+                    # just keep counting from wherever it was — otherwise the
+                    # "has enough playback elapsed to allow a silence-skip"
+                    # check reads a stale value and can block a genuine skip
+                    # for up to 30s after the seek, even while sitting in
+                    # real silence the whole time. Also clear the in-progress
+                    # silence run, since it was measuring audio from the old
+                    # position.
+                    self._frames_played = frame_pos
+                    self._silence_frames_count = 0
+                    self._silence_detected = False
             except Exception:
                 logger.error(f"Failed to set time to {time_ms}", exc_info=True)
 

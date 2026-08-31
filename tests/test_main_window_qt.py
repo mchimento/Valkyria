@@ -423,3 +423,91 @@ def test_open_booklet_opens_dialog_for_resolved_file(window):
 
     assert len(window._track_booklet_windows) == 1
     assert window._track_booklet_windows[0].file_path == "/tmp/a.mp3"
+
+
+# ---------- mini player ----------
+
+def test_minimize_shows_mini_player_when_enabled(qtbot, window, settings):
+    settings.mini_player_enabled = True
+    window.show()
+    qtbot.waitExposed(window)
+    window.showMinimized()
+    qtbot.wait(50)
+    # MiniPlayerWindowQt is intentionally parentless (a WindowStaysOnTopHint
+    # window shouldn't be parented to the window it floats above), so it
+    # isn't cleaned up by qtbot.addWidget(window) alone — register it here
+    # or its still-running 500ms QTimer leaks into later tests.
+    qtbot.addWidget(window.mini_player)
+    assert window.mini_player is not None
+    assert window.mini_player.isVisible()
+    window.mini_player.stop_updates()
+
+
+def test_minimize_does_not_show_mini_player_when_disabled(qtbot, window, settings):
+    settings.mini_player_enabled = False
+    window.show()
+    qtbot.waitExposed(window)
+    window.showMinimized()
+    qtbot.wait(50)
+    assert window.mini_player is None
+
+
+def test_restore_from_mini_player_hides_it_and_restores_main(qtbot, window, settings):
+    settings.mini_player_enabled = True
+    window.show()
+    qtbot.waitExposed(window)
+    window.showMinimized()
+    qtbot.wait(50)
+
+    qtbot.addWidget(window.mini_player)
+    with patch.object(window, "showNormal") as mock_show_normal, \
+         patch.object(window, "raise_") as mock_raise, \
+         patch.object(window, "activateWindow") as mock_activate:
+        window.mini_player.restore_requested.emit()
+        # raise_()/activateWindow() are deferred via QTimer.singleShot(0, ...)
+        # to dodge GNOME/Mutter's focus-stealing prevention — give that tick
+        # a chance to fire before asserting.
+        qtbot.waitUntil(lambda: mock_raise.called, timeout=1000)
+
+    assert not window.mini_player.isVisible()
+    mock_show_normal.assert_called_once()
+    mock_raise.assert_called_once()
+    mock_activate.assert_called_once()
+
+
+def test_mini_player_play_pause_when_stopped_calls_play_requested(window):
+    window.controls.is_playing = False
+    window.controls.is_paused = False
+    with patch.object(window, "_on_play_requested") as mock_play_requested:
+        window._on_mini_player_play_pause()
+    mock_play_requested.assert_called_once()
+
+
+def test_mini_player_play_pause_when_playing_calls_pause(window):
+    window.controls.is_playing = True
+    window.controls.is_paused = False
+    with patch.object(window.controls, "_on_pause") as mock_pause:
+        window._on_mini_player_play_pause()
+    mock_pause.assert_called_once()
+
+
+def test_mini_player_play_pause_when_paused_calls_pause(window):
+    window.controls.is_playing = False
+    window.controls.is_paused = True
+    with patch.object(window.controls, "_on_pause") as mock_pause:
+        window._on_mini_player_play_pause()
+    mock_pause.assert_called_once()
+
+
+def test_close_event_stops_mini_player_timer(qtbot, window, settings):
+    settings.mini_player_enabled = True
+    window.show()
+    qtbot.waitExposed(window)
+    window.showMinimized()
+    qtbot.wait(50)
+    mini_player = window.mini_player
+    qtbot.addWidget(mini_player)
+
+    window.close()
+
+    assert not mini_player._timer.isActive()

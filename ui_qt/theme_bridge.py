@@ -133,6 +133,21 @@ def build_stylesheet(palette: dict) -> str:
         background: transparent;
     }}
 
+    QWidget#MiniPlayerWindow {{
+        background-color: {bg};
+        border: 1px solid {border};
+        border-radius: 12px;
+    }}
+    QProgressBar#MiniPlayerProgress {{
+        background-color: {scrollbar_track};
+        border: none;
+        border-radius: 4px;
+    }}
+    QProgressBar#MiniPlayerProgress::chunk {{
+        background-color: {accent};
+        border-radius: 4px;
+    }}
+
     QWidget#CentralArea {{
         background-color: {bg};
     }}
