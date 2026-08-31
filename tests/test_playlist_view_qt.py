@@ -269,6 +269,27 @@ def test_clearing_search_restores_all_rows(qtbot):
     qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 2, timeout=2000)
 
 
+def test_manual_selection_survives_later_metadata_batch(qtbot):
+    # Regression: _on_metadata_batch used to reselect the tree's whole
+    # _pending_selection (captured once, before search results existed)
+    # after *every* batch, silently wiping out a selection the user made
+    # by hand while later batches were still streaming in — as happens
+    # with real files, where per-track metadata reads take real time.
+    state = AppState(playlist=["/tmp/a.mp3"])
+    view = PlaylistViewQt(state, PALETTE)
+    qtbot.addWidget(view)
+    qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 1, timeout=2000)
+
+    # Simulate the user clicking the row that arrived in an earlier batch.
+    view._select_indices([0])
+    assert view.get_selected_indices() == [0]
+
+    # A later batch (e.g. more search results still streaming in for other,
+    # not-yet-added tracks) must not clobber that manual selection.
+    view._on_metadata_batch(view._load_id, [(1, "/tmp/extra.mp3", {"title": "extra"})])
+    assert view.get_selected_indices() == [0]
+
+
 def test_internal_drag_resync_ignored_while_search_active(qtbot):
     state = AppState(playlist=["/tmp/alpha_song.mp3", "/tmp/bravo_song.mp3", "/tmp/charlie_song.mp3"])
     view = PlaylistViewQt(state, PALETTE)

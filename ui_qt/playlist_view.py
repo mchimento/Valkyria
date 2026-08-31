@@ -240,6 +240,14 @@ class PlaylistViewQt(QWidget):
     def _on_metadata_batch(self, load_id: int, batch: list) -> None:
         if load_id != self._load_id:
             return
+        # Selects matching rows at creation time instead of a blanket
+        # clearSelection()+reselect after every batch — refresh() already
+        # cleared the tree once up front, and batches can keep streaming in
+        # well after that (real per-file metadata reads take noticeable
+        # time). Re-running a global reselect on each later batch used to
+        # silently wipe out a selection the user made by hand (e.g.
+        # clicking a search result) while earlier batches were still loading.
+        wanted = set(self._pending_selection)
         for actual_index, path, meta in batch:
             title = meta.get("title") or os.path.basename(path)
             item = QTreeWidgetItem(["", meta.get("artist", ""), meta.get("album", ""), meta.get("duration", "")])
@@ -250,9 +258,10 @@ class PlaylistViewQt(QWidget):
             # Prevents a drop-on-row from nesting instead of reordering.
             item.setFlags(item.flags() & ~Qt.ItemIsDropEnabled)
             self._tree.addTopLevelItem(item)
+            if actual_index in wanted:
+                item.setSelected(True)
         self._adjust_title_column_width()
         self.refresh_highlight()
-        self._select_indices(self._pending_selection)
         if self._pending_scroll_value is not None:
             self._tree.verticalScrollBar().setValue(self._pending_scroll_value)
 
