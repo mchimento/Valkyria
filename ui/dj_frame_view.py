@@ -56,6 +56,10 @@ class DJFrameView(ctk.CTkFrame):
         if self.player:
             self.player.set_audio_metrics_callback(self._on_audio_metrics_update)
 
+    def _tk_scheduler(self, func, *args):
+        """Passed to AnalysisManager.submit_* as the scheduler callable."""
+        self._tk_root.after(0, func, *args)
+
     def is_visible(self):
         """Check if the DJ frame is currently visible.
 
@@ -463,7 +467,7 @@ class DJFrameView(ctk.CTkFrame):
 
                 def estimate_bpm():
                     try:
-                        analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
+                        analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self._tk_scheduler)
                     except Exception as e:
                         logger.error(f"BPM estimation error for {filepath}: {e}")
                         self.after(0, lambda: self._finish_estimation(filepath, None))
@@ -525,7 +529,7 @@ class DJFrameView(ctk.CTkFrame):
 
                 def estimate_key():
                     try:
-                        analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
+                        analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self._tk_scheduler)
                     except Exception as e:
                         logger.error(f"Key estimation error for {filepath}: {e}")
                         self.after(0, lambda: self._finish_key_estimation(filepath, None))
@@ -687,7 +691,7 @@ class DJFrameView(ctk.CTkFrame):
 
     def _analyze_bpm_worker(self, filepath):
         # Use manager for analysis
-        analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self)
+        analysis_manager.submit_bpm_analysis(filepath, self._on_bpm_analysis_complete, self._tk_scheduler)
 
     def _on_bpm_analysis_complete(self, filepath, bpm_value):
         try:
@@ -741,7 +745,7 @@ class DJFrameView(ctk.CTkFrame):
 
     def _save_bpm_worker(self, filepath, bpm_value):
         # Use manager for saving
-        analysis_manager.submit_bpm_save(filepath, bpm_value, self._on_bpm_save_complete, self)
+        analysis_manager.submit_bpm_save(filepath, bpm_value, self._on_bpm_save_complete, self._tk_scheduler)
 
     def _on_bpm_save_complete(self, filepath, success):
         try:
@@ -835,7 +839,7 @@ class DJFrameView(ctk.CTkFrame):
 
                         def estimate_key():
                             try:
-                                analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self)
+                                analysis_manager.submit_key_analysis(filepath, self._finish_key_estimation, self._tk_scheduler)
                             except Exception:
                                 self.after(0, lambda: self._finish_key_estimation(filepath, None))
 
@@ -859,7 +863,7 @@ class DJFrameView(ctk.CTkFrame):
             if self.current_temp_key is not None:
                 self.save_key_btn.configure(state="disabled", text="Saving...")
 
-                analysis_manager.submit_key_save(filepath, self.current_temp_key, self._on_key_save_complete, self)
+                analysis_manager.submit_key_save(filepath, self.current_temp_key, self._on_key_save_complete, self._tk_scheduler)
         except Exception as exc:
             logger.error("Error in Key button click: %s", exc)
             self._reset_key_button()
@@ -867,8 +871,8 @@ class DJFrameView(ctk.CTkFrame):
     def _on_key_save_complete(self, filepath, success):
         try:
             if success:
-                # Remove cached estimate now that value is persisted
-                self.temporary_key_values.pop(filepath, None)
+                # Keep cached estimate (matches BPM's behavior) so it can be
+                # re-saved later if the on-disk metadata is removed.
                 self.save_key_btn.place_forget()
             else:
                 self._reset_key_button()

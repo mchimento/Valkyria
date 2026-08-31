@@ -116,17 +116,17 @@ class AnalysisManager:
                 callback_info = self.callbacks.pop(key, None)
 
                 if callback_info:
-                    callback, root_widget = callback_info
+                    callback, scheduler = callback_info
 
-                    if root_widget:
-                        # Schedule callback on main thread
-                        root_widget.after(0, callback, filepath, data)
+                    if scheduler:
+                        # Schedule callback on the caller's own thread (Tk's .after(), a Qt Signal, etc)
+                        scheduler(callback, filepath, data)
 
                     # If this was a save operation and it succeeded, update metadata cache
                     # and notify listeners within the main thread context if possible
                     if task_type in ('save_bpm', 'save_key') and data:
                         try:
-                            if root_widget:
+                            if scheduler:
                                 def _notify():
                                     try:
                                         if metadata_extractor:
@@ -139,12 +139,12 @@ class AnalysisManager:
                                     except Exception:
                                         pass
                                 try:
-                                    root_widget.after(0, _notify)
+                                    scheduler(_notify)
                                 except Exception:
                                     # If scheduling fails, call directly as fallback
                                     _notify()
                             else:
-                                # No root widget provided - attempt direct update/notify
+                                # No scheduler provided - attempt direct update/notify
                                 if metadata_extractor:
                                     metadata_extractor.update_cache(filepath)
                                     if task_type == 'save_bpm':
@@ -157,50 +157,62 @@ class AnalysisManager:
             except Exception as e:
                 logger.error(f"Error in Analysis result listener: {e}")
 
-    def submit_bpm_analysis(self, filepath, callback, root_widget):
-        """Submit a BPM analysis task."""
+    def submit_bpm_analysis(self, filepath, callback, scheduler):
+        """Submit a BPM analysis task. scheduler(func, *args) runs func on the caller's thread."""
         if not self.running:
             self.start()
 
         key = ('analyze_bpm', filepath)
-        self.callbacks[key] = (callback, root_widget)
+        self.callbacks[key] = (callback, scheduler)
         self.input_queue.put(('analyze_bpm', filepath, None))
 
-    def submit_bpm_save(self, filepath, bpm_value, callback, root_widget):
+    def submit_bpm_save(self, filepath, bpm_value, callback, scheduler):
         """Submit a BPM save task."""
         if not self.running:
             self.start()
 
         key = ('save_bpm', filepath)
-        self.callbacks[key] = (callback, root_widget)
+        self.callbacks[key] = (callback, scheduler)
         self.input_queue.put(('save_bpm', filepath, [bpm_value]))
 
-    def submit_key_analysis(self, filepath, callback, root_widget):
+    def submit_key_analysis(self, filepath, callback, scheduler):
         """Submit a Key analysis task."""
         if not self.running:
             self.start()
 
         key = ('analyze_key', filepath)
-        self.callbacks[key] = (callback, root_widget)
+        self.callbacks[key] = (callback, scheduler)
         self.input_queue.put(('analyze_key', filepath, None))
 
-    def submit_key_save(self, filepath, key_value, callback, root_widget):
+    def submit_key_save(self, filepath, key_value, callback, scheduler):
         """Submit a Key save task."""
         if not self.running:
             self.start()
 
         key = ('save_key', filepath)
-        self.callbacks[key] = (callback, root_widget)
+        self.callbacks[key] = (callback, scheduler)
         self.input_queue.put(('save_key', filepath, [key_value]))
 
     def shutdown(self):
-        """Shutdown the background process."""
+        """Shutdown the background process. Guarantees the process is
+        actually dead before returning — otherwise Python's own atexit
+        multiprocessing cleanup joins remaining daemon children with no
+        timeout at all, which can hang the whole interpreter on exit if
+        a long-running analysis (analyze_bpm/analyze_key on a real audio
+        file) is still in flight when this is called."""
         self.running = False
         if self.process:
-            self.input_queue.put(None)
+            try:
+                self.input_queue.put(None)
+            except Exception:
+                pass
             self.process.join(timeout=1.0)
             if self.process.is_alive():
                 self.process.terminate()
+                self.process.join(timeout=1.0)
+            if self.process.is_alive():
+                self.process.kill()
+                self.process.join(timeout=1.0)
 
 # Global accessor - aliased for backward compat if needed, but renamed to analysis_manager
 analysis_manager = AnalysisManager.get_instance()

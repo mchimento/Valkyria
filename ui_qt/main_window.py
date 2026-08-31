@@ -19,19 +19,22 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, QEvent, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
 from app.paths import get_resource_path
 from app.state import AppState
 from audio import m3u as m3u_module
 from audio.audio_player import filter_selectable_audio_devices
+from audio.bpm import analysis_manager
 from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui_qt.browser_view import BrowserViewQt
 from ui_qt.controls import ControlsBarQt
+from ui_qt.dj_view import DJViewQt
 from ui_qt.menu_bar import CustomMenuBarQt
 from ui_qt.playback_features_window import PlaybackFeaturesWindowQt
 from ui_qt.playlist_view import PlaylistViewQt
 from ui_qt.preferences_window import PreferencesWindowQt
+from ui_qt.status_view import StatusViewQt
 from ui_qt.theme_bridge import apply_theme
 
 logger = logging.getLogger(__name__)
@@ -132,6 +135,22 @@ class MainWindowQt(QWidget):
 
         self.controls = ControlsBarQt(self.player, self.settings, self.theme.palette, state=self.state, parent=self.central_area)
         central_layout.addWidget(self.controls)
+
+        self.bottom_info_bar = QWidget(self.central_area)
+        bottom_layout = QHBoxLayout(self.bottom_info_bar)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        self.status_view = StatusViewQt(self.state, self.theme, self.settings, parent=self.bottom_info_bar)
+        self.dj_view = DJViewQt(self.state, self.theme, self.settings, self.player, parent=self.bottom_info_bar)
+        bottom_layout.addWidget(self.status_view, 1)
+        bottom_layout.addWidget(self.dj_view, 0)
+        central_layout.addWidget(self.bottom_info_bar)
+        show_dj = bool(getattr(settings, "show_dj", True))
+        self.dj_view.setVisible(show_dj)
+        # dj_view.isVisible() isn't reliable yet here — the window itself
+        # hasn't been shown, so it would read False regardless of show_dj.
+        if not show_dj:
+            self.player.set_audio_metrics_callback(None)
+
         layout.addWidget(self.central_area, 1)
 
         self.playlist_view.track_activated.connect(self._play_index)
@@ -142,6 +161,7 @@ class MainWindowQt(QWidget):
         self.controls.effects_requested.connect(self._on_open_audio_effects)
         self.controls.stopped.connect(self._on_stopped)
         self.controls.crossfade_requested.connect(self._on_track_ended)
+        self.controls.paused_state_changed.connect(self._on_pause_toggled)
         self._track_switch_ready.connect(self._play_index, Qt.QueuedConnection)
         self.playlist_view.playlist_changed.connect(self._update_menu_state)
         # Relays into the same cleanup a real Stop press gets (waveform reset, etc).
@@ -231,7 +251,7 @@ class MainWindowQt(QWidget):
         view_items = [
             {"label": "Show Playback", "checkbutton": True, "checked": bool(getattr(self.settings, "show_playlist", True)), "accelerator": "F9", "command": self._toggle_playlist_visibility},
             {"label": "Show Browser", "checkbutton": True, "checked": bool(getattr(self.settings, "show_browser", True)), "accelerator": "F10", "command": self._toggle_browser_visibility},
-            {"label": "Show Live Audio Analysis", "checkbutton": True, "checked": bool(getattr(self.settings, "show_dj", True)), "accelerator": "F11"},
+            {"label": "Show Live Audio Analysis", "checkbutton": True, "checked": bool(getattr(self.settings, "show_dj", True)), "accelerator": "F11", "command": self._toggle_dj_visibility},
             {"separator": True},
             {"label": "Always on Top", "state": "disabled"},
         ]
@@ -403,6 +423,17 @@ class MainWindowQt(QWidget):
         self.state.current_index = None
         self.playlist_view.refresh_highlight()
         self._update_menu_state()
+        self.status_view._stop_time_limit_updates()
+        self.status_view.handle_stop()
+        self.dj_view._clear_info()
+
+    def _on_pause_toggled(self, is_paused: bool) -> None:
+        if is_paused:
+            self.status_view._stop_time_limit_updates()
+            return
+        idx = self.state.current_index
+        if idx is not None and idx < len(self.state.playlist) and self.state.playlist[idx] in self.state.play_limits:
+            self.status_view._start_time_limit_updates(self.controls)
 
     def _find_action(self, menu, label: str):
         for action in menu.actions():
@@ -433,6 +464,10 @@ class MainWindowQt(QWidget):
         self.controls.play_file(self.state.playlist[index])
         self.playlist_view.refresh_highlight()
         self._update_menu_state()
+        self.status_view.restore_status()
+        self.dj_view.update_info()
+        if self.state.playlist[index] in self.state.play_limits:
+            self.status_view._start_time_limit_updates(self.controls)
 
     def _on_track_ended(self) -> None:
         """Connected to PlayerBridge.track_ended (see main_qt.py) in place
@@ -449,6 +484,7 @@ class MainWindowQt(QWidget):
         if repeat_mode == "one":
             self._play_index(self.state.current_index)
             self._set_repeat_mode("none")
+            self.status_view.schedule_restore(3000)
         elif repeat_mode == "all":
             next_index = self.state.current_index + 1
             if next_index >= len(self.state.playlist):
@@ -471,6 +507,20 @@ class MainWindowQt(QWidget):
         visible = not self.browser_view.isVisible()
         self.browser_view.setVisible(visible)
         self.settings.show_browser = visible
+        self._save_settings_safe()
+
+    def _toggle_dj_visibility(self) -> None:
+        # Register/unregister the metrics callback, not just hide the widget —
+        # AudioPlayer._update_audio_metrics skips its work entirely when unset.
+        visible = not self.dj_view.isVisible()
+        self.dj_view.setVisible(visible)
+        if visible:
+            self.player.set_audio_metrics_callback(self.dj_view._emit_metrics)
+            if self.state.current_index is not None:
+                self.dj_view.update_info()
+        else:
+            self.player.set_audio_metrics_callback(None)
+        self.settings.show_dj = visible
         self._save_settings_safe()
 
     def _build_audio_device_items(self) -> list:
@@ -560,6 +610,8 @@ class MainWindowQt(QWidget):
             apply_theme(app, palette)
         self.controls.apply_palette(palette)
         self.playlist_view.apply_palette(palette)
+        self.status_view.apply_palette(palette)
+        self.dj_view.apply_palette(palette)
 
     # ---------- geometry persistence ----------
 
@@ -615,6 +667,14 @@ class MainWindowQt(QWidget):
             self.browser_view.shutdown()
         except Exception:
             logger.exception("Failed to shut down browser preview player on close")
+        try:
+            self.dj_view.shutdown()
+        except Exception:
+            logger.exception("Failed to shut down DJ view on close")
+        try:
+            analysis_manager.shutdown()
+        except Exception:
+            logger.exception("Failed to shut down BPM/Key analysis process on close")
         self._save_geometry()
         try:
             self.settings.save()

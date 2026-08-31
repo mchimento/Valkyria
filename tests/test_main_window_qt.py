@@ -324,3 +324,19 @@ def test_toggle_browser_visibility(qtbot, window, settings):
     window._toggle_browser_visibility()
     assert not window.browser_view.isVisible()
     assert settings.show_browser is False
+
+
+def test_toggle_dj_visibility_registers_and_unregisters_metrics_callback(qtbot, window, settings, mock_player):
+    window.show()
+    qtbot.waitExposed(window)
+    assert window.dj_view.isVisible()
+
+    window._toggle_dj_visibility()
+    assert not window.dj_view.isVisible()
+    assert settings.show_dj is False
+    mock_player.set_audio_metrics_callback.assert_called_with(None)
+
+    window._toggle_dj_visibility()
+    assert window.dj_view.isVisible()
+    assert settings.show_dj is True
+    mock_player.set_audio_metrics_callback.assert_called_with(window.dj_view._emit_metrics)

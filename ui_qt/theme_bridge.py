@@ -66,6 +66,9 @@ def build_stylesheet(palette: dict) -> str:
     entry_bg = palette.get("entry_bg", "#2A2A2A")
     fg_dim = palette.get("fg_dim", "#888888")
 
+    status_bg = palette.get("status_bg", "#E8E8E8")
+    status_border = palette.get("status_border", "#D0D0D0")
+
     return f"""
     QWidget {{
         background-color: {bg};
@@ -84,6 +87,12 @@ def build_stylesheet(palette: dict) -> str:
     QWidget#DialogTitleBar {{
         background-color: {menubar_bg};
         border-bottom: 1px solid {border};
+    }}
+
+    QFrame#StatusPanel, QFrame#DJPanel {{
+        background-color: {status_bg};
+        border: 1px solid {status_border};
+        border-radius: 6px;
     }}
 
     QWidget#CentralArea {{
@@ -188,6 +197,22 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {button_hover};
     }}
     QPushButton#BrowserActionButton:pressed {{
+        background-color: {button_pressed};
+    }}
+
+    QPushButton#DJSaveButton {{
+        background-color: {button_bg};
+        color: {button_fg};
+        border-radius: 6px;
+        padding: 2px 6px;
+        min-width: 56px;
+        min-height: 22px;
+        font-size: 9pt;
+    }}
+    QPushButton#DJSaveButton:hover {{
+        background-color: {button_hover};
+    }}
+    QPushButton#DJSaveButton:pressed {{
         background-color: {button_pressed};
     }}
 

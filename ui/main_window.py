@@ -1308,6 +1308,11 @@ class MainWindow:
         except Exception:
             logger.error("Failed to stop player on exit", exc_info=True)
         try:
+            from audio.bpm import analysis_manager
+            analysis_manager.shutdown()
+        except Exception:
+            logger.error("Failed to shut down BPM/Key analysis process on exit", exc_info=True)
+        try:
             self.root.destroy()
         except Exception:
             logger.error("Failed to destroy window on exit", exc_info=True)

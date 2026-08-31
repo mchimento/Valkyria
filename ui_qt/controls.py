@@ -49,6 +49,7 @@ class ControlsBarQt(QWidget):
     repeat_toggle_requested = Signal()
     effects_requested = Signal()
     crossfade_requested = Signal()
+    paused_state_changed = Signal(bool)
 
     def __init__(self, player, settings, palette: dict, state=None, parent=None):
         super().__init__(parent)
@@ -230,6 +231,7 @@ class ControlsBarQt(QWidget):
     def _on_pause(self) -> None:
         try:
             self.player.pause()
+            self.paused_state_changed.emit(self.player.is_paused())
         except Exception:
             logger.exception("pause() failed")
 
