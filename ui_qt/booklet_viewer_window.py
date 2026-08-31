@@ -4,7 +4,7 @@ images embedded in an audio file's tags (plus folder art)."""
 import logging
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -73,7 +73,9 @@ class BookletViewerWindowQt(QDialog):
         body_layout.addWidget(self.info_label)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.button(QDialogButtonBox.Close).setObjectName("DialogButton")
+        close_btn = buttons.button(QDialogButtonBox.Close)
+        close_btn.setObjectName("DialogButton")
+        close_btn.setIcon(QIcon())
         buttons.rejected.connect(self.reject)
         body_layout.addWidget(buttons)
 

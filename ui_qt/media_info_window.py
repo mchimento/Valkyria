@@ -8,6 +8,7 @@ from typing import Callable, Optional
 
 import shiboken6
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -81,6 +82,7 @@ class MediaInfoWindowQt(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         btn = buttons.button(QDialogButtonBox.Close)
         btn.setObjectName("DialogButton")
+        btn.setIcon(QIcon())
         buttons.rejected.connect(self.reject)
         body_layout.addWidget(buttons)
 
@@ -201,7 +203,10 @@ class MediaInfoWindowQt(QDialog):
 
     def _build_metadata_tab(self) -> QWidget:
         tab = QWidget()
-        form = QFormLayout(tab)
+        tab_layout = QVBoxLayout(tab)
+        form_widget = QWidget()
+        form = QFormLayout(form_widget)
+        tab_layout.addWidget(form_widget)
         self.entries = {}
         meta = self.file_info.get("metadata", {})
 
@@ -213,7 +218,7 @@ class MediaInfoWindowQt(QDialog):
         bpm_row = QHBoxLayout()
         self.entries["bpm"] = QLineEdit()
         self.bpm_btn = QPushButton("Calculate BPM")
-        self.bpm_btn.setObjectName("DialogButton")
+        self.bpm_btn.setObjectName("CompactButton")
         self.bpm_btn.clicked.connect(self._calculate_bpm)
         bpm_row.addWidget(self.entries["bpm"], 1)
         bpm_row.addWidget(self.bpm_btn)
@@ -224,7 +229,7 @@ class MediaInfoWindowQt(QDialog):
         key_row = QHBoxLayout()
         self.entries["key"] = QLineEdit()
         self.key_btn = QPushButton("Calculate Key")
-        self.key_btn.setObjectName("DialogButton")
+        self.key_btn.setObjectName("CompactButton")
         self.key_btn.clicked.connect(self._calculate_key)
         key_row.addWidget(self.entries["key"], 1)
         key_row.addWidget(self.key_btn)
@@ -238,7 +243,8 @@ class MediaInfoWindowQt(QDialog):
         save_row = QHBoxLayout()
         save_row.addStretch(1)
         save_row.addWidget(self.save_btn)
-        form.addRow(save_row)
+        tab_layout.addStretch(1)
+        tab_layout.addLayout(save_row)
 
         return tab
 

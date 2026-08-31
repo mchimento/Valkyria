@@ -230,7 +230,7 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {button_pressed};
     }}
 
-    QPushButton#DJSaveButton {{
+    QPushButton#CompactButton {{
         background-color: {button_bg};
         color: {button_fg};
         border-radius: 6px;
@@ -239,10 +239,10 @@ def build_stylesheet(palette: dict) -> str:
         min-height: 22px;
         font-size: 9pt;
     }}
-    QPushButton#DJSaveButton:hover {{
+    QPushButton#CompactButton:hover {{
         background-color: {button_hover};
     }}
-    QPushButton#DJSaveButton:pressed {{
+    QPushButton#CompactButton:pressed {{
         background-color: {button_pressed};
     }}
 
