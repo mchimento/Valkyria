@@ -127,6 +127,20 @@ def test_remove_selected(view, state):
     assert state.current_index == 1
 
 
+def test_remove_selected_clears_selection_afterward(qtbot, view, state):
+    # Regression: refresh()'s default (no select= passed) reselects by raw
+    # index number, which after a removal refers to different remaining
+    # songs the user never selected — not an empty selection.
+    view._select_indices([0, 1])
+    view.remove_selected()
+    # Waits for the async row rebuild (and its per-item reselect decision)
+    # to actually finish — state.playlist changes synchronously well before
+    # that, so waiting on it alone would check selection too early to mean
+    # anything either way.
+    qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 1, timeout=2000)
+    assert view.get_selected_indices() == []
+
+
 def test_play_after_current_selected(view, state):
     state.current_index = 0
     view._select_indices([2])
@@ -168,6 +182,13 @@ def test_context_remove(view, state):
     state.current_index = None
     view._context_remove(1)
     assert state.playlist == ["/tmp/a.mp3", "/tmp/c.mp3"]
+
+
+def test_context_remove_clears_selection_afterward(qtbot, view, state):
+    view._select_indices([0, 1])
+    view._context_remove(1)
+    qtbot.waitUntil(lambda: view._tree.topLevelItemCount() == 2, timeout=2000)
+    assert view.get_selected_indices() == []
 
 
 def _build_context_menu_actions(view, row_index):

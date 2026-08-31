@@ -364,7 +364,11 @@ class PlaylistViewQt(QWidget):
         self.state.playlist = new_playlist
         self.state.current_index = new_index
         self._stop_if_current_cleared(new_index)
-        self.refresh()
+        # Explicit empty selection — refresh()'s default (reselect whatever
+        # was selected before) would reselect by raw index number, which
+        # after a removal refers to different, remaining songs that were
+        # never actually selected by the user.
+        self.refresh(select=[])
 
     def _on_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
         if not getattr(self.state, "play_on_double", True):
@@ -401,7 +405,10 @@ class PlaylistViewQt(QWidget):
         self.state.playlist = new_playlist
         self.state.current_index = new_index
         self._stop_if_current_cleared(new_index)
-        self.refresh()
+        # See _context_remove's comment: default reselect would land on
+        # whatever remaining songs now occupy the removed rows' old index
+        # numbers, not an empty selection.
+        self.refresh(select=[])
 
     def play_after_current_selected(self) -> None:
         indices = self.get_selected_indices()
