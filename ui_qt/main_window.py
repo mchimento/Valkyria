@@ -144,13 +144,7 @@ class MainWindowQt(QWidget):
         self.controls.crossfade_requested.connect(self._on_track_ended)
         self._track_switch_ready.connect(self._play_index, Qt.QueuedConnection)
         self.playlist_view.playlist_changed.connect(self._update_menu_state)
-        # Relays to controls' own `stopped` signal rather than duplicating
-        # its cleanup here — this fires both ControlsBarQt's internal
-        # _finish_stop (waveform.clear() + time labels) and this class's
-        # own _on_stopped (current_index/highlight), the exact same
-        # cleanup a real Stop press gets. Without this, clearing/removing
-        # the playing track stopped the audio but left the waveform
-        # showing that track's stale playhead position indefinitely.
+        # Relays into the same cleanup a real Stop press gets (waveform reset, etc).
         self.playlist_view.playback_stopped.connect(self.controls.stopped)
         self._update_menu_state()
 
@@ -496,12 +490,7 @@ class MainWindowQt(QWidget):
         if not devices:
             return [{"label": "No devices found", "state": "disabled"}]
         current_id = getattr(self.player, "_device_id", None)
-        # sounddevice/PortAudio can't see what "Default Audio Device"
-        # actually reaches once it's something outside the ALSA hostapi
-        # (e.g. a Bluetooth headset set as PipeWire's active default
-        # sink) — get_default_output_info() asks WirePlumber directly, so
-        # the menu label can say so instead of silently looking like
-        # Bluetooth isn't in use at all.
+        # Show what "Default" actually resolves to (e.g. a Bluetooth sink).
         try:
             _alsa_card, default_description = self.player.get_default_output_info()
         except Exception:

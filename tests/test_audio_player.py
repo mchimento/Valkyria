@@ -212,5 +212,66 @@ class TestAudioPlayerResample(unittest.TestCase):
         self.assertLess(buf_len, 5000)
 
 
+class TestAudioPlayerSilenceDetection(unittest.TestCase):
+    """Regression tests for silence-detection auto-skip in _stream_callback."""
+
+    class ConstantLevelBuffer:
+        """Fake AudioBuffer returning a constant amplitude on every read."""
+
+        def __init__(self, amplitude, channels=2, samplerate=44100):
+            self.channels = channels
+            self.samplerate = samplerate
+            self.absolute_read_pos = 0
+            self.eof = False
+            self._amplitude = amplitude
+
+        def read(self, frames):
+            return np.full((frames, self.channels), self._amplitude, dtype="float32")
+
+    def _make_player(self, amplitude, total_frames, frames_played, volume=100):
+        player = AudioPlayer()
+        player.effects.process = lambda x: x
+        player.silence_detection_enabled = True
+        player._buffer = self.ConstantLevelBuffer(amplitude=amplitude)
+        player._total_frames = total_frames
+        player._frames_played = frames_played
+        player._volume = volume
+        return player
+
+    def _run_quiet_callbacks(self, player, seconds=4.5, frames=4410):
+        # Stops as soon as _silence_detected flips.
+        outdata = np.zeros((frames, 2), dtype="float32")
+        for _ in range(int(seconds * 44100 / frames) + 1):
+            player._stream_callback(outdata, frames, None, None)
+            if player._silence_detected:
+                break
+
+    def test_quiet_intro_does_not_trigger_near_start_of_track(self):
+        player = self._make_player(
+            amplitude=1e-4, total_frames=44100 * 300, frames_played=0,
+        )
+        self._run_quiet_callbacks(player)
+        self.assertFalse(player._silence_detected)
+
+    def test_quiet_stretch_near_end_of_track_triggers(self):
+        total_frames = 44100 * 100
+        player = self._make_player(
+            amplitude=1e-4, total_frames=total_frames,
+            frames_played=total_frames - 44100 * 5,
+        )
+        self._run_quiet_callbacks(player)
+        self.assertTrue(player._silence_detected)
+
+    def test_measured_on_raw_source_not_volume_scaled_output(self):
+        # Loud raw source + near-zero volume: must not read as silent post-volume.
+        total_frames = 44100 * 100
+        player = self._make_player(
+            amplitude=0.5, total_frames=total_frames,
+            frames_played=total_frames - 44100 * 5, volume=0.1,
+        )
+        self._run_quiet_callbacks(player)
+        self.assertFalse(player._silence_detected)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -271,13 +271,7 @@ class PlaybackFeaturesWindowQt(QDialog):
 
     def _on_silence_toggle(self, checked: bool) -> None:
         self.state.silence_detection_enabled = checked
-        # Matches ui/playback_features_view.py:425-426 — a direct attribute
-        # assignment, not a setter method (AudioPlayer doesn't have one for
-        # this flag). Guarded the same way the fade in/out handlers
-        # tolerate a missing player (via their try/except) — this method
-        # runs unconditionally during __init__ (see the call right after
-        # construction above), so a dialog opened with player=None would
-        # otherwise crash on this line before it ever finished building.
+        # Guarded like the fade handlers — runs during __init__, so player=None must not crash.
         if self.player is not None:
             self.player.silence_detection_enabled = checked
 

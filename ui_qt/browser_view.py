@@ -1,24 +1,5 @@
-"""
-Qt port of ui/browser_view.py.
-
-Not a lazy filesystem tree in the original either — just a flat list of
-files the user picked via "Open Folder..."/"Open Files...", stored in
-state.browser_files. The hand-rolled ButtonPress/B1-Motion drag machinery
-and the floating tk.Toplevel drag tooltip (browser_view.py:256-270,
-429-642) are replaced by QTreeWidget's native drag support — dragging
-selected rows out just needs mimeData() to package file paths as a
-standard text/uri-list, which ui_qt/playlist_view.py's drop handling
-already reads via QMimeData.urls().
-
-Button column matches the original's layout: a vertically-centered column
-on the left (button_frame, browser_view.py:114-159) — Folder/File pickers,
-Add/Add Below (drag-drop isn't the only way in), then preview play/stop —
-with the tree taking the rest of the width, rather than a row above it.
-Above the tree on the right, a "Preview output:" device dropdown
-(browser_view.py:168-187, 811-878) lets preview play through a different
-device than the main player — it always excludes whatever device the main
-player currently has selected, resolved the same way the original does.
-"""
+"""Qt port of ui/browser_view.py — flat file list with drag-drop into the
+playlist and a preview player with its own output-device selector."""
 
 import logging
 import os
@@ -47,12 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class _BrowserTree(QTreeWidget):
-    """Drag source (out to the playlist) and drop target for reordering
-    itself — mirrors ui_qt/playlist_view.py's _PlaylistTree: let Qt perform
-    the visual move natively, then resync state.browser_files from the
-    result. The browser never accepts drops *from* elsewhere (only the
-    playlist accepts external drops), so dropEvent ignores anything whose
-    source isn't this same tree."""
+    """Drag source into the playlist; also reorderable in place."""
 
     def __init__(self, owner: "BrowserViewQt", parent=None):
         super().__init__(parent)
@@ -65,16 +41,8 @@ class _BrowserTree(QTreeWidget):
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
     def mimeData(self, items):
-        # Augment (not replace) Qt's own mimeData: the base implementation
-        # already encodes application/x-qabstractitemmodeldatalist, which
-        # QAbstractItemView's default dropEvent needs to recognize an
-        # internal row-move at all. Building a QMimeData from scratch here
-        # (as an earlier version of this method did) produced only
-        # text/uri-list — external drops onto the playlist worked, since
-        # that side only reads mime.urls(), but internal reordering within
-        # this tree silently did nothing, since super().dropEvent() had no
-        # row-move data to act on. Confirmed by inspecting mime.formats()
-        # before/after this fix.
+        # Augment (not replace) Qt's own mimeData, which internal row-move
+        # drop handling needs, with a text/uri-list for external drops.
         mime = super().mimeData(items)
         urls = []
         for item in items:
@@ -92,10 +60,7 @@ class _BrowserTree(QTreeWidget):
         event.ignore()
 
     def keyPressEvent(self, event) -> None:
-        # Matches ui/browser_view.py:279's tree.bind('<Delete>', ...) — an
-        # earlier version had no way to remove a single mistaken entry
-        # from the browser's file list at all; only re-browsing a whole
-        # folder/file selection (replacing the entire list) could change it.
+        # Matches ui/browser_view.py:279's tree.bind('<Delete>', ...).
         if event.key() == Qt.Key_Delete:
             self._owner._remove_selected_from_browser()
             return
@@ -136,12 +101,7 @@ class BrowserViewQt(QWidget):
         self.btn_add = QPushButton("➕ Add")
         self.btn_add_below = QPushButton("⬇ Add Below")
         for btn in (self.btn_open_folder, self.btn_open_files, self.btn_add, self.btn_add_below):
-            # BrowserActionButton, not the shared DialogButton: its wider
-            # min-width (needed so "⬇ Add Below" isn't clipped) is set in
-            # theme_bridge.py's QSS, not via setMinimumWidth() here — QSS
-            # box-model properties on a styled widget override a Python-
-            # side setMinimumWidth() call entirely once the stylesheet is
-            # applied, so setting it here would have had no effect.
+            # Wider min-width (vs shared DialogButton) set via QSS, not setMinimumWidth().
             btn.setObjectName("BrowserActionButton")
             button_col.addWidget(btn)
 
@@ -200,11 +160,7 @@ class BrowserViewQt(QWidget):
         for path in self.state.browser_files:
             item = QTreeWidgetItem([os.path.basename(path)])
             item.setData(0, Qt.UserRole, path)
-            # See ui_qt/playlist_view.py's refresh() for why: without this,
-            # a drop squarely on a row nests it as a child instead of
-            # reordering, and _resync_from_internal_move only reads
-            # top-level items — a nested row would silently vanish from
-            # state.browser_files.
+            # Prevents a drop-on-row from nesting instead of reordering.
             item.setFlags(item.flags() & ~Qt.ItemIsDropEnabled)
             self._tree.addTopLevelItem(item)
 
@@ -272,79 +228,19 @@ class BrowserViewQt(QWidget):
     # ---------- preview output device ----------
 
     def _get_preview_devices(self) -> List[tuple]:
-        """(id, name) pairs available for preview: only devices that are
-        genuinely *separate physical hardware* from whatever the main
-        player is using (e.g. a second sound card feeding headphones,
-        while the main player plays to speakers) — never anything that
-        shares the main player's actual output, even if it wouldn't
-        technically crash.
-
-        This went through two wrong designs before landing here. First,
-        an index-based exclusion (matching ui/browser_view.py:811-833's
-        own logic, so this gap is pre-existing there too) only excluded
-        the one specific device the main player was using, leaving every
-        *other* entry offered — including a raw "hw:X,Y" alias of the
-        *same* card, which really did collide with the main player
-        ("AlsaOpen" failing). Second, an allowlist of "known-safe" shared
-        paths (the system default and an explicit "pipewire" entry, both
-        of which route through PipeWire's own mixing and don't crash)
-        stopped the crashes, but was still wrong: it let preview and the
-        main playlist end up audibly mixed onto the *same* output, which
-        defeats the actual point of a preview feature — cueing up a track
-        before it goes to the main output, not blending it in. A real
-        report confirmed exactly that: "it is still possible to play both
-        lists from the same output."
-
-        So this compares *cards*, not raw device identity, and treats
-        every name without an explicit "(hw:CARD,DEV)" suffix (Default,
-        pipewire, sysdefault, dmix, front, surroundNN) as aliasing
-        whatever the system's actual current default output is. A device
-        (aliased or raw) is offered only when it's genuinely not that —
-        an earlier version excluded every alias unconditionally
-        regardless of which card it actually pointed to, which both hid
-        genuinely-safe options and made the browser's list arbitrarily
-        smaller than the Tools menu's full device list.
-
-        A third bug (found via a real Bluetooth headset) went the other
-        way: an even earlier version of this *card-matching* logic
-        assumed every alias resolves to whichever card the first raw
-        hw: entry names — true on a system with no PipeWire routing
-        surprises, but wrong the moment the user's actual default sink
-        becomes something sounddevice/PortAudio can't see at all
-        (confirmed via sd.query_hostapis(): only an "ALSA" hostapi
-        exists here, no native PipeWire/Pulse one, so a Bluetooth sink
-        never gets its own hw:CARD,DEV entry or hostapi). With that
-        wrong assumption, once the user's real default became a
-        Bluetooth headset, this still treated the main player's "Default"
-        selection as if it were sitting on the primary ALSA card, which
-        both wrongly excluded the laptop's own real speakers (genuinely
-        a different device from the Bluetooth headset) and had no way to
-        surface the Bluetooth headset itself. Fixed by asking WirePlumber
-        directly (get_default_output_info(), the only component with
-        actual visibility into PipeWire's active default sink) instead
-        of guessing from the static ALSA device list. If the system has
-        no second sound card, preview has nothing safe to offer and
-        correctly comes back empty (see _refresh_preview_devices, which
-        disables preview entirely rather than showing a device that
-        isn't real separation)."""
+        """(id, name) pairs available for preview: only devices genuinely
+        separate from whatever card the main player is using — never
+        anything that would share its actual output."""
         if self._main_player is None:
             return []
         try:
             all_devices = self._main_player.get_audio_devices()
         except Exception:
             return []
-        # Same alias-collapsing the Tools menu applies (filter_selectable_
-        # audio_devices) — without this, sysdefault/front/surroundNN/
-        # pipewire/dmix/"default" all carry the *same* effective card as
-        # "Default Audio Device" itself (see below), so whenever Default
-        # was offered, all ~7 of its aliases were offered right alongside
-        # it as redundant duplicates. The two lists must show the same
-        # set of "real" devices.
+        # Same alias-collapsing as the Tools menu, so both lists agree.
         all_devices = filter_selectable_audio_devices(all_devices)
 
         def hw_card(name: str) -> Optional[str]:
-            # "HDA Intel PCH: ... (hw:0,0)" -> "0"; None for anything
-            # without an explicit hw:CARD,DEV suffix.
             match = re.search(r"\(hw:(\d+),\d+\)", name)
             return match.group(1) if match else None
 
@@ -353,15 +249,10 @@ class BrowserViewQt(QWidget):
         except Exception:
             default_alsa_card, default_description = None, None
 
-        # Only used when get_default_output_info() itself couldn't
-        # determine anything (wpctl missing/failed) — best-effort guess,
-        # same as the old (known-imperfect) heuristic.
+        # Fallback guess if get_default_output_info() couldn't resolve anything.
         fallback_card = next((hw_card(name) for _did, name in all_devices if hw_card(name) is not None), None)
 
-        # A sentinel distinct from any real card number string (those
-        # are always plain digits) — marks "known to be non-ALSA
-        # hardware" (e.g. Bluetooth) so it never accidentally matches a
-        # real card and never gets confused with "unknown."
+        # Sentinel distinct from any real (digit-string) card number.
         NON_ALSA = "non-alsa-default"
 
         def default_effective_card() -> Optional[str]:
@@ -385,10 +276,7 @@ class BrowserViewQt(QWidget):
             main_card = default_effective_card()
 
         def displayed_name(device_id: str, name: str) -> str:
-            # Mirrors main_window.py's Tools menu: sounddevice/PortAudio
-            # can't see what "Default" actually reaches once it's a
-            # non-ALSA sink (Bluetooth), so surface WirePlumber's live
-            # resolution on the label instead of the plain static name.
+            # Mirrors the Tools menu: show what "Default" actually reaches.
             if device_id == "__DEFAULT__" and default_description:
                 return f"{name} (currently: {default_description})"
             return name
@@ -399,15 +287,7 @@ class BrowserViewQt(QWidget):
         ]
 
     def _refresh_preview_devices(self) -> None:
-        # Matches ui/browser_view.py:835-850: preserve the user's current
-        # selection if it's still present in the refreshed list, only
-        # falling back to the first entry if it's genuinely gone. An
-        # earlier version always cleared+repopulated unconditionally,
-        # which silently reset the combo (and the device _preview_play
-        # would actually use) to the first device on every single refresh
-        # — including the one _preview_play itself triggers right before
-        # reading the selection, so a chosen non-default device was never
-        # actually used for preview playback.
+        # Preserve the current selection across a refresh if it's still valid.
         previous_selection = self.preview_device_combo.currentText()
         devices = self._get_preview_devices()
         self._preview_devices = devices

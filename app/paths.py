@@ -48,15 +48,8 @@ def get_user_data_path() -> Path:
         old_path = Path.home() / ".tango-studio"
 
     if not path.exists() and old_path.exists():
-        # One-time migration from the app's old name (Tango Studio) — a
-        # plain rename here without this would make every existing
-        # user's saved theme, volume, window geometry, etc. (all read
-        # from Settings.config_path, which lives under this directory)
-        # silently vanish on first launch after the app rename, since
-        # Settings() would just find nothing at the new path and fall
-        # back to hardcoded defaults. shutil.move handles the same-
-        # filesystem rename case and the cross-filesystem copy+remove
-        # case transparently.
+        # One-time migration from the app's old name (Tango Studio), so
+        # existing users don't lose their saved settings on first launch.
         try:
             shutil.move(str(old_path), str(path))
             logger.info(f"Migrated user data directory from {old_path} to {path}")

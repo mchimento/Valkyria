@@ -50,19 +50,8 @@ def suppress_c_stderr():
 
 
 def filter_selectable_audio_devices(devices: list) -> list:
-    """
-    Keeps two kinds of entry: "Default Audio Device" itself
-    (device_id == '__DEFAULT__') and anything with a raw
-    "(hw:CARD,DEV)" suffix (genuine physical hardware — the laptop's
-    analog output, HDMI, etc). '__DEFAULT__' has to stay even though it
-    isn't itself physical hardware: with only the ALSA hostapi
-    available, a Bluetooth headset or other dynamically-connected output
-    never gets its own named entry in this list at all — it only
-    becomes reachable by becoming whatever the system default (i.e.
-    PipeWire's active sink) points to, which is exactly what
-    '__DEFAULT__' selects. Dropping it would remove the only way to
-    reach Bluetooth outputs, not just declutter aliases.
-    """
+    """Drop ALSA's stock plugin aliases (sysdefault, front, pipewire, dmix,
+    ...), keeping only 'Default Audio Device' and real hw:CARD,DEV entries."""
     def is_selectable(device_id: str, name: str) -> bool:
         if device_id == "__DEFAULT__":
             return True
@@ -515,26 +504,28 @@ class AudioPlayer:
             vol = self._volume / 100.0
             outdata[:] *= vol
 
-        # Silence Detection (needs to access buffer samplerate safely)
+        # Silence Detection — measured on raw `data`, not volume-scaled
+        # `outdata`, so it isn't affected by the volume/mute/fade settings.
         with self._lock:
-            if self.silence_detection_enabled and not self._silence_detected and self._buffer:
-                # Calculate RMS level in dB
-                rms = np.sqrt(np.mean(outdata ** 2))
+            if self.silence_detection_enabled and not self._silence_detected and self._buffer and len(data) > 0:
+                rms = np.sqrt(np.mean(data ** 2))
                 level_db = 20 * np.log10(rms + 1e-10)  # Add small value to avoid log(0)
 
                 if level_db < self._silence_threshold:
-                    # Silence detected, increment counter
-                    self._silence_frames_count += frames
-                    # Get samplerate from buffer
+                    self._silence_frames_count += len(data)
                     sr = self._buffer.samplerate
                     silence_duration = self._silence_frames_count / sr
 
-                    # If silence exceeds threshold duration, mark for stop
+                    # Only trigger near the actual end of the track — this
+                    # detects trailing dead air, not a quiet intro/section.
                     if silence_duration >= self._silence_duration:
-                        self._silence_detected = True
-                        # Don't call on_track_end here - let it happen naturally via CallbackStop
+                        near_end = (
+                            self._total_frames <= 0
+                            or (self._total_frames - self._frames_played) <= sr * 30
+                        )
+                        if near_end:
+                            self._silence_detected = True
                 else:
-                    # Audio detected, reset silence counter
                     self._silence_frames_count = 0
 
         # Calculate audio metrics if callback is registered
@@ -1101,6 +1092,8 @@ class AudioPlayer:
             return [('__DEFAULT__', 'Default Audio Device')]
 
     def get_default_output_info(self):
+        """Resolve what '__DEFAULT__' actually reaches via WirePlumber
+        (sounddevice's ALSA hostapi can't see this). Returns (alsa_card, description)."""
         try:
             result = subprocess.run(
                 ["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"],

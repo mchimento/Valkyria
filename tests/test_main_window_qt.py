@@ -60,16 +60,6 @@ def test_is_frameless(window):
 
 
 def test_audio_device_menu_drops_alsa_plugin_aliases(window):
-    # Regression test: sd.query_devices() also lists ALSA's stock
-    # software/plugin routes (sysdefault, front, surroundNN, pipewire,
-    # dmix, "default") as separate "devices" purely because alsa.conf
-    # names them — on a system with only an ALSA hostapi (no native
-    # PipeWire/Pulse hostapi) they all resolve to the same underlying
-    # output as "Default Audio Device", so they should be filtered out
-    # of the Tools > Audio Device menu rather than padding it with
-    # duplicates. Physical hw:CARD,DEV entries and "Default Audio
-    # Device" itself (the only way to reach a Bluetooth/dynamically
-    # connected output on such a system) must remain.
     window.player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default Audio Device"),
         ("0", "HDA Intel PCH: Analog (hw:0,0)"),
@@ -90,10 +80,6 @@ def test_audio_device_menu_drops_alsa_plugin_aliases(window):
 
 
 def test_audio_device_menu_labels_default_with_live_bluetooth_name(window):
-    # Regression test: sounddevice/PortAudio can't see what "Default"
-    # actually reaches once it's a Bluetooth sink, so the menu used to
-    # just say "(system default)" with no indication Bluetooth was even
-    # in use. get_default_output_info() resolves this via WirePlumber.
     window.player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default Audio Device"),
         ("0", "HDA Intel PCH: Analog (hw:0,0)"),
@@ -171,8 +157,7 @@ def test_open_folder_menu_action_populates_playlist(qtbot, window, tmp_path):
 
     assert window.state.playlist == [str(tmp_path / "song.mp3")]
     assert window.state.current_index is None
-    # Rows are only created once their metadata batch arrives — see
-    # ui_qt/playlist_view.py's refresh() docstring.
+    # Rows only appear once their metadata batch arrives.
     qtbot.waitUntil(lambda: window.playlist_view._tree.topLevelItemCount() == 1, timeout=2000)
 
 
@@ -241,9 +226,7 @@ def test_prev_moves_back_one(qtbot, window, mock_player):
 
     window.controls.btn_prev.click()
 
-    # _on_prev routes through _fade_then_play, which triggers the fade-out
-    # and switches tracks on a background thread + queued connection (see
-    # main_window.py:385-401) rather than updating state synchronously.
+    # _on_prev routes through _fade_then_play (threaded + queued), not synchronous.
     qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
     assert window.state.current_index == 1
     assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
@@ -265,8 +248,7 @@ def test_next_moves_forward_one(qtbot, window, mock_player):
 
     window.controls.btn_next.click()
 
-    # See test_prev_moves_back_one: _on_next also routes through the
-    # threaded/queued _fade_then_play sequence, not a synchronous update.
+    # Same as test_prev_moves_back_one: threaded + queued, not synchronous.
     qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
     assert window.state.current_index == 1
     assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"

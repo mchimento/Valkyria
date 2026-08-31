@@ -135,9 +135,7 @@ def test_play_after_current_selected(view, state):
 
 
 def test_clear(view, state):
-    # clear() confirms via QMessageBox.question before wiping the
-    # playlist (see playlist_view.py:468-490) — stub it to the Yes
-    # button, same as a user confirming the dialog.
+    # clear() confirms via QMessageBox.question first.
     with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
         view.clear()
     assert state.playlist == []

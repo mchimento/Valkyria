@@ -1,16 +1,7 @@
-"""
-Rounded pill-shaped toggle switch with a sliding knob, matching the
-tkinter build's CTkSwitch look — Qt's native QCheckBox has no built-in
-equivalent, it only renders as a plain square checkbox regardless of
-theme/QSS.
-
-Drop-in replacement for a QCheckBox used as an on/off toggle (not as a
-tri-state or list-item checkbox): subclasses QAbstractButton, so
-setCheckable/isChecked/setChecked/.toggled all work the same way. Unlike
-QCheckBox it has no built-in text label — callers pair it with a QLabel
-in their own layout (matches CTkSwitch's own text being visually separate
-from the interactive knob anyway).
-"""
+"""Rounded pill-shaped toggle switch with a sliding knob, matching the
+tkinter build's CTkSwitch look. Drop-in QCheckBox replacement for on/off
+toggles (setCheckable/isChecked/setChecked/.toggled all work the same),
+but has no built-in text label — pair it with a QLabel."""
 
 from PySide6.QtCore import (
     Property,
@@ -63,9 +54,7 @@ class ToggleSwitch(QAbstractButton):
         self._animation.start()
 
     def setChecked(self, checked: bool) -> None:
-        # Matches QCheckBox.setChecked() being usable programmatically
-        # (e.g. syncing to a saved setting on dialog open) without wanting
-        # the slide animation to play every time — jump straight there.
+        # Programmatic sync (e.g. loading a saved setting) jumps, no animation.
         super().setChecked(checked)
         self._animation.stop()
         self._knob_position = 1.0 if checked else 0.0

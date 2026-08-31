@@ -30,10 +30,7 @@ class TestPaths(unittest.TestCase):
                 self.assertEqual(base_path, Path(mock_meipass))
 
     def test_get_user_data_path(self):
-        """Test user data path generation. Mocks Path.home()/LOCALAPPDATA
-        so this never touches the real user directory (get_user_data_path
-        also does a migration check against an old-name directory next
-        to it, which would otherwise run against the real filesystem)."""
+        """Mocks Path.home()/LOCALAPPDATA so this never touches the real user directory."""
         import platform
         with tempfile.TemporaryDirectory() as tmp:
             if platform.system() == "Windows":
@@ -48,10 +45,7 @@ class TestPaths(unittest.TestCase):
             self.assertTrue(path.is_absolute())
 
     def test_get_user_data_path_migrates_old_tango_studio_directory(self):
-        """Renaming the app must not silently drop an existing user's
-        saved settings: if the old-named directory (from when the app
-        was called Tango Studio) is present and the new one isn't yet,
-        its contents should be moved over rather than left behind."""
+        """An old-named directory's contents should be moved, not left behind."""
         import platform
         with tempfile.TemporaryDirectory() as tmp:
             if platform.system() == "Windows":

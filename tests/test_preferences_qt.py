@@ -68,13 +68,7 @@ def test_incidental_save_during_preview_does_not_persist_it(dialog, settings):
 
 
 def test_reject_without_preview_does_not_reemit_theme(qtbot, dialog, theme_signal):
-    # Regression test: closing Preferences without ever touching the
-    # theme radios used to unconditionally re-broadcast the (unchanged)
-    # committed palette anyway, forcing a full app.setStyleSheet() re-
-    # polish of every widget for nothing — expensive enough on the main
-    # thread to audibly glitch a track playing via the callback-based
-    # sd.OutputStream in audio/audio_player.py. Simply opening and
-    # closing the dialog must not touch theme_signal at all.
+    # Regression test: closing without touching the theme must not re-broadcast it.
     received = []
     theme_signal.changed.connect(lambda palette: received.append(palette))
 

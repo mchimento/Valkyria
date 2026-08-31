@@ -35,14 +35,7 @@ def settings():
 
 @pytest.fixture
 def main_player():
-    # Two distinct sound cards (hw:0,* and hw:1,*), matching a real
-    # multi-card system — _get_preview_devices() only offers devices on a
-    # *different* card than whatever the main player uses, so tests need
-    # at least two to exercise anything beyond the "nothing available"
-    # case. BrowserViewQt is never constructed without a real player in
-    # production (main_qt.py always passes one), so tests default to
-    # having one too — test_no_main_player_has_no_preview_devices covers
-    # the player=None edge case explicitly instead.
+    # Two distinct sound cards, so tests can exercise more than "nothing available".
     player = MagicMock()
     player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default Audio Device"),
@@ -169,10 +162,7 @@ def test_items_are_not_drop_enabled_to_prevent_accidental_nesting(view):
 
 
 def test_internal_reorder_resyncs_browser_files(view, state):
-    # Simulates what Qt's real drag-drop already did visually (see
-    # ui_qt/playlist_view.py's equivalent test for why this is the
-    # reliable way to test the resync logic itself, independent of Qt's
-    # startDrag()/QDrag lifecycle).
+    # Simulates the visual move Qt's real drag-drop would perform.
     item_b = view._tree.takeTopLevelItem(1)
     view._tree.insertTopLevelItem(0, item_b)
 
@@ -244,10 +234,6 @@ def test_add_without_playlist_view_does_not_raise(qtbot, settings, mock_preview_
 # ---------- preview output device ----------
 
 def test_no_main_player_has_no_preview_devices(state, settings, mock_preview_player):
-    # With no main player reference, there's no way to know what card it
-    # occupies, so no device can be confirmed as genuinely separate —
-    # preview correctly has nothing safe to offer, matching
-    # ui/browser_view.py's own `if self._main_player is None: return []`.
     v = BrowserViewQt(state, settings)  # no player
     assert v.preview_device_combo.count() == 1
     assert v.preview_device_combo.currentText() == "No device available"
@@ -269,10 +255,6 @@ def test_main_player_device_excluded_from_preview_list(qtbot, state, settings, m
     qtbot.addWidget(v)
 
     names = [v.preview_device_combo.itemText(i) for i in range(v.preview_device_combo.count())]
-    # Same card as main (even by a different, non-hw-suffixed name) or any
-    # device with no hw:CARD,DEV suffix at all (ambiguous which card it
-    # actually reaches) must never be offered — only a genuinely different
-    # card counts as real separation.
     assert "HDA Intel PCH: Analog (hw:0,0)" not in names
     assert "Default" not in names
     assert "sysdefault" not in names
@@ -280,15 +262,7 @@ def test_main_player_device_excluded_from_preview_list(qtbot, state, settings, m
 
 
 def test_main_player_on_secondary_card_reoffers_default(qtbot, state, settings, mock_preview_player):
-    # Regression test: an earlier version excluded every non-hw:-suffixed
-    # name (Default, sysdefault, ...) unconditionally, even when the main
-    # player was pinned to a card those names don't actually reach. If
-    # the main player is on a *secondary* card, "Default Audio Device"
-    # (which resolves to the primary card) is genuinely separate hardware
-    # and must be offered, not hidden. Its ALSA plugin aliases (sysdefault,
-    # front, pipewire, ...) are filtered out entirely up front by
-    # filter_selectable_audio_devices — same as the Tools menu — so they
-    # never reach this list as redundant duplicates of Default itself.
+    # Default resolves to the primary card, so it's real separation when main is on a secondary card.
     main_player = MagicMock()
     main_player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default"),
@@ -309,15 +283,7 @@ def test_main_player_on_secondary_card_reoffers_default(qtbot, state, settings, 
 
 
 def test_main_player_on_bluetooth_default_reoffers_laptop_speakers(qtbot, state, settings, mock_preview_player):
-    # Regression test (found via a real Bluetooth headset): sounddevice/
-    # PortAudio can't see that "Default" now routes to a non-ALSA sink,
-    # so the old "assume Default == first hw: entry's card" heuristic
-    # wrongly excluded the laptop's own real speakers too. When
-    # get_default_output_info() reports a known non-ALSA default (alsa
-    # card None, a description present), every real hw:CARD,DEV device
-    # must still be offered -- none of them can be the same physical
-    # sink as a Bluetooth headset -- while Default/its aliases (which
-    # *are* that same Bluetooth sink) must not be.
+    # Regression test: a non-ALSA default (Bluetooth) must not wrongly exclude real hw: devices.
     main_player = MagicMock()
     main_player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default Audio Device"),
@@ -338,11 +304,7 @@ def test_main_player_on_bluetooth_default_reoffers_laptop_speakers(qtbot, state,
 
 
 def test_default_entry_shows_live_bluetooth_name_when_offered(qtbot, state, settings, mock_preview_player):
-    # When Default *is* offered (main player pinned elsewhere), its label
-    # should say what it currently resolves to, same as the Tools menu —
-    # otherwise a Bluetooth headset set as the system default is
-    # invisible everywhere in the UI even though it's genuinely
-    # selectable as a preview target here.
+    # Label should show what Default currently resolves to, same as the Tools menu.
     main_player = MagicMock()
     main_player.get_audio_devices.return_value = [
         ("__DEFAULT__", "Default Audio Device"),

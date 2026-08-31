@@ -1,29 +1,7 @@
-"""
-Qt port of ui/playlist_view.py.
-
-Most of the original's 1312 lines are hand-rolled drag-reorder math that
-exists purely because ttk.Treeview has no native drag-drop reordering —
-QTreeWidget's DragDrop mode replaces essentially all of it; only re-syncing
-state.playlist to Qt's new visual row order after a move is real logic to
-port (see _resync_from_internal_move). The manual queue.SimpleQueue +
-root.after() polling pump for background metadata
-(ui/playlist_view.py:455-507) is replaced by a plain background thread
-emitting a queued-connection signal per batch — Qt's signal/slot crossing
-threads natively makes the polling loop itself unnecessary.
-
-Search filtering (ui/playlist_view.py:1245-1267, case-insensitive substring
-match against title/artist/album) means a visible row's *position* no
-longer equals its *actual playlist index* once a filter is active — same
-problem the original solves with its `index_{n}` tag trick
-(_get_actual_index_from_tree_item). The Qt equivalent stores the actual
-index as item data (Qt.UserRole + 2); every place that used to assume
-visual position == index (_actual_index and its callers below) reads that
-instead.
-
-Reuses audio.playback's pure list functions (sort/shuffle/move/remove/
-play-after-current) and audio.metadata.get_metadata as-is — both already
-framework-neutral.
-"""
+"""Qt port of ui/playlist_view.py — QTreeWidget with native drag-drop
+reordering, background metadata loading, and search filtering. When a
+search filter is active, visual row position != actual playlist index, so
+the real index is stored as item data (Qt.UserRole + 2)."""
 
 import logging
 import os
@@ -54,11 +32,7 @@ logger = logging.getLogger(__name__)
 COLUMNS = ["Title", "Artist", "Album", "Duration"]
 COLUMN_WIDTHS = [200, 80, 100, 100]  # matches ui/playlist_view.py's tree.column() widths
 BATCH_SIZE = 50
-# ui/playlist_view.py:160-163 sets these same floors via ttk's minwidth=:
-# Title/Artist/Album all stretch=True with their own minwidth, Duration
-# stretch=False. MIN_COLUMN_WIDTHS mirrors that per-column, used as the
-# floor in _on_section_resized's compensation math below.
-MIN_COLUMN_WIDTHS = [150, 50, 60, 50]
+MIN_COLUMN_WIDTHS = [150, 50, 60, 50]  # floors used in _on_section_resized
 
 
 class _PlaylistTree(QTreeWidget):
@@ -103,18 +77,8 @@ class _PlaylistTree(QTreeWidget):
 class PlaylistViewQt(QWidget):
     track_activated = Signal(int)  # playlist index, from double-click
     metadata_batch_ready = Signal(int, list)  # load_id, [(path, metadata_dict), ...]
-    # Fired at the end of every refresh() — i.e. after every mutation this
-    # view makes to state.playlist (add/remove/clear/sort/shuffle/reorder).
-    # MainWindowQt uses it to keep playlist-dependent menu items' enabled
-    # state in sync (ui/main_window.py:670-699's _update_menu_state).
-    playlist_changed = Signal()
-    # Fired right after this view calls player.stop() itself (clearing/
-    # removing the currently-playing track) — MainWindowQt relays this to
-    # ControlsBarQt.stopped so the waveform/time labels actually reset,
-    # the same cleanup Stop-button/Stop-shortcut already gets. Calling
-    # player.stop() alone (what this view used to do) stops the audio but
-    # leaves the waveform showing the now-stopped track's stale position,
-    # since that reset lives in ControlsBarQt, not here.
+    playlist_changed = Signal()  # fired after every refresh(); keeps menu state in sync
+    # Fired after this view stops playback itself (clear/remove current track).
     playback_stopped = Signal()
 
     def __init__(self, state, palette: dict, player=None, parent=None):
@@ -154,43 +118,13 @@ class PlaylistViewQt(QWidget):
         self._tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._tree.setAlternatingRowColors(True)
         header = self._tree.header()
-        # QHeaderView defaults sectionsMovable to True — dragging anywhere
-        # on a header label (not just the boundary) reorders that whole
-        # column instead of resizing it, which reads exactly like "the
-        # whole table moves" if the drag didn't start precisely on the
-        # thin resize handle. Not a feature this app wants (ttk's
-        # Treeview doesn't support column reordering either); the fixed
-        # logical-column-index assumptions elsewhere here (_actual_index's
-        # data lives in column 0 specifically) would also break if the
-        # visual order could diverge from the logical one.
+        # Column reordering would break _actual_index's column-0 assumption.
         header.setSectionsMovable(False)
-        # Every attempt so far to give Title a SPECIAL resize mode (Stretch,
-        # or a synthetic event-filter-based handle at its boundary with
-        # Artist) either lost the ability to drag Title's own boundary at
-        # all, or (per direct log evidence from a real interactive session)
-        # turned out to not reliably receive real mouse events the way a
-        # headless offscreen test suggested it would. ui/playlist_view.py
-        # sidesteps all of this by not treating Title specially in the
-        # first place: Title/Artist/Album are ALL stretch=True with their
-        # own minwidth (ui/playlist_view.py:160-162), Duration alone is
-        # stretch=False — ttk's native Treeview handles resize+redistribute
-        # entirely internally, no custom per-column-role logic at all.
-        # Mirroring that: every column here is plain Interactive — this is
-        # the one resize mode PROVEN reliable for real mouse drags in this
-        # app (confirmed via the same log evidence: continuous, smooth,
-        # pixel-by-pixel sectionResized events for a directly-dragged
-        # Interactive column). _on_section_resized below then reacts to
-        # sectionResized the same way ttk's stretch pool does — any column
-        # being resized transfers the delta to its neighbor so the total
-        # stays pinned to the tree's width — but every column keeps its own
-        # fully-native, real, working drag handle; nothing here relies on
-        # synthesizing one.
+        # All columns stay Interactive (not Stretch) — see CLAUDE.md's
+        # QHeaderView.Stretch gotcha for why. _on_section_resized below
+        # redistributes width between neighbors, like ttk's stretch pool.
         for col in range(len(COLUMNS)):
             header.setSectionResizeMode(col, QHeaderView.Interactive)
-        # QTreeWidget's header defaults stretchLastSection to True (unlike
-        # a bare QHeaderView) — without turning it off explicitly, Duration
-        # (the last column) stretches instead of being managed by
-        # _on_section_resized like the others.
         header.setStretchLastSection(False)
         for col, width in enumerate(COLUMN_WIDTHS):
             self._tree.setColumnWidth(col, width)
@@ -239,35 +173,16 @@ class PlaylistViewQt(QWidget):
     # ---------- population ----------
 
     def refresh(self, select: Optional[List[int]] = None) -> None:
-        """Clears and rebuilds the tree, but — matching
-        ui/playlist_view.py's _start_progressive_insert docstring ("each
-        row appears only once all its columns are ready, so there is never
-        a visible empty-column state") — does NOT insert placeholder rows
-        with blank Artist/Album/Duration up front. Rows are created by
-        _on_metadata_batch only once their real metadata has arrived; an
-        earlier version of this method inserted a full blank skeleton
-        immediately and filled it in progressively, which is exactly the
-        visible-empty-column state the original goes out of its way to
-        avoid.
-
-        Since rows no longer exist synchronously after this call returns,
-        callers that want to select specific indices post-move (move_up/
-        move_down restoring the shifted selection, rather than the
-        pre-move one) must pass `select` — calling _select_indices() right
-        after refresh() would silently do nothing, since the tree is still
-        empty at that point and only catches up once metadata batches
-        arrive.
-        """
+        """Clears and rebuilds the tree. Rows appear only once their real
+        metadata has arrived (via _on_metadata_batch), so they don't exist
+        synchronously right after this call — pass `select` for indices to
+        restore once loaded, rather than calling _select_indices() after."""
         self._load_id += 1
         load_id = self._load_id
 
         self._pending_selection = select if select is not None else self.get_selected_indices()
         self._tree.clear()
         self._load_metadata_async(load_id)
-        # state.playlist is already updated synchronously by every caller
-        # before refresh() runs — emitted here rather than waiting for the
-        # async metadata batch, since menu-enabled state only depends on
-        # playlist length/current_index, not on rows actually being drawn.
         self.playlist_changed.emit()
 
     def refresh_highlight(self) -> None:
@@ -324,9 +239,7 @@ class PlaylistViewQt(QWidget):
             item.setData(0, Qt.UserRole + 1, title)
             item.setData(0, Qt.UserRole + 2, actual_index)
             item.setTextAlignment(3, Qt.AlignCenter)
-            # See refresh()'s comment history — without this, a drop
-            # squarely on a row nests it as a child instead of reordering,
-            # and _resync_from_internal_move only reads top-level items.
+            # Prevents a drop-on-row from nesting instead of reordering.
             item.setFlags(item.flags() & ~Qt.ItemIsDropEnabled)
             self._tree.addTopLevelItem(item)
         self._adjust_title_column_width()
@@ -392,10 +305,6 @@ class PlaylistViewQt(QWidget):
         menu.exec(self._tree.viewport().mapToGlobal(pos))
 
     def _context_play_after_current(self, index: int) -> None:
-        # Matches ui/main_window.py:1807-1821's _on_context_play_after_current:
-        # nothing playing means "after current" is meaningless, so tell the
-        # user instead of silently no-op'ing (which the shared
-        # playback.play_after_current already does safely on its own).
         if self.state.current_index is None:
             QMessageBox.information(self, "No Track Playing", "Please start playing a track first.")
             return
@@ -412,10 +321,6 @@ class PlaylistViewQt(QWidget):
         self.refresh()
 
     def _on_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
-        # Matches ui/playlist_view.py:568's play_on_double gate (toggled
-        # via the Playback Features dialog) — an earlier version of this
-        # method ignored the setting entirely and always played on
-        # double-click.
         if not getattr(self.state, "play_on_double", True):
             return
         self.track_activated.emit(self._actual_index(item))
@@ -426,11 +331,7 @@ class PlaylistViewQt(QWidget):
         indices = self.get_selected_indices()
         if not indices:
             return
-        # audio.playback.move_selected_up no-ops the whole move if any
-        # selected index is already at the top (min(indices) <= 0) — an
-        # earlier version here always shifted the reselect set regardless,
-        # so a blocked move (nothing actually reordered) still highlighted
-        # a different row than the one the user had selected.
+        # move_selected_up no-ops the whole move if any index is already at the top.
         blocked = min(indices) <= 0
         self.state.playlist = playback.move_selected_up(self.state.playlist, indices)
         reselect = indices if blocked else sorted({(i - 1 if i > 0 else i) for i in indices})
@@ -466,11 +367,6 @@ class PlaylistViewQt(QWidget):
         self.refresh()
 
     def clear(self) -> None:
-        # Matches ui/main_window.py:1330-1338's clear_playlist: no-op on an
-        # already-empty playlist, confirm before wiping it, and stop
-        # playback first — an earlier version skipped all three, so
-        # clearing while a track was playing left audio running with
-        # nothing in the playlist to reference it.
         if not self.state.playlist:
             return
         reply = QMessageBox.question(
@@ -490,9 +386,6 @@ class PlaylistViewQt(QWidget):
         self.refresh()
 
     def _stop_if_current_cleared(self, new_index: Optional[int]) -> None:
-        # Matches ui/main_window.py:1359-1373/1789-1805: removing whatever
-        # was currently playing stops playback rather than leaving audio
-        # running for a track no longer in the playlist.
         if new_index is None and self.player is not None:
             try:
                 self.player.stop()
@@ -515,50 +408,17 @@ class PlaylistViewQt(QWidget):
     # ---------- column sizing ----------
 
     def resizeEvent(self, event) -> None:
-        # Hooked on this outer panel, not the inner _PlaylistTree: this
-        # widget's size only changes when the splitter/window resizes it,
-        # never as a side effect of a user dragging a column boundary
-        # inside the tree.
+        # Hooked on this outer panel, not _PlaylistTree, since column drags
+        # shouldn't trigger this too.
         super().resizeEvent(event)
         self._adjust_title_column_width()
 
     def _adjust_title_column_width(self) -> None:
-        """Distribute whatever leftover width Duration doesn't need across
-        Title/Artist/Album proportionally to their current widths — called
-        on this panel's own resize (see resizeEvent above) and again once
-        rows land (_on_metadata_batch), since a vertical scrollbar
-        appearing/disappearing changes the available width without
-        resizing the panel itself.
-
-        Matches ui/playlist_view.py:160-163: Title/Artist/Album are all
-        stretch=True there, Duration alone is stretch=False — ttk
-        distributes leftover space across all three stretch columns, not
-        just one. An earlier version of this method gave 100% of the
-        leftover to Title alone; with the browser panel hidden (a lot of
-        leftover width appears all at once), that meant Title ballooned
-        into a huge mostly-empty column while Artist/Album/Duration stayed
-        pinned to their small default widths, clustered together on the
-        far right — reported directly as looking visually unbalanced.
-        Proportional-to-current-width distribution keeps their relative
-        sizes consistent as the panel grows/shrinks (matches ttk's actual
-        stretch-column behavior), rather than everything piling into one
-        column or splitting dead evenly regardless of each column's
-        existing size.
-
-        Computed from self._tree.width(), NOT self._tree.viewport().width():
-        confirmed empirically that at the moment resizeEvent fires here,
-        tree.width() already reflects the new size but viewport().width()
-        can still be stale for an indeterminate number of event-loop
-        ticks — tree.width() is reliably synchronous, since it's set
-        directly by this panel's own layout as part of processing the
-        resize that triggers this method in the first place.
-
-        Wrapped in the same _in_section_resize guard _on_section_resized
-        uses for its own programmatic calls: setColumnWidth here also
-        fires sectionResized, and without the guard, _on_section_resized
-        would misread "the panel gained leftover space" as a user drag and
-        try to redistribute it again via its own chained-compensation
-        logic — the two mechanisms would fight each other."""
+        """Distributes leftover width (beyond Duration's) across
+        Title/Artist/Album proportionally to their current widths. Uses
+        tree.width(), not viewport().width() (stale at this point).
+        Guarded by _in_section_resize so it doesn't fight
+        _on_section_resized's own compensation."""
         stretch_cols = (0, 1, 2)  # Title, Artist, Album
         duration_width = self._tree.columnWidth(3)
         scrollbar = self._tree.verticalScrollBar()
@@ -584,41 +444,13 @@ class PlaylistViewQt(QWidget):
             self._in_section_resize = False
 
     def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
-        """A chain, not a star: column N's own left edge is the boundary
-        Qt attributes to column N-1 (it always reports the LEFT column of
-        whatever boundary was dragged — confirmed via direct log evidence
-        from a real session). Column N-1's width is what Qt is genuinely,
-        natively changing as the mouse moves — that's what makes the
-        boundary under the cursor actually follow the drag. Column N then
-        silently absorbs the exact opposite delta, which (since N's own
-        left edge = N-1's end, and N-1 just moved by delta) moves N's left
-        edge along with the boundary while its OWN right edge — i.e.
-        whatever comes after N — stays completely fixed. That's the
-        illusion of "column N is being resized from its own left edge,"
-        built entirely out of its native left-neighbor's real resize plus
-        an equal-and-opposite compensation, chained pairwise: Title(0)
-        absorbed-by/gives-to Artist(1) [confirmed working], Artist(1) vs.
-        Album(2), Album(2) vs. Duration(3) — so partner is always
-        logical_index + 1. Column 3 (Duration) never appears as
-        logical_index for a real drag (nothing exists to its right for Qt
-        to attribute a boundary to) so it's a no-op below.
-
-        Same net effect as ttk's stretch pool (ui/playlist_view.py:160-163,
-        Title/Artist/Album all stretch=True with their own minwidth): the
-        four columns' total stays pinned to the tree's width, so a
-        horizontal scrollbar never has a reason to appear, while every
-        column keeps its own real, native Interactive drag handle — not a
-        synthesized one.
-
-        Growing a neighbor past what its partner can spare is capped, not
-        just compensated, using MIN_COLUMN_WIDTHS as the floor (same
-        per-column minimums as ttk's minwidth), so neither side can be
-        squeezed to nothing or fought into unbounded growth.
-
-        _in_section_resize guards against re-entrancy: both branches below
-        call setColumnWidth on a column this same method listens to, which
-        re-emits this signal for that column — without the guard, that
-        echo would get reprocessed as a second, unrelated resize."""
+        """Qt attributes a dragged boundary to its LEFT column, so this
+        chains column N's resize to its right neighbor (partner =
+        logical_index + 1), transferring the opposite delta so the total
+        width stays pinned to the tree — same net effect as ttk's stretch
+        pool, but with every column keeping a real native drag handle.
+        Capped at MIN_COLUMN_WIDTHS. _in_section_resize guards re-entrancy
+        since the compensation itself re-emits this signal."""
         if self._in_section_resize or logical_index >= len(COLUMNS) - 1:
             return
         partner = logical_index + 1
