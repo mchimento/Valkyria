@@ -100,10 +100,71 @@ def test_pause_calls_player_pause(controls, mock_player):
     assert mock_player.pause.called
 
 
+def test_pause_with_nothing_loaded_does_not_change_button_state(controls, mock_player):
+    # Matches ui/controls.py's _on_pause guard: with nothing playing or
+    # paused, pressing Pause must be a no-op, not flip is_playing/is_paused
+    # and highlight a button for playback that isn't actually happening.
+    mock_player.is_playing.return_value = False
+    mock_player.is_paused.return_value = False
+
+    controls.btn_pause.click()
+
+    assert not mock_player.pause.called
+    assert controls.is_playing is False
+    assert controls.is_paused is False
+    assert controls.btn_play.styleSheet() == ""
+    assert controls.btn_pause.styleSheet() == ""
+
+
 def test_stop_dispatches_and_resets_ui(qtbot, controls, mock_player):
     controls.btn_stop.click()
     qtbot.waitUntil(lambda: mock_player.stop.called, timeout=2000)
     qtbot.waitUntil(lambda: controls.current_time_label.text() == "--:--", timeout=2000)
+
+
+def test_play_file_highlights_play_button(controls, tiny_wav):
+    assert controls.btn_play.styleSheet() == ""
+    controls.play_file(tiny_wav)
+    assert controls.is_playing is True
+    assert controls.is_paused is False
+    assert "button_pressed" not in controls.btn_play.styleSheet()  # sanity: real color, not the key name
+    assert controls.btn_play.styleSheet() == f"background-color: {PALETTE['button_pressed']};"
+    assert controls.btn_pause.styleSheet() == ""
+
+
+def test_pause_then_resume_toggles_button_highlight(controls, mock_player, tiny_wav):
+    controls.play_file(tiny_wav)
+
+    mock_player.is_paused.return_value = True
+    controls.btn_pause.click()
+    assert controls.is_paused is True
+    assert controls.is_playing is False
+    assert controls.btn_pause.styleSheet() == f"background-color: {PALETTE['button_pressed']};"
+    assert controls.btn_play.styleSheet() == ""
+
+    mock_player.is_paused.return_value = False
+    controls.btn_pause.click()
+    assert controls.is_playing is True
+    assert controls.is_paused is False
+    assert controls.btn_play.styleSheet() == f"background-color: {PALETTE['button_pressed']};"
+    assert controls.btn_pause.styleSheet() == ""
+
+
+def test_stop_clears_play_pause_highlight(qtbot, controls, mock_player, tiny_wav):
+    controls.play_file(tiny_wav)
+    controls.btn_stop.click()
+    qtbot.waitUntil(lambda: mock_player.stop.called, timeout=2000)
+    qtbot.waitUntil(lambda: controls.btn_play.styleSheet() == "", timeout=2000)
+    assert controls.is_playing is False
+    assert controls.is_paused is False
+    assert controls.btn_pause.styleSheet() == ""
+
+
+def test_track_ended_clears_play_pause_highlight(controls, tiny_wav):
+    controls.play_file(tiny_wav)
+    controls.on_track_ended()
+    assert controls.is_playing is False
+    assert controls.btn_play.styleSheet() == ""
 
 
 def test_volume_change_persists_and_calls_player(controls, mock_player, settings):

@@ -59,6 +59,8 @@ class ControlsBarQt(QWidget):
         self.state = state
         self._is_muted = False
         self._crossfade_fired = False
+        self.is_playing = False
+        self.is_paused = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -192,6 +194,19 @@ class ControlsBarQt(QWidget):
     def apply_palette(self, palette: dict) -> None:
         self.palette = palette
         self.waveform.apply_palette(palette)
+        self._update_play_pause_button_states()
+
+    def _update_play_pause_button_states(self) -> None:
+        """Matches ui/controls.py's _update_play_button_state/
+        _update_pause_button_state: whichever of Play/Pause reflects what's
+        currently happening gets the button_pressed background, the other
+        goes back to normal. Called from every path that changes playback
+        state (play_file, pause/resume, stop) so it covers Play-button
+        clicks, prev/next, and double-clicking a playlist row alike —
+        matching Tk, where all of those funnel through the same _on_play()."""
+        pressed = self.palette.get("button_pressed", "#6023CB")
+        self.btn_play.setStyleSheet(f"background-color: {pressed};" if self.is_playing else "")
+        self.btn_pause.setStyleSheet(f"background-color: {pressed};" if self.is_paused else "")
 
     def set_repeat_icon(self, mode: str) -> None:
         """Called by MainWindowQt after it changes state.repeat_mode —
@@ -227,11 +242,23 @@ class ControlsBarQt(QWidget):
         self._crossfade_fired = False
         threading.Thread(target=self.player.play, args=(path,), daemon=True).start()
         self.waveform.load_waveform(path)
+        self.is_playing = True
+        self.is_paused = False
+        self._update_play_pause_button_states()
 
     def _on_pause(self) -> None:
+        # Matches ui/controls.py's _on_pause guard: with nothing loaded or
+        # playing, this must be a no-op — otherwise clicking Pause with an
+        # empty playlist would still flip is_playing and highlight a button.
         try:
+            if not (self.player.is_playing() or self.player.is_paused()):
+                return
             self.player.pause()
-            self.paused_state_changed.emit(self.player.is_paused())
+            is_paused = self.player.is_paused()
+            self.is_paused = is_paused
+            self.is_playing = not is_paused
+            self._update_play_pause_button_states()
+            self.paused_state_changed.emit(is_paused)
         except Exception:
             logger.exception("pause() failed")
 
@@ -256,6 +283,9 @@ class ControlsBarQt(QWidget):
         self.waveform.clear()
         self.current_time_label.setText("--:--")
         self.total_time_label.setText("--:--")
+        self.is_playing = False
+        self.is_paused = False
+        self._update_play_pause_button_states()
 
     def on_track_ended(self) -> None:
         """Connected to PlayerBridge.track_ended. No playlist yet, so a

@@ -172,6 +172,20 @@ def test_play_index_updates_state_and_plays(qtbot, window, mock_player):
     assert mock_player.play.call_args[0][0] == "/tmp/b.mp3"
 
 
+def test_double_click_playlist_row_highlights_play_button(qtbot, window, mock_player):
+    # play_on_double is on by default; double-clicking a row must reach
+    # play_file the same way a Play-button click does, so the button's
+    # pressed-highlight isn't tied to only one of the two trigger paths.
+    window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
+    window.playlist_view.refresh()
+
+    window.playlist_view.track_activated.emit(1)
+
+    qtbot.waitUntil(lambda: mock_player.play.called, timeout=1000)
+    assert window.controls.is_playing is True
+    assert window.controls.btn_play.styleSheet() != ""
+
+
 def test_track_ended_repeat_none_advances_to_next(window):
     window.state.playlist = ["/tmp/a.mp3", "/tmp/b.mp3"]
     window.state.current_index = 0
