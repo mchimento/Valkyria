@@ -92,6 +92,7 @@ class PlaylistViewQt(QWidget):
         self._load_id = 0
         self._search_text = ""
         self._pending_selection: List[int] = []
+        self._pending_scroll_value: Optional[int] = None
         self._in_section_resize = False
 
         layout = QVBoxLayout(self)
@@ -176,15 +177,18 @@ class PlaylistViewQt(QWidget):
 
     # ---------- population ----------
 
-    def refresh(self, select: Optional[List[int]] = None) -> None:
+    def refresh(self, select: Optional[List[int]] = None, preserve_scroll: bool = False) -> None:
         """Clears and rebuilds the tree. Rows appear only once their real
         metadata has arrived (via _on_metadata_batch), so they don't exist
         synchronously right after this call — pass `select` for indices to
-        restore once loaded, rather than calling _select_indices() after."""
+        restore once loaded, rather than calling _select_indices() after.
+        `preserve_scroll` keeps the viewport anchored at its current
+        position instead of jumping to wherever the reselected row lands."""
         self._load_id += 1
         load_id = self._load_id
 
         self._pending_selection = select if select is not None else self.get_selected_indices()
+        self._pending_scroll_value = self._tree.verticalScrollBar().value() if preserve_scroll else None
         self._tree.clear()
         self._load_metadata_async(load_id)
         self.playlist_changed.emit()
@@ -249,6 +253,8 @@ class PlaylistViewQt(QWidget):
         self._adjust_title_column_width()
         self.refresh_highlight()
         self._select_indices(self._pending_selection)
+        if self._pending_scroll_value is not None:
+            self._tree.verticalScrollBar().setValue(self._pending_scroll_value)
 
     # ---------- drag-drop ----------
 
@@ -318,7 +324,7 @@ class PlaylistViewQt(QWidget):
         new_playlist, new_index = playback.play_after_current(self.state.playlist, [index], self.state.current_index)
         self.state.playlist = new_playlist
         self.state.current_index = new_index
-        self.refresh()
+        self.refresh(preserve_scroll=True)
 
     def _context_remove(self, index: int) -> None:
         new_playlist, new_index = playback.remove_selected_from_playlist(self.state.playlist, [index], self.state.current_index)
@@ -371,7 +377,7 @@ class PlaylistViewQt(QWidget):
         new_playlist, new_index = playback.play_after_current(self.state.playlist, indices, self.state.current_index)
         self.state.playlist = new_playlist
         self.state.current_index = new_index
-        self.refresh()
+        self.refresh(preserve_scroll=True)
 
     def clear(self) -> None:
         if not self.state.playlist:
