@@ -36,6 +36,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSlider,
+    QStyle,
+    QStyleOptionSlider,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -53,6 +55,24 @@ with open(_DEFAULTS_PATH, "r") as f:
     AUDIO_DEFAULTS = json.load(f)
 
 _CHANNEL_MODES = ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff)"]
+
+
+class _ClickToSeekSlider(QSlider):
+    """Plain QSlider only page-steps toward a click on the track — it
+    never jumps straight to the clicked position unless you drag the
+    handle itself. This makes a click anywhere on the track set the value
+    directly, which is what users actually expect from a slider like this."""
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            opt = QStyleOptionSlider()
+            self.initStyleOption(opt)
+            handle_rect = self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self)
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            if not handle_rect.contains(pos):
+                value = QStyle.sliderValueFromPosition(self.minimum(), self.maximum(), pos.x(), self.width())
+                self.setValue(value)
+        super().mousePressEvent(event)
 
 
 class AudioEffectsWindowQt(QDialog):
@@ -156,7 +176,7 @@ class AudioEffectsWindowQt(QDialog):
         text_label = QLabel(label)
         text_label.setFixedWidth(120)
         row.addWidget(text_label)
-        slider = QSlider(Qt.Horizontal)
+        slider = _ClickToSeekSlider(Qt.Horizontal)
         slider.setMinimum(round(minimum * scale))
         slider.setMaximum(round(maximum * scale))
         slider.setValue(round(initial * scale))

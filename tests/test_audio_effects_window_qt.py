@@ -4,6 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 
 import ui_qt.audio_effects_window as aew
 from ui_qt.audio_effects_window import AUDIO_DEFAULTS, AudioEffectsWindowQt
@@ -243,3 +245,32 @@ def test_save_preserves_rms_buffer_size_from_disk(qtbot, player, tmp_path):
     assert saved["compressor"]["rms_buffer_size"] == 1024
     assert saved["playback"]["min_rate"] == 0.1
     assert saved["playback"]["max_rate"] == 8.0
+
+
+# ---------- click-to-seek sliders ----------
+
+def test_clicking_track_jumps_to_position_not_page_step(dialog):
+    # Regression: plain QSlider only page-steps toward a click on the
+    # track — this must jump straight to the clicked position instead.
+    slider = dialog.preamp_slider
+    assert slider.value() == 0
+
+    click_pos = QPointF(int(slider.width() * 0.9), slider.height() // 2)
+    event = QMouseEvent(QMouseEvent.MouseButtonPress, click_pos, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    slider.mousePressEvent(event)
+
+    # A page-step nudge would move it by a few units; a real jump lands
+    # much closer to the slider's maximum (200 at this slider's 1-decimal
+    # scale of -20..20 dB).
+    assert slider.value() > 100
+
+
+def test_clicking_near_left_edge_jumps_toward_minimum(dialog):
+    slider = dialog.preamp_slider
+    slider.setValue(150)
+
+    click_pos = QPointF(int(slider.width() * 0.1), slider.height() // 2)
+    event = QMouseEvent(QMouseEvent.MouseButtonPress, click_pos, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    slider.mousePressEvent(event)
+
+    assert slider.value() < -100
