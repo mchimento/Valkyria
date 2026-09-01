@@ -385,11 +385,9 @@ def build_stylesheet(palette: dict) -> str:
         outline: 0;
         font-size: 10pt;
     }}
-    /* ui/playlist_view.py's own "Playlist.Treeview" ttk style intentionally
-       differs from the generic Treeview style the browser uses: no border
-       (borderwidth=0, relief=flat) and background=palette["bg"], not
-       tree_bg — it's meant to blend into the surrounding panel rather than
-       read as its own framed box. */
+    /* Deliberately differs from the generic QTreeWidget style the browser
+       uses: no border and background={bg} not tree_bg, so it blends into
+       the surrounding panel rather than reading as its own framed box. */
     QTreeWidget#PlaylistTree {{
         background-color: {bg};
         border: none;

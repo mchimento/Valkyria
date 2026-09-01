@@ -1,5 +1,5 @@
-"""Qt port of ui/dj_frame_view.py — live LUFS/peak/limiter/energy meters
-plus BPM/Key display and save-to-tag buttons."""
+"""Live LUFS/peak/limiter/energy meters plus BPM/Key display and
+save-to-tag buttons."""
 
 import logging
 import os
@@ -141,11 +141,9 @@ class DJViewQt(QWidget):
         self.key_title, self.key_label = self._add_value_row(right_column, "KEY", "Estimating...")
         self.energy_title, self.energy_meter = self._add_meter_row(right_column, "ENERGY", 100)
 
-        # Fixed-height container (not just a layout) so this row keeps
-        # reserving its space even when both buttons are hidden — a plain
-        # QHBoxLayout collapses to zero height with no visible children,
-        # which would shift every row above it since the column is
-        # vertically centered as a whole.
+        # Fixed-height container, not just a layout, so this row keeps
+        # reserving space even when both buttons are hidden (a plain
+        # QHBoxLayout collapses to zero height with no visible children).
         button_container = QWidget()
         button_container.setObjectName("DJButtonRow")
         button_container.setFixedHeight(ROW_HEIGHT)

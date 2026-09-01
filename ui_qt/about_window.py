@@ -1,7 +1,6 @@
-"""Qt port of ui/main_window.py's open_about — a small, non-modal info
-dialog (logo, description, version, OK). Matches the original's "don't
-grab focus" behavior: constructed fresh each time, never kept as a
-singleton reference, since there's no live state here to diverge."""
+"""Small, non-modal About dialog (logo, description, version, OK).
+Constructed fresh each time, not kept as a singleton — no live state here
+to diverge."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap

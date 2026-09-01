@@ -1,15 +1,12 @@
 """
-Qt port of ui/controls.py — ControlsBar: Play/Pause/Prev/Stop/Next,
-volume/mute, time labels, waveform seekbar, and the repeat/effects
-ExtrasBar (ui/controls.py:16-56). Play/Prev/Next/repeat-toggle/effects-open
-are emitted as signals rather than handled here directly — the actual
-"which track" / "which index is next" / "open the effects window" policy
-lives in MainWindowQt, which owns state and playlist_view (mirrors the
-original's split between ControlsBar's play()/prev()/next() mechanism and
-MainWindow's policy methods). Play in particular needs playlist_view's
-current selection — ui/controls.py's ControlsBar._on_play(from_user=True)
-plays whatever's selected, not just whatever was last loaded, which this
-widget alone can't determine.
+ControlsBar: Play/Pause/Prev/Stop/Next, volume/mute, time labels, waveform
+seekbar, and the repeat/effects buttons. Play/Prev/Next/repeat-toggle/
+effects-open are emitted as signals rather than handled here directly —
+the actual "which track" / "which index is next" / "open the effects
+window" policy lives in MainWindowQt, which owns state and playlist_view.
+Play in particular needs playlist_view's current selection (play whatever
+is selected, not just whatever was last loaded), which this widget alone
+can't determine.
 """
 
 import logging
@@ -35,12 +32,10 @@ def _format_ms(ms) -> str:
 
 class ControlsBarQt(QWidget):
     # Emitted from the stop-sequence worker thread once the fade-out wait
-    # and player.stop() complete; Qt auto-queues delivery to the main thread
-    # since this widget has main-thread affinity (same pattern as
-    # ui_qt.player_bridge.PlayerBridge). Public (unlike a leading-underscore
-    # name would suggest) because MainWindowQt also needs it — clearing
-    # state.current_index and the playlist's now-playing highlight on stop
-    # is policy that lives at that level, same as play/prev/next.
+    # and player.stop() complete; Qt auto-queues delivery to the main
+    # thread. Public because MainWindowQt also needs it — clearing
+    # state.current_index and the now-playing highlight on stop is policy
+    # that lives at that level, same as play/prev/next.
     stopped = Signal()
 
     play_requested = Signal()
@@ -71,7 +66,6 @@ class ControlsBarQt(QWidget):
         row = QHBoxLayout()
         row.setSpacing(6)
 
-        # Order matches ui/controls.py: play, pause, prev, stop, next.
         self.btn_play = QPushButton("▶")
         self.btn_pause = QPushButton("⏸")
         self.btn_prev = QPushButton("⏮")
@@ -90,17 +84,10 @@ class ControlsBarQt(QWidget):
         # Balances the stretch after total_time_label so the waveform group is centered.
         row.addStretch(1)
 
-        # Matches ui/controls.py:165-181 exactly: current time, waveform,
-        # total time all live inline in the same row as the transport
-        # buttons ("middle" frame in the original) — not stacked above them
-        # on a row of their own.
         self.current_time_label = QLabel("--:--")
         self.total_time_label = QLabel("--:--")
-        # ui/controls.py sets width=8 (character cells) on these labels
-        # specifically to stop them reflowing the row as the text changes
-        # length every tick — without a fixed width, everything to the
-        # right (the waveform included) visibly shifts sideways as the
-        # elapsed-time text grows/shrinks digit by digit.
+        # Fixed width stops these labels reflowing the row (and shifting
+        # the waveform sideways) as the elapsed-time text changes length.
         time_width = QFontMetrics(self.current_time_label.font()).horizontalAdvance("00:00") + 10
         for label in (self.current_time_label, self.total_time_label):
             label.setFixedWidth(time_width)
@@ -174,12 +161,10 @@ class ControlsBarQt(QWidget):
             logger.exception("Failed to apply initial volume")
 
     def _init_mute(self) -> None:
-        # settings.mute is the source of truth here — the player is always
-        # freshly constructed right before ControlsBarQt (see main_qt.py),
-        # so get_mute_state() would just return its constructor default
-        # (False) and silently reset a saved "muted" preference back to
-        # unmuted on every launch. Push settings' value into the player
-        # below, not the other way around.
+        # settings.mute is the source of truth — the player is always
+        # freshly constructed right before this widget, so get_mute_state()
+        # would just return its constructor default (False), silently
+        # resetting a saved "muted" preference on every launch.
         initial_mute = bool(getattr(self.settings, "mute", False))
         self._is_muted = initial_mute
         self.btn_mute.setText("🔇" if initial_mute else "🔊")
@@ -199,28 +184,21 @@ class ControlsBarQt(QWidget):
         self._update_play_pause_button_states()
 
     def _update_play_pause_button_states(self) -> None:
-        """Matches ui/controls.py's _update_play_button_state/
-        _update_pause_button_state: whichever of Play/Pause reflects what's
-        currently happening gets the button_pressed background, the other
-        goes back to normal. Called from every path that changes playback
-        state (play_file, pause/resume, stop) so it covers Play-button
-        clicks, prev/next, and double-clicking a playlist row alike —
-        matching Tk, where all of those funnel through the same _on_play()."""
+        """Whichever of Play/Pause reflects what's currently happening gets
+        the button_pressed background, the other goes back to normal.
+        Called from every path that changes playback state (play_file,
+        pause/resume, stop) so it covers Play-button clicks, prev/next,
+        and double-clicking a playlist row alike."""
         pressed = self.palette.get("button_pressed", "#6023CB")
         self.btn_play.setStyleSheet(f"background-color: {pressed};" if self.is_playing else "")
         self.btn_pause.setStyleSheet(f"background-color: {pressed};" if self.is_paused else "")
 
     def set_repeat_icon(self, mode: str) -> None:
-        """Called by MainWindowQt after it changes state.repeat_mode —
-        matches ui/controls.py's ExtrasBar._update_repeat_icon: 'none' is
-        the plain button, 'one' swaps to the single-repeat glyph, 'all'
-        keeps the loop glyph but both 'one'/'all' get the active
-        (button_pressed) background.
-
-        Also updates the tooltip, matching ExtrasBar's dynamic
-        `f"Repeat Mode: {mode.title()}"` tooltip (ui/controls.py:54) — an
-        earlier version left the Qt tooltip as a static "Repeat Mode"
-        string that never reflected the current mode, unlike Tk's."""
+        """Called by MainWindowQt after it changes state.repeat_mode:
+        'none' is the plain button, 'one' swaps to the single-repeat
+        glyph, 'all' keeps the loop glyph, and 'one'/'all' both get the
+        active (button_pressed) background. Also updates the tooltip to
+        reflect the current mode."""
         pressed = self.palette.get("button_pressed", "#6023CB")
         if mode == "one":
             self.btn_repeat.setText("🔂")
@@ -236,9 +214,9 @@ class ControlsBarQt(QWidget):
     # ---------- transport ----------
 
     def play_file(self, path: str) -> None:
-        # Matches ui/controls.py:286-288's _on_play: reset the time labels
-        # immediately rather than leaving the previous track's stale
-        # elapsed/total time visible until the next 500ms timer tick.
+        # Reset the time labels immediately rather than leaving the
+        # previous track's stale elapsed/total time visible until the
+        # next 500ms timer tick.
         self.current_time_label.setText("00:00")
         self.total_time_label.setText("--:--")
         self._crossfade_fired = False
@@ -250,9 +228,9 @@ class ControlsBarQt(QWidget):
         self._update_play_pause_button_states()
 
     def _on_pause(self) -> None:
-        # Matches ui/controls.py's _on_pause guard: with nothing loaded or
-        # playing, this must be a no-op — otherwise clicking Pause with an
-        # empty playlist would still flip is_playing and highlight a button.
+        # With nothing loaded or playing, this must be a no-op — otherwise
+        # clicking Pause with an empty playlist would still flip
+        # is_playing and highlight a button.
         try:
             if not (self.player.is_playing() or self.player.is_paused()):
                 return
@@ -311,15 +289,10 @@ class ControlsBarQt(QWidget):
             self.total_time_label.setText("--:--")
 
     def _check_crossfade(self, time_ms: int, length_ms: int) -> None:
-        """Matches ui/controls.py:567-574: once within crossfade_duration
-        of the end, request an early advance to the next track — the
-        original's "crossfade" is really just early-advance timing, not
-        real audio blending (audio/audio_player.py has no crossfade logic
-        at all), so this matches it exactly rather than under- or
-        over-implementing. state.crossfade_enabled/crossfade_duration were
-        already fully wired end-to-end by the Playback Features dialog,
-        but nothing here ever polled them, so toggling Crossfade on had no
-        actual effect until now."""
+        """Once within crossfade_duration of the end, request an early
+        advance to the next track — this is really just early-advance
+        timing, not real audio blending (audio/audio_player.py has no
+        crossfade logic at all)."""
         if self._crossfade_fired or self.state is None:
             return
         if not getattr(self.state, "crossfade_enabled", False):
@@ -336,10 +309,8 @@ class ControlsBarQt(QWidget):
             self.crossfade_requested.emit()
 
     def _check_time_limit(self, time_ms: int) -> None:
-        """Matches ui/controls.py:553-565's enforcement check — but signals
-        MainWindowQt to advance via _on_track_ended (same repeat-mode-aware
-        path crossfade already uses above) instead of tkinter's separate
-        player.stop() + delayed _on_next() sequence."""
+        """Signals MainWindowQt to advance via _on_track_ended — the same
+        repeat-mode-aware path crossfade already uses above."""
         if self._time_limit_fired or self.state is None:
             return
         try:
@@ -358,8 +329,7 @@ class ControlsBarQt(QWidget):
     # ---------- volume / mute ----------
 
     def step_volume(self, delta: int) -> None:
-        """Mirrors ui/controls.py's <plus>/<minus>-bound _volume_step —
-        setValue() clamps to the slider's 0-100 range on its own."""
+        """setValue() clamps to the slider's 0-100 range on its own."""
         self.volume_slider.setValue(self.volume_slider.value() + delta)
 
     def _on_volume_changed(self, value: int) -> None:
@@ -384,9 +354,6 @@ class ControlsBarQt(QWidget):
         self._save_settings()
 
     def _update_mute_tooltip(self) -> None:
-        # Matches ui/controls.py's _get_mute_tooltip: "Muted (M)"/"Mute (M)"
-        # — an earlier version set this once at construction and never
-        # again, unlike the repeat button's tooltip (see set_repeat_icon).
         self.btn_mute.setToolTip("Muted (M)" if self._is_muted else "Mute (M)")
 
     def _save_settings(self) -> None:

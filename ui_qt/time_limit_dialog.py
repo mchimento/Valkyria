@@ -1,5 +1,5 @@
-"""Qt port of ui/time_limit_dialog.py — lets the user set or clear a
-playback time limit (state.play_limits) for a track."""
+"""Lets the user set or clear a playback time limit (state.play_limits)
+for a track."""
 
 from typing import Optional
 

@@ -1,14 +1,9 @@
 """
-Qt port of ui/waveform_seekbar.py.
-
-Peak-extraction logic (soundfile block/seek sampling -> ffmpeg fallback ->
-librosa fallback) is pure numpy/soundfile/subprocess logic with no tkinter
-dependency, so it's ported essentially unchanged. What changes is the
-completion hop (a peaks_ready Qt signal instead of self.after(0, ...)) and
-the paint implementation: QPainter.drawRects() with two batched calls
-(played/unplayed), the pattern validated in spike_pyside6/waveform_spike.py
-(~4-6ms/frame) rather than building a QPainterPath from per-bar addRect()
-calls (~110ms/frame — confirmed in that spike, not a style choice).
+Waveform seekbar. Peak extraction (soundfile block/seek sampling -> ffmpeg
+fallback -> librosa fallback) is pure numpy/soundfile/subprocess logic.
+Painting uses QPainter.drawRects() with two batched calls (played/
+unplayed) — ~4-6ms/frame, vs. ~110ms/frame building a QPainterPath from
+per-bar addRect() calls.
 """
 
 import logging
@@ -94,9 +89,8 @@ class WaveformSeekbarQt(QWidget):
         self._waveform_thread.start()
 
     def _safe_emit_peaks(self, result) -> None:
-        # Runs on the decode thread: if the widget was destroyed while this
-        # was still decoding (e.g. the app closed, or in tests, the widget
-        # went out of scope) the underlying C++ QObject is gone and
+        # Runs on the decode thread: if the widget was destroyed while
+        # this was still decoding, the underlying C++ QObject is gone and
         # emit() raises RuntimeError rather than silently no-op'ing.
         if shiboken6.isValid(self):
             self.peaks_ready.emit(result)
@@ -141,25 +135,11 @@ class WaveformSeekbarQt(QWidget):
                         pass
 
                     if failed_reads > 0:
-                        # A handful of libsndfile MP3 decoders can seek()
-                        # successfully near the end of a file but then
-                        # silently return empty/short reads instead of
-                        # raising — total_frames (from len(sf_f)) can look
-                        # entirely accurate (matching the player's own
-                        # reported length almost exactly) while individual
-                        # seeks past some internal point still fail, so
-                        # this can't be caught by validating total_frames
-                        # up front. Confirmed via a real report: 74 of 360
-                        # peaks (the last ~20%) came back as a solid run of
-                        # exact zeros — implausible as genuine silence for
-                        # a ~60-second stretch, and reproduced no failures
-                        # at all on a short synthetic test file, matching a
-                        # seek-position-dependent failure rather than a
-                        # general soundfile/MP3 incompatibility. Falling
-                        # through to the sequential (non-seeking) fallback
-                        # below — the same one already used when this
-                        # block raises an exception — avoids the seek
-                        # dependency entirely instead of silently shipping
+                        # Some libsndfile MP3 decoders can seek() near the
+                        # end of a file but silently return empty reads
+                        # past some internal point, even though total_frames
+                        # looks accurate — falls through to the sequential
+                        # (non-seeking) fallback below instead of shipping
                         # a partially-blank waveform.
                         raise RuntimeError(f"{failed_reads} of {num_pixels} seek-based peak reads returned empty")
 
@@ -271,13 +251,9 @@ class WaveformSeekbarQt(QWidget):
                 unplayed_rects = []
                 for i in range(n):
                     amp = self.waveform_data[i]
-                    # A silent (near-zero amplitude) stretch — real trailing/
-                    # leading silence, or the tail of a track whose actual
-                    # length is shorter than the widget's playhead range —
-                    # would otherwise draw a literal zero-height rect, i.e.
-                    # nothing at all, making it look like the waveform (and
-                    # by extension the track) just stops short of the full
-                    # width rather than genuinely being silent there.
+                    # A minimum height so real silence still draws a thin
+                    # bar, rather than a zero-height gap that reads as the
+                    # waveform stopping short of the full width.
                     bar_h = max(amp * max_h / 2, 0.5)
                     x = i * px_w
                     rect = QRectF(x, center_y - bar_h, max(px_w, 1.0), bar_h * 2)
@@ -301,10 +277,8 @@ class WaveformSeekbarQt(QWidget):
                 painter.drawLine(QPointF(self.playhead_x, 0), QPointF(self.playhead_x, h))
 
         # drawRect() fills with the current brush as well as stroking the
-        # outline — without resetting it, this border draw silently fills
-        # the whole widget with whatever brush color the bars loop left set
-        # (always played_color), masking the actual played/unplayed paint
-        # underneath regardless of playhead position.
+        # outline — without resetting it, this border draw would fill the
+        # whole widget with whatever brush color the bars loop left set.
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QColor(self.border_color))
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))

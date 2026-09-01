@@ -1,27 +1,14 @@
 """
-Qt port of ui/custom_menu_bar.py's CustomMenuBar.
+Data-driven menu bar built on native QMenuBar/QMenu/QAction, plus the
+window chrome (min/max/close) and a draggable spacer (startSystemMove()).
 
-Keeps the same data-driven call signature as the Tk version:
-    add_menu(label, items)
-    setup_window_controls(close_callback, show_maximize=True)
-so that porting MainWindow._build_menu's call sites later is close to
-mechanical. Internals are fully native Qt (QMenuBar/QMenu/QAction) instead
-of hand-rolled frames, and window drag uses startSystemMove() instead of
-per-mousemove geometry() calls.
-
-Item dict shape (see ui/main_window.py._build_menu for real examples):
+add_menu(label, items) builds a menu from a list of item dicts:
     {"label": str, "command": Callable, "state": "normal"|"disabled",
      "accelerator": str, "separator": True, "submenu": [items...],
      "checkbutton": True, "checked": bool,
      "radiobutton": True, "group": str, "value": Any, "checked": bool}
-
-Tk's checkbutton/radiobutton items carry a bound tk.Variable; that's a
-tkinter concept and has no place in ui_qt. The Qt-native equivalent tracked
-here is a plain initial "checked" bool (checkbuttons) or a "group" name +
-"value" (radiobuttons, one QActionGroup per group per menu). When
-MainWindow._build_menu itself is ported in a later phase, its
-tk.BooleanVar/StringVar-backed items translate into this shape at that call
-site — this module does not need to know about tkinter.
+Checkbuttons/radiobuttons carry a plain initial "checked" bool, or a
+"group" name (one QActionGroup per group per menu) for radio items.
 """
 
 import logging
@@ -41,12 +28,9 @@ class CustomMenuBarQt(QWidget):
         self.parent_window = parent_window if parent_window is not None else parent
 
         self.setObjectName("MenuBarContainer")
-        # Plain QWidget only reliably paints QSS background-color when
-        # nested this deep (MainWindowQt -> here) with this attribute set —
-        # without it the area behind the transparent min/max/close buttons
-        # and the drag spacer falls through to the window's base bg instead
-        # of menubar_bg, showing as the background stopping right after the
-        # last menu item.
+        # Without this, the area behind the transparent min/max/close
+        # buttons and drag spacer falls through to the window's base bg
+        # instead of menubar_bg.
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFixedHeight(30)
 

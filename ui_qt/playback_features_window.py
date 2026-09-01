@@ -1,38 +1,16 @@
 """
-Qt port of ui/playback_features_view.py.
+Playback Features dialog — fade in/out, early track advance ("crossfade"),
+silence detection, play-on-double-click.
 
-Unlike PreferencesWindowQt, every control here applies LIVE — to
-state/player — the moment it's changed, exactly like the original: Tk's
-Save button (_save_features_config) only persists the current values to
-settings/disk, it is not what makes them take effect. This is a
-deliberately different pattern from Preferences' theme "preview until
-committed" (see preferences_window.py's docstring) — there is nothing to
-preview here, these are direct playback controls, and the original
-behaves the same way (flip Fade In on, it fades immediately; only losing
-that setting on the next launch if you never hit Save is what's at stake).
-
-Simplified vs. the original: ui/playback_features_view.py additionally
-persists fade-in/out to a *second*, separate
-`playback_features_config.json` file and reads defaults back from it —
-but crossfade/silence-detection/play-on-double were written to that same
-file and never actually read back from anywhere, so those three settings
-silently reset to AppState's class defaults on every restart regardless of
-Save (a real, pre-existing gap in the original, not something intentional
-to replicate). This port uses `settings.*` uniformly for *persistence*
-(see app/settings.py's play_on_double/crossfade_enabled/crossfade_duration
-fields, added alongside this dialog) — one save path, actually correct for
-all six values, no separate config file needed.
-
-Persistence is not the same as initial display value, though: matching
-ui/playback_features_view.py:22-25/41-46 exactly, every control here is
-initialized from the LIVE state/player, not from settings — play_on_double/
-crossfade/silence_detection from `state`, fade in/out from `player` (falling
-back to `settings` only if unavailable). Reading from settings instead was
-tried first and was wrong: since every control applies live immediately,
-reopening the dialog after an unsaved toggle would silently revert the
-still-in-effect value back to whatever was last saved to disk, because the
-fresh dialog's own init sequence re-invokes each toggle handler with
-whatever value it was constructed with.
+Every control applies LIVE to state/player the moment it's changed; Save
+only persists current values to settings/disk for next launch, it isn't
+what makes them take effect. Controls are initialized from the LIVE
+state/player, not from settings (fade in/out fall back to settings only
+if the player is unavailable) — reading from settings instead is wrong
+here: since every control applies live, reopening the dialog after an
+unsaved toggle would silently revert the still-in-effect value back to
+whatever was last saved to disk, because init re-invokes each toggle
+handler with whatever value it's constructed with.
 """
 
 import logging
@@ -84,19 +62,7 @@ class PlaybackFeaturesWindowQt(QDialog):
         general_group = QGroupBox("General")
         general_layout = QVBoxLayout(general_group)
 
-        # Sourced from LIVE state/player, not settings — matches
-        # ui/playback_features_view.py:22-25 (play_on_double/crossfade/
-        # silence_detection always come from app_state) and lines 41-46
-        # ("sync with active player state": fade in/out fall back to
-        # settings but get unconditionally overridden by the player's own
-        # live values whenever a player is passed, which it always is in
-        # production). An earlier version sourced all six from `settings`
-        # instead — since every control here applies live immediately
-        # (see the module docstring), that meant reopening this dialog
-        # after toggling something on WITHOUT clicking Save would silently
-        # revert the still-in-effect change back to whatever was last
-        # saved to disk, because the fresh dialog's own init sequence
-        # re-invokes each toggle handler with the (stale) initial value.
+        # Sourced from LIVE state/player, not settings (see module docstring).
         fade_in_enabled_default = bool(getattr(settings, "fade_in_enabled", False))
         fade_in_duration_default = int(getattr(settings, "fade_in_duration", 3))
         fade_out_enabled_default = bool(getattr(settings, "fade_out_enabled", False))
@@ -127,12 +93,10 @@ class PlaybackFeaturesWindowQt(QDialog):
         advance_layout = QVBoxLayout(advance_group)
 
         # Visible label only — "Crossfade" was misleading (no real audio
-        # blending happens, see _check_crossfade in controls.py), renamed
-        # to describe what actually happens: an early advance to the next
-        # track. Internal names (checkbox_crossfade, state.crossfade_enabled/
-        # crossfade_duration, settings fields) are left as-is deliberately —
-        # renaming those too would touch saved-config compatibility for a
-        # cosmetic change with no functional benefit.
+        # blending happens, see _check_crossfade in controls.py); the
+        # internal names (checkbox_crossfade, state.crossfade_enabled,
+        # settings fields) are left as-is to avoid touching saved-config
+        # compatibility for a cosmetic change.
         self.checkbox_crossfade, self.slider_crossfade, self.label_crossfade = self._add_toggle_slider_row(
             advance_layout, "Early Track Advance", bool(getattr(state, "crossfade_enabled", False)),
             int(getattr(state, "crossfade_duration", 5)), minimum=1, maximum=12,
@@ -146,16 +110,9 @@ class PlaybackFeaturesWindowQt(QDialog):
 
         layout.addWidget(advance_group)
 
-        # Applying the loaded/saved enabled-state to the slider's disabled
-        # look and to the player happens once here — same as Tk calling
-        # _on_fade_in_toggle()/_on_fade_out_toggle() right after building
-        # the sliders (ui/playback_features_view.py:200-201). Also covers
-        # checkbox_silence for the same reason, even though Tk doesn't:
         # setChecked() above runs before .toggled.connect(), so it can't
-        # itself fire _on_silence_toggle — if the checkbox's initial value
-        # is already True (state.silence_detection_enabled was already on
-        # when this dialog was opened/reopened), that True never actually
-        # reaches self.player without this explicit call.
+        # itself fire these handlers — without this explicit call, an
+        # already-True initial value never actually reaches self.player.
         self._on_fade_in_toggle(self.checkbox_fade_in.isChecked())
         self._on_fade_out_toggle(self.checkbox_fade_out.isChecked())
         self._on_crossfade_toggle(self.checkbox_crossfade.isChecked())
@@ -180,11 +137,8 @@ class PlaybackFeaturesWindowQt(QDialog):
     # ---------- construction helpers ----------
 
     def _add_toggle_row(self, parent_layout, label, enabled_default, on_toggle):
-        """A ToggleSwitch + its text label, matching CTkSwitch's own
-        combined look (ui/playback_features_view.py's switches always pair
-        a switch with a label right next to it) — QCheckBox bundled the
-        label into the same widget, ToggleSwitch doesn't draw text at all,
-        so this pairs them in a small row instead."""
+        """A ToggleSwitch + its text label — ToggleSwitch doesn't draw text
+        on its own, so this pairs it with a QLabel in a small row."""
         row = QHBoxLayout()
         row.setSpacing(8)
         switch = ToggleSwitch(self.palette)
@@ -231,19 +185,14 @@ class PlaybackFeaturesWindowQt(QDialog):
         self.move(x, y)
 
     def _on_theme_changed(self, palette: dict) -> None:
-        # ToggleSwitch self-paints via QPainter rather than QSS, so it
-        # isn't restyled for free by the app-wide stylesheet a theme change
-        # already triggers everywhere else — without this, a switch here
-        # keeps showing whatever theme was active when this dialog was
-        # opened even after switching (e.g. dark's purple staying visible
-        # after the rest of the app has gone light), for as long as the
-        # dialog stays open.
+        # ToggleSwitch self-paints via QPainter, so it isn't restyled for
+        # free by the app-wide stylesheet a theme change already triggers.
         self.palette = palette
         for switch in (self.checkbox_play_on_double, self.checkbox_fade_in, self.checkbox_fade_out,
                        self.checkbox_crossfade, self.checkbox_silence):
             switch.apply_palette(palette)
 
-    # ---------- live handlers (mirror ui/playback_features_view.py's *_toggle/*_change methods) ----------
+    # ---------- live handlers ----------
 
     def _on_play_on_double_toggle(self, checked: bool) -> None:
         self.state.play_on_double = checked

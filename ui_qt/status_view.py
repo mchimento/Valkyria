@@ -1,5 +1,5 @@
-"""Qt port of ui/status_frame_view.py — artwork, title/artist, format info,
-and a time-limit countdown for the currently playing track."""
+"""Artwork, title/artist, format info, and a time-limit countdown for the
+currently playing track."""
 
 import logging
 import os

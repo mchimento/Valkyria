@@ -1,17 +1,14 @@
 """
-Qt port of ui/preferences_window.py.
-
-Scoped to what PreferencesWindow actually owns: theme (Light/Dark), mini
-player enabled, BPM mode. Fade in/out and silence detection belong to
-ui/playback_features_view.py, a separate window not ported yet.
+Preferences dialog: theme (Light/Dark), mini player enabled, BPM mode.
+Playback-specific settings (fade in/out, silence detection) live in their
+own Playback Features dialog instead.
 
 Theme switching gets special care here (see ui_qt/theme_bridge.py's
-ThemeSignal docstring for the two root causes this design avoids): the
-only notification path is one `theme_signal.changed.emit(palette)` call,
-and there is no manual per-widget restyle walk in this file at all —
-apply_theme() (called by whoever owns the ThemeSignal connection) re-skins
-this dialog the same as everything else, since it's just another QWidget
-under the app-wide stylesheet.
+ThemeSignal docstring): the only notification path is one
+`theme_signal.changed.emit(palette)` call, with no manual per-widget
+restyle walk in this file — apply_theme() re-skins this dialog the same
+as everything else, since it's just another QWidget under the app-wide
+stylesheet.
 """
 
 import json
@@ -62,10 +59,8 @@ class _DialogTitleBar(QWidget):
         super().__init__(dialog)
         self.dialog = dialog
         self.setObjectName("DialogTitleBar")
-        # Qt's QSS auto-detection for plain QWidget only special-cases
-        # background-color and the full `border` shorthand; border-bottom
-        # alone silently doesn't paint without this attribute forcing full
-        # stylesheet-aware rendering.
+        # QSS `border-bottom` alone silently doesn't paint on a plain
+        # QWidget without this attribute.
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFixedHeight(30)
 
@@ -74,10 +69,8 @@ class _DialogTitleBar(QWidget):
         layout.setSpacing(0)
 
         label = QLabel(title)
-        # Plain QWidget renders background-color from the generic `QWidget`
-        # QSS rule regardless of WA_StyledBackground, so without this the
-        # label paints its own bg-colored rect on top of the titlebar's
-        # menubar_bg strip.
+        # Without this the label paints its own bg-colored rect on top of
+        # the titlebar's menubar_bg strip.
         label.setStyleSheet("background: transparent;")
         layout.addWidget(label)
         layout.addStretch(1)
@@ -123,8 +116,7 @@ class PreferencesWindowQt(QDialog):
         self.tabs = QTabWidget(body)
         layout.addWidget(self.tabs, 1)
 
-        # ---------- Interface tab (ui/preferences_window.py's
-        # _create_interface_section: Theme + Mini Player) ----------
+        # ---------- Interface tab: Theme + Mini Player ----------
         interface_tab = QWidget()
         interface_layout = QVBoxLayout(interface_tab)
         interface_layout.setContentsMargins(20, 20, 20, 20)
@@ -161,8 +153,7 @@ class PreferencesWindowQt(QDialog):
 
         self.tabs.addTab(interface_tab, "Interface")
 
-        # ---------- Audio tab (ui/preferences_window.py's
-        # _create_audio_section: BPM Mode) ----------
+        # ---------- Audio tab: BPM Mode ----------
         audio_tab = QWidget()
         audio_layout = QVBoxLayout(audio_tab)
         audio_layout.setContentsMargins(20, 20, 20, 20)
@@ -188,18 +179,14 @@ class PreferencesWindowQt(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.setCenterButtons(True)
-        # The app-wide QPushButton QSS rule is flat/transparent (it's meant
-        # for the toolbar-style menu bar and window-control buttons), which
-        # leaves ordinary dialog action buttons with no visible chrome at
-        # all. Give these the same treatment as the transport buttons.
+        # The app-wide QPushButton QSS rule is flat/transparent (meant for
+        # the menu bar/window-control buttons), so give these real chrome.
         for role in (QDialogButtonBox.Save, QDialogButtonBox.Cancel):
             btn = buttons.button(role)
             if btn is not None:
                 btn.setObjectName("DialogButton")
-                # Some Qt styles attach a platform icon to standard dialog
-                # buttons (a checkmark/X glyph next to the text) — cleared
-                # explicitly so the button is plain text only, regardless
-                # of style/platform.
+                # Clears a platform icon some Qt styles attach to standard
+                # dialog buttons, so it's plain text only everywhere.
                 btn.setIcon(QIcon())
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
@@ -224,22 +211,14 @@ class PreferencesWindowQt(QDialog):
 
     def _preview_theme(self, name: str) -> None:
         # Deliberately does not touch self.settings.theme or self.theme —
-        # those are shared, persisted objects, and anything else in the app
-        # that calls settings.save() while this preview is live (adjusting
-        # volume, toggling mute, even just closing the whole app) would
-        # otherwise silently bake the uncommitted preview into config.json.
-        # Preview only broadcasts a palette for display; nothing is
-        # committed until _on_save().
+        # those are shared, persisted objects, and anything else that calls
+        # settings.save() while this preview is live would otherwise
+        # silently bake the uncommitted preview into config.json.
         self._previewed = True
         palette = _load_palette(name)
         self.theme_signal.changed.emit(palette)
-        # ToggleSwitch self-paints via QPainter rather than QSS, so it
-        # doesn't get restyled for free by the app-wide stylesheet the
-        # broadcast above triggers elsewhere — it needs its own explicit
-        # refresh, including here in the same dialog that's doing the
-        # broadcasting (confirmed via pixel sampling: without this, the
-        # switch keeps showing the previous theme's color throughout the
-        # whole preview, e.g. staying purple after switching to Light).
+        # ToggleSwitch self-paints via QPainter, so it doesn't get restyled
+        # for free by the app-wide stylesheet the broadcast above triggers.
         self.checkbox_mini_player.apply_palette(palette)
 
     def _on_save(self) -> None:
@@ -247,10 +226,9 @@ class PreferencesWindowQt(QDialog):
         self.theme.reload()
         self.settings.mini_player_enabled = self.checkbox_mini_player.isChecked()
         self.settings.bpm_mode = "perceived" if self.radio_bpm_perceived.isChecked() else "raw"
-        # Matches ui/preferences_window.py:400-401 — without this,
-        # audio.metadata.BPM_PREFERENCE never picks up the new choice
-        # until the next full app restart (main_qt.py only applies the
-        # startup value once), same gap as the one main_qt.py itself had.
+        # Without this, audio.metadata.BPM_PREFERENCE never picks up the
+        # new choice until the next full app restart — main_qt.py only
+        # applies the startup value once.
         try:
             metadata_module.set_bpm_preference(self.settings.bpm_mode)
         except Exception:
@@ -262,15 +240,9 @@ class PreferencesWindowQt(QDialog):
         self.accept()
 
     def reject(self) -> None:
-        # Covers the Cancel button, the window's X close, and Escape — Qt
-        # routes all three through reject(), so this one override is the
-        # single rollback path (no separate close-protocol wiring needed).
-        # settings.theme/self.theme were never touched by preview, so
-        # there's nothing to roll back there — just restore the visible
-        # app to whatever theme.palette actually still says (in case a
-        # preview changed what's on screen without changing what's saved).
-        # Only re-broadcast if a preview actually happened — the resulting
-        # full-app restyle is expensive enough to audibly glitch playback.
+        # Covers Cancel, the window's X close, and Escape — Qt routes all
+        # three through reject(). Only re-broadcasts if a preview actually
+        # happened, restoring the on-screen palette to theme.palette.
         if self._previewed:
             self.theme_signal.changed.emit(self.theme.palette)
         super().reject()

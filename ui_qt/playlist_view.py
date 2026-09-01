@@ -1,7 +1,7 @@
-"""Qt port of ui/playlist_view.py — QTreeWidget with native drag-drop
-reordering, background metadata loading, and search filtering. When a
-search filter is active, visual row position != actual playlist index, so
-the real index is stored as item data (Qt.UserRole + 2)."""
+"""QTreeWidget with native drag-drop reordering, background metadata
+loading, and search filtering. When a search filter is active, visual row
+position != actual playlist index, so the real index is stored as item
+data (Qt.UserRole + 2)."""
 
 import logging
 import os
@@ -30,7 +30,7 @@ from audio.metadata import get_display_title, get_metadata
 logger = logging.getLogger(__name__)
 
 COLUMNS = ["Title", "Artist", "Album", "Duration"]
-COLUMN_WIDTHS = [200, 80, 100, 100]  # matches ui/playlist_view.py's tree.column() widths
+COLUMN_WIDTHS = [200, 80, 100, 100]
 BATCH_SIZE = 50
 MIN_COLUMN_WIDTHS = [150, 50, 60, 50]  # floors used in _on_section_resized
 
@@ -196,8 +196,8 @@ class PlaylistViewQt(QWidget):
         self.playlist_changed.emit()
 
     def _duration_text(self, path: str, meta: dict) -> str:
-        # Matches ui/playlist_view.py: a track with an active play_limits
-        # entry shows the limit instead of its real duration in this column.
+        # A track with an active play_limits entry shows the limit
+        # instead of its real duration in this column.
         if path in self.state.play_limits:
             return f"⏱ {int(self.state.play_limits[path])}s"
         return meta.get("duration", "")
@@ -262,12 +262,10 @@ class PlaylistViewQt(QWidget):
         if load_id != self._load_id:
             return
         # Selects matching rows at creation time instead of a blanket
-        # clearSelection()+reselect after every batch — refresh() already
-        # cleared the tree once up front, and batches can keep streaming in
-        # well after that (real per-file metadata reads take noticeable
-        # time). Re-running a global reselect on each later batch used to
-        # silently wipe out a selection the user made by hand (e.g.
-        # clicking a search result) while earlier batches were still loading.
+        # clearSelection()+reselect after every batch — batches keep
+        # streaming in well after refresh(), and a global reselect on each
+        # later batch would wipe out a selection the user made by hand
+        # while earlier batches were still loading.
         wanted = set(self._pending_selection)
         for actual_index, path, meta in batch:
             title = meta.get("title") or os.path.basename(path)

@@ -1,5 +1,5 @@
-"""Qt port of ui/booklet_viewer.py — pages through booklet/liner-note
-images embedded in an audio file's tags (plus folder art)."""
+"""Pages through booklet/liner-note images embedded in an audio file's
+tags (plus folder art)."""
 
 import logging
 

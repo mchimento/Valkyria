@@ -1,18 +1,17 @@
-"""Qt port of ui/playlist_generator_window.py — build named, rule-based
-playlist templates (groups/subgroups/sources with BPM/key filters and an
-ordering strategy) and generate a playlist from them.
+"""Build named, rule-based playlist templates (groups/subgroups/sources
+with BPM/key filters and an ordering strategy) and generate a playlist
+from them.
 
 The data model, generation algorithm, and template JSON persistence all
-live in audio/playlist_generator.py (framework-neutral, unmodified here) —
-this file is purely the Qt UI wired to that engine, mirroring the
-tkinter window's structure and behavior.
+live in audio/playlist_generator.py — this file is purely the UI wired to
+that engine.
 
 Every rules widget writes straight into the live self._template object on
 change, same live-apply pattern as ui_qt/playback_features_window.py and
 ui_qt/audio_effects_window.py — there is no separate Apply step. Boolean
-options use QCheckBox rather than ToggleSwitch: tkinter itself uses plain
-checkboxes here too (not CTkSwitch), which also means nothing here needs a
-theme_signal subscription, since QCheckBox is QSS-styled already.
+options use QCheckBox rather than ToggleSwitch, which also means nothing
+here needs a theme_signal subscription, since QCheckBox is QSS-styled
+already.
 """
 
 import copy
@@ -114,17 +113,11 @@ class PlaylistGeneratorWindowQt(QDialog):
         super().showEvent(event)
         if not self._sized_once:
             self._sized_once = True
-            # Deliberately deferred to the first real show rather than
-            # done in __init__: a not-yet-shown/polished QSS-styled
-            # widget tree this deep can report an inflated sizeHint(), so
-            # sizing before show() left this window still close to
-            # tkinter's original fixed 960x680 (with the same dead space
-            # below the button grid/rules boxes that prompted this fix)
-            # despite measuring correctly tight when checked headless.
-            # adjustSize() computes width too, which would come out
-            # narrower than we want for a two-column layout — call it
-            # first for the natural (tight) height, then explicitly
-            # re-widen to a fixed 960 while keeping that computed height.
+            # Deferred to the first real show, not done in __init__: a
+            # not-yet-shown/polished QSS-styled widget tree this deep can
+            # report an inflated sizeHint(). adjustSize() computes width
+            # too, narrower than wanted for a two-column layout — call it
+            # first for the natural height, then re-widen to a fixed 960.
             self.adjustSize()
             self.resize(960, self.height())
         self._center_on_parent()
@@ -167,21 +160,15 @@ class PlaylistGeneratorWindowQt(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # A QGroupBox (not a plain label) so its title sits at the exact
-        # same layout position as "Global Rules" on the right — both are
-        # the first widget in a QVBoxLayout with zero top margin, so their
-        # titles are guaranteed to line up regardless of the platform's Qt
-        # style (a plain QLabel header rendered its text a few pixels off
-        # from a QGroupBox title's own style-dependent vertical placement).
+        # same layout position as "Global Rules" on the right, guaranteed
+        # to line up regardless of platform Qt style.
         canvas_group = QGroupBox("Playlist Canvas")
         canvas_layout = QVBoxLayout(canvas_group)
         self._tree = QTreeWidget()
         self._tree.setHeaderHidden(True)
-        # Explicit height rather than an expanding stretch factor — this
-        # window's total height is sized off its actual content (see
-        # __init__'s adjustSize() call), so nothing forces this panel
-        # taller than its natural size; without a real height here the
-        # tree would collapse to whatever tiny default an empty
-        # QTreeWidget's sizeHint happens to be.
+        # Explicit height rather than an expanding stretch factor — the
+        # window's height is sized off actual content (see showEvent), so
+        # an empty QTreeWidget would otherwise collapse to a tiny default.
         self._tree.setMinimumHeight(320)
         self._tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
         self._tree.itemDoubleClicked.connect(self._on_tree_double_clicked)
@@ -210,13 +197,9 @@ class PlaylistGeneratorWindowQt(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._build_global_rules_group())
         layout.addWidget(self._build_group_rules_group())
-        # QHBoxLayout forces every column in main_area to the same row
-        # height (the taller left column, canvas+buttons) regardless of
-        # what's in this one — without this trailing stretch to absorb
-        # that leftover height as blank space, Qt instead grows the
-        # Global Rules QGroupBox itself to fill it (QGroupBox's default
-        # size policy allows that), since it'd otherwise be the only
-        # visible child left to claim the extra space.
+        # main_area forces this column to match the taller left column's
+        # row height — without this stretch absorbing the leftover as
+        # blank space, Qt grows the Global Rules QGroupBox itself instead.
         layout.addStretch(1)
         return panel
 
@@ -842,13 +825,10 @@ class PlaylistGeneratorWindowQt(QDialog):
         self.playlist_generated.emit(songs, mode)
 
     def _ask_generate_destination(self, summary: str) -> Optional[str]:
-        # A plain QMessageBox renders with no app theming at all on this
-        # user's system (native OS chrome, white background, default OS
-        # buttons) — matches why ui/playlist_generator_window.py's own
-        # _ask_generate_destination never used a native tk messagebox
-        # either, building a themed custom Toplevel instead. Mirrored here
-        # the same way every other dialog in this app is built: frameless
-        # + _DialogTitleBar + CompactButton-styled buttons.
+        # A plain QMessageBox renders with no app theming at all (native OS
+        # chrome, white background, default buttons) — built the same way
+        # every other dialog in this app is: frameless + _DialogTitleBar +
+        # CompactButton-styled buttons.
         dlg = QDialog(self)
         dlg.setObjectName("MainWindow")
         dlg.setWindowFlag(Qt.FramelessWindowHint)

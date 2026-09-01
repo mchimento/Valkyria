@@ -1,22 +1,15 @@
-"""Qt port of ui/audio_effects_window.py — Equalizer, Compressor,
-Spatializer, and Advanced (speed/channel-mode/vocal-remover) controls for
-the shared audio/audio_effects.py DSP chain.
+"""Equalizer, Compressor, Spatializer, and Advanced (speed/channel-mode/
+vocal-remover) controls for the shared audio/audio_effects.py DSP chain.
 
-Every control here applies LIVE to the player the moment it changes,
-exactly like the original — there is no pending/Apply state. Save
-(_save_to_config) only persists current values to
+Every control applies LIVE to the player the moment it changes — there is
+no pending/Apply state. Save only persists current values to
 audio/audio_effects_config.json so they become next launch's defaults; it
 has no effect on already-live audio. Close does not revert anything.
 
-Unlike the original (which reads compressor/spatializer numeric values only
-from the saved config file, with no live-getter override, so reopening
-after an unsaved change shows stale numbers), this port initializes every
-control from the live player via player.get_compressor_settings()/
-get_spatializer_settings() — matching ui_qt/playback_features_window.py's
-own stated design intent for this category of dialog.
-
-EQ bands use horizontal sliders (matching every other slider in this app)
-rather than the original's vertical faders."""
+Compressor/spatializer controls initialize from the live player via
+player.get_compressor_settings()/get_spatializer_settings(), not from the
+saved config file, so reopening after an unsaved change shows current
+values, not stale ones."""
 
 import json
 import logging
@@ -82,10 +75,9 @@ class AudioEffectsWindowQt(QDialog):
         self.palette = palette
         if theme_signal is not None:
             theme_signal.changed.connect(self._on_theme_changed)
-        # Fields Save must round-trip but nothing in this dialog edits
-        # directly (rms_buffer_size, min_rate/max_rate) — read once here so
-        # _save_to_config can preserve them instead of silently dropping
-        # them from the file.
+        # Fields Save must round-trip but nothing here edits directly
+        # (rms_buffer_size, min_rate/max_rate) — read once so _save_to_config
+        # can preserve them instead of dropping them from the file.
         try:
             with open(_CONFIG_PATH, "r") as f:
                 self._config_on_disk = json.load(f)
@@ -133,10 +125,8 @@ class AudioEffectsWindowQt(QDialog):
         self._center_on_parent()
 
     def _measure_ideal_height(self) -> int:
-        # Fixed window height sized off the Advanced tab's real content
-        # height instead of an arbitrary constant that left large empty
-        # areas under every tab after porting from a fixed 800x500 that
-        # was sized for tkinter's own (differently laid-out) content.
+        # Sized off the Advanced tab's real content height rather than an
+        # arbitrary constant that leaves empty space under shorter tabs.
         advanced_height = self.tabs.widget(3).sizeHint().height()
         chrome = 30 + self.save_btn.sizeHint().height() + 40  # titlebar + button row + margins
         return advanced_height + self.tabs.tabBar().sizeHint().height() + chrome
@@ -151,11 +141,8 @@ class AudioEffectsWindowQt(QDialog):
         self.move(x, y)
 
     def _on_theme_changed(self, palette: dict) -> None:
-        # ToggleSwitch self-paints via QPainter rather than QSS, so it
-        # isn't restyled for free by the app-wide stylesheet a theme change
-        # already triggers elsewhere — without this, a switch here keeps
-        # showing whatever theme was active when this dialog was opened,
-        # for as long as it stays open.
+        # ToggleSwitch self-paints via QPainter, so it isn't restyled for
+        # free by the app-wide stylesheet a theme change already triggers.
         self.palette = palette
         for switch in (self.eq_enable, self.comp_enable, self.comp_rms_mode,
                        self.spat_enable, self.vocal_remover_enable):
@@ -286,10 +273,8 @@ class AudioEffectsWindowQt(QDialog):
         self.player.set_equalizer_band(index, value)
 
     def _on_preset_change(self, name: str) -> None:
-        # Matches ui/audio_effects_window.py's _on_preset_change: the blank
-        # entry isn't a no-op, it's treated as "Flat" (reset to default EQ)
-        # — the combo just keeps showing blank rather than jumping to show
-        # "Flat" as selected.
+        # The blank entry isn't a no-op — it resets to "Flat" (default EQ),
+        # the combo just keeps showing blank rather than jumping to "Flat".
         if not name:
             name = "Flat"
         if name not in self.presets:
@@ -478,10 +463,6 @@ class AudioEffectsWindowQt(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
 
-        # Matches ui/audio_effects_window.py: only this tab's 3 sections use
-        # bordered+titled frames (ttk.LabelFrame) — Equalizer/Compressor/
-        # Spatializer use plain unframed layout there too, so those tabs
-        # stay as-is.
         speed_group = QGroupBox("Playback Speed")
         speed_layout = QVBoxLayout(speed_group)
         rate_default = float(self.player.get_playback_rate())
@@ -598,11 +579,10 @@ class AudioEffectsWindowQt(QDialog):
                 "max_rate": self._config_on_disk.get("playback", {}).get("max_rate", 4.0),
             },
             "channel_mode": {
-                # Saved as the display-cased string ("Mono", not "mono") to
-                # match what ui/audio_effects_window.py's own save writes —
-                # player.get_channel_mode() returns lowercase, which is a
-                # different string than what set_channel_mode() itself
-                # accepts and what this config file has always stored.
+                # Saved as the display-cased string ("Mono", not "mono") —
+                # player.get_channel_mode() returns lowercase, a different
+                # string than what set_channel_mode() accepts and what
+                # this config file stores.
                 "mode": (self.channel_mode_group.checkedButton().text()
                          if self.channel_mode_group.checkedButton() else "Stereo"),
             },

@@ -1,5 +1,5 @@
-"""Qt port of ui/browser_view.py — flat file list with drag-drop into the
-playlist and a preview player with its own output-device selector."""
+"""Flat file list with drag-drop into the playlist and a preview player
+with its own output-device selector."""
 
 import logging
 import os
@@ -60,7 +60,6 @@ class _BrowserTree(QTreeWidget):
         event.ignore()
 
     def keyPressEvent(self, event) -> None:
-        # Matches ui/browser_view.py:279's tree.bind('<Delete>', ...).
         if event.key() == Qt.Key_Delete:
             self._owner._remove_selected_from_browser()
             return
@@ -215,8 +214,7 @@ class BrowserViewQt(QWidget):
         if not paths or self.playlist_view is None:
             return
         # Prefer the last-selected playlist row; fall back to right after
-        # the currently-playing track; then the end — matches
-        # ui/browser_view.py's add_selected_below_playlist.
+        # the currently-playing track; then the end.
         insert_pos = len(self.state.playlist)
         pl_selected = self.playlist_view.get_selected_indices()
         if pl_selected:

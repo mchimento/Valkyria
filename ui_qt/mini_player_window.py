@@ -1,8 +1,8 @@
-"""Qt port of ui/mini_player.py — a small always-on-top floating window
-with transport controls + track info, shown while the main window is
-minimized. No duplicate playback logic: it polls the shared AppState/
-ControlsBarQt for display and emits Signals for every user action, which
-MainWindowQt connects to the same handlers its own transport bar uses."""
+"""Small always-on-top floating window with transport controls + track
+info, shown while the main window is minimized. No duplicate playback
+logic: it polls the shared AppState/ControlsBarQt for display and emits
+Signals for every user action, which MainWindowQt connects to the same
+handlers its own transport bar uses."""
 
 import logging
 import os
@@ -79,13 +79,10 @@ class MiniPlayerWindowQt(QWidget):
         top_row.addLayout(transport_row)
         top_row.setAlignment(transport_row, Qt.AlignVCenter)
 
-        # Title + time are the two lines the transport buttons should
-        # visually center against. time_limit_label is almost always blank
-        # (no active limit) — if it shared this VBox, its always-reserved
-        # blank line would pull the "visual center" of title+time upward
-        # relative to the buttons even though the box's math center matched.
-        # It gets its own row below top_row instead (still always reserving
-        # space there, so nothing shifts when a limit becomes active).
+        # time_limit_label gets its own row below top_row rather than
+        # joining this VBox — it's almost always blank, and sharing this
+        # box would pull title/time's visual center off the transport
+        # buttons even though the box's math center still matched.
         info_col = QVBoxLayout()
         info_col.setSpacing(2)
         self.title_label = QLabel("No track loaded")
@@ -117,13 +114,10 @@ class MiniPlayerWindowQt(QWidget):
     # ---------- lifecycle ----------
 
     def _apply_rounded_mask(self) -> None:
-        # Qt.WA_TranslucentBackground needs a compositor to blend properly;
-        # without one the whole window can lose its background instead of
-        # just the corners going transparent. A hard window-shape mask
-        # clips the actual window to the rounded rect without needing
-        # compositing at all, so it works the same on any WM — but on some
-        # platforms a mask set before the native window surface exists gets
-        # dropped, so this is reapplied in showEvent too, not just here.
+        # A hard window-shape mask clips to a rounded rect without needing
+        # compositing (Qt.WA_TranslucentBackground can lose the whole
+        # background without one) — reapplied in showEvent too, since a
+        # mask set before the native window surface exists can get dropped.
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), 12, 12)
         self.setMask(QRegion(path.toFillPolygon().toPolygon()))

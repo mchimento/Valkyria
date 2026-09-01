@@ -1,7 +1,7 @@
-"""Rounded pill-shaped toggle switch with a sliding knob, matching the
-tkinter build's CTkSwitch look. Drop-in QCheckBox replacement for on/off
-toggles (setCheckable/isChecked/setChecked/.toggled all work the same),
-but has no built-in text label — pair it with a QLabel."""
+"""Rounded pill-shaped toggle switch with a sliding knob. Drop-in QCheckBox
+replacement for on/off toggles (setCheckable/isChecked/setChecked/.toggled
+all work the same), but has no built-in text label — pair it with a
+QLabel."""
 
 from PySide6.QtCore import (
     Property,

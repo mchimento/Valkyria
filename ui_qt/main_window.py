@@ -1,13 +1,10 @@
 """
-Qt port of ui/main_window.py — Phase 1 (window chrome/menu) + Phase 2
-(waveform + playback controls, wired to the real AudioPlayer).
+Main application window: chrome/menu, waveform + playback controls,
+browser/playlist, DJ view, status bar, and secondary dialogs.
 
-Browser/playlist, DJ view, status bar and all secondary dialogs are NOT
-here yet — see the ui_qt migration plan for what comes next.
-
-Reuses the real app.settings.Settings and themes.theme_manager.ThemeManager
-as-is: only Settings' plain fields and ThemeManager's .palette/.reload() are
-touched. ThemeManager.apply_to() is Tk-specific and is never called here.
+Reuses app.settings.Settings and themes.theme_manager.ThemeManager as-is —
+only Settings' plain fields and ThemeManager's .palette/.reload() are
+touched.
 """
 
 import logging
@@ -66,13 +63,11 @@ class MainWindowQt(QWidget):
         self.theme = theme
         self.player = player
         self.theme_signal = theme_signal
-        # Tracks whatever palette is actually on screen right now, which
-        # can be a live, uncommitted Preferences preview — self.theme.palette
-        # only updates on Save. A dialog opened while a preview is active
-        # must be built from this, not self.theme.palette, or its
-        # QPainter-painted widgets (ToggleSwitch) start out on the stale,
-        # pre-preview theme even though the rest of the app (QSS-driven)
-        # already shows the preview.
+        # Tracks whatever palette is actually on screen, which can be a
+        # live, uncommitted Preferences preview — self.theme.palette only
+        # updates on Save. Dialogs must be built from this, not
+        # self.theme.palette, or QPainter-painted widgets (ToggleSwitch)
+        # start out on the stale, pre-preview theme.
         self._current_palette: dict = theme.palette
         self._preferences_win: Optional[PreferencesWindowQt] = None
         self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
@@ -98,15 +93,10 @@ class MainWindowQt(QWidget):
         self._build_menu()
         self.menubar.setup_window_controls(self._on_quit, show_maximize=True)
 
-        # Matches ui/main_window.py:670-699's _update_menu_state — an
-        # earlier version never touched these after building the menu
-        # once, so Save Playlist/Save Playlist As/Play After Current Song
-        # stayed clickable even with an empty playlist or nothing playing
-        # (the shared audio.playback functions safely no-op, but the
-        # affordance of a visibly-disabled, meaningless action was
-        # missing). Looked up by label rather than threading QAction
-        # references out of _build_menu()'s item dicts, since add_menu()
-        # only returns the top-level QMenu.
+        # Looked up by label rather than threading QAction references out
+        # of _build_menu()'s item dicts, since add_menu() only returns the
+        # top-level QMenu. Kept up to date by _update_menu_state() so these
+        # actions disable when meaningless (empty playlist, nothing playing).
         self._action_save_playlist = self._find_action(self.menubar._menus["&Media"], "Save Playlist")
         self._action_save_playlist_as = self._find_action(self.menubar._menus["&Media"], "Save Playlist As...")
         self._action_play_after_current = self._find_action(self.menubar._menus["&Playback"], "Play After Current Song")
@@ -116,12 +106,9 @@ class MainWindowQt(QWidget):
         self._track_booklet_windows = []
 
         self.state = AppState(exts=tuple(getattr(settings, "supported_extensions", ()) or ()))
-        # Matches app/application.py's ValkyriaApp.__init__ (Tk) applying
-        # these same settings onto AppState at startup — silence_detection_
-        # enabled specifically is NOT also pushed onto self.player here,
-        # matching Tk exactly: the original only ever sets
-        # player.silence_detection_enabled from within the Playback
-        # Features dialog's own toggle handler, never at launch.
+        # silence_detection_enabled is deliberately NOT also pushed onto
+        # self.player here — only the Playback Features dialog's own
+        # toggle handler does that, never at launch.
         self.state.play_on_double = bool(getattr(settings, "play_on_double", True))
         self.state.crossfade_enabled = bool(getattr(settings, "crossfade_enabled", False))
         self.state.crossfade_duration = int(getattr(settings, "crossfade_duration", 5))
@@ -134,21 +121,15 @@ class MainWindowQt(QWidget):
         central_layout.setSpacing(8)
 
         splitter = QSplitter(Qt.Horizontal, self.central_area)
-        # QSplitterHandle's size is determined via QStyle::pixelMetric, not
-        # the stylesheet box model — QSS `width` on QSplitter::handle is
-        # silently ignored (confirmed empirically). setHandleWidth() is the
-        # only thing that actually reserves this much layout space; the
-        # handle stays visually invisible (transparent background, from
-        # theme_bridge.py) until hovered, but this is what makes it a real
-        # gap between the panels rather than the two touching directly.
+        # QSS `width` on QSplitter::handle is silently ignored —
+        # setHandleWidth() is what actually reserves this layout space.
         splitter.setHandleWidth(16)
         self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, player=self.player, parent=splitter)
         self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, player=self.player, parent=splitter)
         splitter.addWidget(self.playlist_view)
         splitter.addWidget(self.browser_view)
-        # Matches ui/main_window.py's left_frame(expand=True)/right_frame(no
-        # expand): the playlist absorbs all extra width on resize, the
-        # browser only changes size if the user drags the handle.
+        # The playlist absorbs all extra width on resize; the browser only
+        # changes size if the user drags the handle.
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
         central_layout.addWidget(splitter, 1)
@@ -203,20 +184,14 @@ class MainWindowQt(QWidget):
     # ---------- keyboard shortcuts ----------
 
     def _bind_transport_shortcuts(self) -> None:
-        """Ports ui/controls.py:262-270's transport key bindings — Tk
-        binds these on a content sub-frame, not the root window; the Qt
-        equivalent is QShortcut with the default Qt.WindowShortcut context
-        (fires whenever this top-level window has focus, regardless of
-        which specific child widget inside it does — the menu bar's own
-        QAction shortcuts already rely on the same context, see
-        _build_menu, so this matches the mechanism already proven to work
-        there rather than introducing a second one).
+        """QShortcut with the default Qt.WindowShortcut context fires
+        whenever this top-level window has focus, regardless of which
+        child widget inside it does — same mechanism the menu bar's own
+        QAction shortcuts already use.
 
         Buttons are triggered via .click() rather than calling their
-        handler methods directly — that exercises the exact same code
-        path (and visual press feedback) a real mouse click would, and
-        avoids reaching into ControlsBarQt's underscore-prefixed
-        click-handler internals from outside the class."""
+        handler methods directly, exercising the same code path (and
+        visual press feedback) a real mouse click would."""
 
         def shortcut(key: str, slot) -> None:
             QShortcut(QKeySequence(key), self, activated=slot)
@@ -231,7 +206,7 @@ class MainWindowQt(QWidget):
         shortcut("+", lambda: self.controls.step_volume(5))
         shortcut("-", lambda: self.controls.step_volume(-5))
 
-    # ---------- menu content (stub — see ui/main_window.py._build_menu for the real items) ----------
+    # ---------- menu content ----------
 
     def _build_menu(self) -> None:
         media_items = [
@@ -359,9 +334,6 @@ class MainWindowQt(QWidget):
             self._on_save_playlist_as()
 
     def _on_save_playlist_as(self) -> None:
-        # Matches ui/main_window.py:836-839: offers both formats and
-        # defaults to .m3u8 — an earlier version only offered *.m3u and
-        # never appended an extension for a bare filename.
         path, _filter = QFileDialog.getSaveFileName(
             self, "Save Playlist As", "", "M3U8 Playlist (*.m3u8);;M3U Playlist (*.m3u)"
         )
@@ -383,11 +355,9 @@ class MainWindowQt(QWidget):
         self.controls.set_repeat_icon(mode)
 
     def _toggle_repeat_mode(self) -> None:
-        """Cycle none -> one -> all -> none, matching
-        ui/main_window.py's toggle_repeat_mode. The menu's radiobuttons
-        aren't re-synced to match (same known cosmetic gap noted for the
-        "repeat one" auto-reset in _on_track_ended) — functionally correct
-        either way since state.repeat_mode is the source of truth."""
+        """Cycle none -> one -> all -> none. The menu's radiobuttons
+        aren't re-synced to match — functionally correct either way since
+        state.repeat_mode is the source of truth."""
         modes = ["none", "one", "all"]
         try:
             idx = modes.index(self.state.repeat_mode)
@@ -396,16 +366,11 @@ class MainWindowQt(QWidget):
         self._set_repeat_mode(modes[(idx + 1) % len(modes)])
 
     def _on_play_requested(self) -> None:
-        """Matches ui/controls.py's ControlsBar._on_play(from_user=True)
-        (ui/controls.py:272-278): the Play button/Enter plays whatever's
-        currently selected in the playlist — falling back to index 0 only
-        if nothing has ever played yet, or to just restarting whatever's
-        already at state.current_index if there's no selection and
-        something was already playing/loaded. An earlier version ignored
-        the playlist's selection entirely and always replayed whatever
-        ControlsBarQt had last been told to load, so selecting a different
-        track and pressing Play just repeated the current song instead of
-        switching to the one just selected."""
+        """The Play button/Enter plays whatever's currently selected in the
+        playlist — falling back to index 0 only if nothing has ever played
+        yet, or to just restarting whatever's already at
+        state.current_index if there's no selection and something was
+        already playing/loaded."""
         selected = self.playlist_view.get_selected_indices()
         if selected:
             self.state.current_index = selected[0]
@@ -427,12 +392,8 @@ class MainWindowQt(QWidget):
             self._fade_then_play(self.state.current_index + 1)
 
     def _fade_then_play(self, index: int) -> None:
-        """Matches ui/controls.py:344-358's prev()/next(): trigger a
-        fade-out and wait for it before switching tracks — same sequence
-        ControlsBarQt._on_stop already uses for Stop. An earlier version
-        called _play_index directly with no fade step, so Stop faded
-        smoothly (when Fade Out is enabled) but Prev/Next cut the audio
-        abruptly."""
+        """Trigger a fade-out and wait for it before switching tracks —
+        same sequence ControlsBarQt._on_stop already uses for Stop."""
         def _sequence():
             try:
                 wait = self.player.trigger_fade_out()
@@ -445,10 +406,6 @@ class MainWindowQt(QWidget):
         threading.Thread(target=_sequence, daemon=True).start()
 
     def _on_stopped(self) -> None:
-        # Matches ui/controls.py's stop() + ui/main_window.py's "stop"
-        # status handler: clear current_index and the playlist's
-        # now-playing highlight — an earlier version left both pointing at
-        # the stopped track indefinitely after Stop was pressed.
         self.state.current_index = None
         self.playlist_view.refresh_highlight()
         self._update_menu_state()
@@ -603,12 +560,9 @@ class MainWindowQt(QWidget):
             self.status_view._start_time_limit_updates(self.controls)
 
     def _on_track_ended(self) -> None:
-        """Connected to PlayerBridge.track_ended (see main_qt.py) in place
-        of controls.on_track_ended directly, now that there's a playlist to
-        advance through. Ports ui/main_window.py's handle_track_end's
-        repeat-mode branching; advancing calls _play_index directly rather
-        than the full stop/reset path so moving between tracks doesn't
-        visibly flash to a stopped state."""
+        """Connected to PlayerBridge.track_ended (see main_qt.py). Advancing
+        calls _play_index directly rather than the full stop/reset path so
+        moving between tracks doesn't visibly flash to a stopped state."""
         if self.state.current_index is None or not self.state.playlist:
             self.controls.on_track_ended()
             return
@@ -657,13 +611,7 @@ class MainWindowQt(QWidget):
         self._save_settings_safe()
 
     def _build_audio_device_items(self) -> list:
-        # Matches ui/main_window.py:849-878 — an earlier version left this
-        # submenu permanently empty ("submenu": []), so switching the
-        # app's actual audio output device was entirely inaccessible in
-        # the Qt build (only the browser's separate *preview* player had
-        # working device selection). Built once at menu-construction time,
-        # same as Tk (_build_audio_device_menu_items is called once from
-        # Tk's own _build_menu, not rebuilt on every menu open).
+        # Built once at menu-construction time, not rebuilt on every menu open.
         try:
             devices = self.player.get_audio_devices()
         except Exception:
@@ -701,12 +649,6 @@ class MainWindowQt(QWidget):
             QMessageBox.critical(self, "Error", f"Failed to set audio device: {device_id}")
 
     def _open_documentation(self, doc_filename: str) -> None:
-        # ui/documentation_view.py has zero tkinter coupling (only touches
-        # theme_manager.palette/.settings.theme, then renders to a temp
-        # HTML file and opens it via webbrowser.open) — reused as-is here
-        # rather than duplicated, matching how app/ and audio/ are shared.
-        # An earlier version left these two menu items with no "command"
-        # at all despite this being trivially portable.
         open_doc_in_browser(doc_filename, self.theme)
 
     def _save_settings_safe(self) -> None:
@@ -750,7 +692,6 @@ class MainWindowQt(QWidget):
         win.show()
 
     def _on_playlist_generated(self, songs: list, mode: str) -> None:
-        # Ports ui/main_window.py:1093-1110.
         if mode == "browser":
             self.state.browser_files = list(songs)
             self.browser_view.refresh()
@@ -781,14 +722,11 @@ class MainWindowQt(QWidget):
     # ---------- geometry persistence ----------
 
     def _apply_initial_geometry(self) -> None:
-        # Matches ui/main_window.py:427-449: a hard minimum size, and a
-        # restored geometry clamped to the CURRENT screen's bounds (at
-        # least 150px reachable) rather than trusted as-is. An earlier
-        # version did neither — a frameless window with no minimum could
-        # be resized down to near-zero with no recovery, and a geometry
-        # saved from a monitor layout that no longer exists (e.g. an
-        # unplugged second display) could restore fully off-screen with
-        # no native titlebar to drag it back by.
+        # A restored geometry is clamped to the CURRENT screen's bounds
+        # (at least 150px reachable) rather than trusted as-is — a saved
+        # geometry from a monitor layout that no longer exists (e.g. an
+        # unplugged second display) could otherwise restore fully
+        # off-screen with no native titlebar to drag it back by.
         self.setMinimumSize(*MIN_SIZE)
         screen = QApplication.primaryScreen()
         avail = screen.availableGeometry() if screen is not None else None
@@ -879,20 +817,14 @@ class MainWindowQt(QWidget):
             self.mini_player.hide()
 
     def _restore_from_mini_player(self) -> None:
-        # Main window was only minimized, never withdrawn/hidden (unlike
-        # tkinter's swap model), so nothing here went stale — no status/
-        # analysis refresh needed.
         self._hide_mini_player()
         self.showNormal()
-        # raise_()/activateWindow() are deferred a tick: some window
-        # managers (GNOME/Mutter's focus-stealing prevention, seen on
-        # Ubuntu) treat an activation request for a *different* top-level
-        # window than the one that just received the click (the mini
-        # player) as unsolicited, and substitute a "ready" notification
-        # instead of actually focusing it. Running this outside the click's
-        # own call stack is a commonly-cited mitigation, but this is a WM
-        # policy, not something app code can always fully override — needs
-        # a real-session check, this may not eliminate it completely.
+        # Deferred a tick: some window managers (GNOME/Mutter's
+        # focus-stealing prevention) treat an activation request for a
+        # different top-level window than the one that just received the
+        # click as unsolicited and won't actually focus it — running this
+        # outside the click's own call stack is a common mitigation, though
+        # WM policy may not always fully cooperate.
         QTimer.singleShot(0, self._focus_after_restore)
 
     def _focus_after_restore(self) -> None:
@@ -900,12 +832,10 @@ class MainWindowQt(QWidget):
         self.activateWindow()
 
     def _on_mini_player_play_pause(self) -> None:
-        """Equivalent to ui/mini_player.py's 3-branch _on_play_pause: tkinter's
-        paused->resume and playing->pause branches both call controls._on_pause()
-        either way, collapsing into one `is_playing or is_paused` check here. The
-        third branch (nothing loaded/stopped -> start) reuses MainWindowQt's own
-        _on_play_requested, the same call the main transport bar's Play button
-        makes (selection-aware start), rather than duplicating that branching."""
+        """Paused->resume and playing->pause both call controls._on_pause(),
+        collapsing into one `is_playing or is_paused` check. Otherwise
+        (nothing loaded/stopped) reuses _on_play_requested — the same
+        selection-aware start the main transport bar's Play button makes."""
         if self.controls.is_playing or self.controls.is_paused:
             self.controls._on_pause()
         else:

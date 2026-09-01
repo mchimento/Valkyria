@@ -1,5 +1,5 @@
-"""Qt port of ui/media_info_window.py — file info, codec details, and
-editable metadata (including BPM/Key calculation) for a single track."""
+"""File info, codec details, and editable metadata (including BPM/Key
+calculation) for a single track."""
 
 import logging
 import os
