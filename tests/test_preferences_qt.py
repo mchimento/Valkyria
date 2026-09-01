@@ -55,6 +55,17 @@ def test_toggling_theme_previews_live_without_touching_settings(qtbot, dialog, s
     assert blocker.args[0]["bg"] == "#1E1E1E"  # dark.json's bg, shown but not saved
 
 
+def test_theme_preview_updates_mini_player_toggle_color(qtbot, dialog, theme_signal):
+    """Regression: ToggleSwitch self-paints via QPainter rather than QSS,
+    so it isn't restyled for free by the app-wide stylesheet a preview
+    broadcast triggers — confirmed via pixel sampling that without this,
+    the switch kept showing the previous theme's color (e.g. dark's purple
+    button_bg_color) even after switching to Light."""
+    with qtbot.waitSignal(theme_signal.changed, timeout=1000):
+        dialog.radio_dark.setChecked(True)
+    assert dialog.checkbox_mini_player._palette.get("button_bg_color") == "#BB86FC"
+
+
 def test_incidental_save_during_preview_does_not_persist_it(dialog, settings):
     """Direct regression test for the reported bug: simulate an unrelated
     settings.save() firing while a preview is live (e.g. the user adjusts

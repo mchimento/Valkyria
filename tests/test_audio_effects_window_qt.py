@@ -274,3 +274,19 @@ def test_clicking_near_left_edge_jumps_toward_minimum(dialog):
     slider.mousePressEvent(event)
 
     assert slider.value() < -100
+
+
+def test_theme_signal_updates_toggle_switch_colors(qtbot, player):
+    from ui_qt.theme_bridge import ThemeSignal
+
+    theme_signal = ThemeSignal()
+    win = AudioEffectsWindowQt(None, player, PALETTE, theme_signal)
+    qtbot.addWidget(win)
+
+    new_palette = {"switch_bg": "#C0C0C0", "button_bg_color": "#1682D4"}
+    theme_signal.changed.emit(new_palette)
+
+    assert win.eq_enable._palette == new_palette
+    assert win.comp_enable._palette == new_palette
+    assert win.spat_enable._palette == new_palette
+    assert win.vocal_remover_enable._palette == new_palette

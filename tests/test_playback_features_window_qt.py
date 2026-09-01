@@ -141,3 +141,17 @@ def test_initialization_falls_back_to_settings_without_a_player(qtbot, state, se
 
     assert win.checkbox_fade_in.isChecked() is True
     assert win.slider_fade_in.value() == 6
+
+
+def test_theme_signal_updates_toggle_switch_colors(qtbot, state, settings, player):
+    from ui_qt.theme_bridge import ThemeSignal
+
+    theme_signal = ThemeSignal()
+    win = PlaybackFeaturesWindowQt(None, state, settings, player, PALETTE, theme_signal)
+    qtbot.addWidget(win)
+
+    new_palette = {"switch_bg": "#C0C0C0", "button_bg_color": "#1682D4"}
+    theme_signal.changed.emit(new_palette)
+
+    assert win.checkbox_fade_in._palette == new_palette
+    assert win.checkbox_silence._palette == new_palette

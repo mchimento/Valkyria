@@ -638,3 +638,21 @@ def test_open_about_shows_dialog(window):
         window._on_open_about()
     mock_cls.assert_called_once_with(window, window.theme.palette)
     mock_cls.return_value.show.assert_called_once()
+
+
+def test_dialogs_opened_during_live_preview_use_previewed_palette(window):
+    # Regression: self.theme.palette only updates on Preferences Save, but
+    # a live (unsaved) preview already updates the rest of the app via the
+    # QSS broadcast. A dialog built with self.theme.palette while a preview
+    # is active would get the stale, pre-preview colors for anything that
+    # doesn't come from QSS (ToggleSwitch self-paints via QPainter) — this
+    # is exactly the bug a screenshot showed: Playback Features/Audio
+    # Effects toggles stuck on dark's purple/black while everything else
+    # correctly showed the previewed Light theme.
+    preview_palette = {"button_bg_color": "#1682D4", "switch_bg": "#C0C0C0"}
+    window._on_theme_changed(preview_palette)
+    assert window._current_palette is preview_palette
+
+    with patch("ui_qt.main_window.AboutWindowQt") as mock_cls:
+        window._on_open_about()
+    mock_cls.assert_called_once_with(window, preview_palette)

@@ -57,12 +57,14 @@ logger = logging.getLogger(__name__)
 
 
 class PlaybackFeaturesWindowQt(QDialog):
-    def __init__(self, parent, state, settings, player, palette: dict):
+    def __init__(self, parent, state, settings, player, palette: dict, theme_signal=None):
         super().__init__(parent)
         self.state = state
         self.settings = settings
         self.player = player
         self.palette = palette
+        if theme_signal is not None:
+            theme_signal.changed.connect(self._on_theme_changed)
 
         self.setObjectName("MainWindow")
         self.setWindowTitle("Playback Features")
@@ -227,6 +229,19 @@ class PlaybackFeaturesWindowQt(QDialog):
         x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
         y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
         self.move(x, y)
+
+    def _on_theme_changed(self, palette: dict) -> None:
+        # ToggleSwitch self-paints via QPainter rather than QSS, so it
+        # isn't restyled for free by the app-wide stylesheet a theme change
+        # already triggers everywhere else — without this, a switch here
+        # keeps showing whatever theme was active when this dialog was
+        # opened even after switching (e.g. dark's purple staying visible
+        # after the rest of the app has gone light), for as long as the
+        # dialog stays open.
+        self.palette = palette
+        for switch in (self.checkbox_play_on_double, self.checkbox_fade_in, self.checkbox_fade_out,
+                       self.checkbox_crossfade, self.checkbox_silence):
+            switch.apply_palette(palette)
 
     # ---------- live handlers (mirror ui/playback_features_view.py's *_toggle/*_change methods) ----------
 

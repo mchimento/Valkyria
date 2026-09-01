@@ -76,10 +76,12 @@ class _ClickToSeekSlider(QSlider):
 
 
 class AudioEffectsWindowQt(QDialog):
-    def __init__(self, parent, player, palette: dict):
+    def __init__(self, parent, player, palette: dict, theme_signal=None):
         super().__init__(parent)
         self.player = player
         self.palette = palette
+        if theme_signal is not None:
+            theme_signal.changed.connect(self._on_theme_changed)
         # Fields Save must round-trip but nothing in this dialog edits
         # directly (rms_buffer_size, min_rate/max_rate) — read once here so
         # _save_to_config can preserve them instead of silently dropping
@@ -147,6 +149,17 @@ class AudioEffectsWindowQt(QDialog):
         x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
         y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
         self.move(x, y)
+
+    def _on_theme_changed(self, palette: dict) -> None:
+        # ToggleSwitch self-paints via QPainter rather than QSS, so it
+        # isn't restyled for free by the app-wide stylesheet a theme change
+        # already triggers elsewhere — without this, a switch here keeps
+        # showing whatever theme was active when this dialog was opened,
+        # for as long as it stays open.
+        self.palette = palette
+        for switch in (self.eq_enable, self.comp_enable, self.comp_rms_mode,
+                       self.spat_enable, self.vocal_remover_enable):
+            switch.apply_palette(palette)
 
     # ---------- construction helpers ----------
 

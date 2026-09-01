@@ -65,6 +65,14 @@ class MainWindowQt(QWidget):
         self.theme = theme
         self.player = player
         self.theme_signal = theme_signal
+        # Tracks whatever palette is actually on screen right now, which
+        # can be a live, uncommitted Preferences preview — self.theme.palette
+        # only updates on Save. A dialog opened while a preview is active
+        # must be built from this, not self.theme.palette, or its
+        # QPainter-painted widgets (ToggleSwitch) start out on the stale,
+        # pre-preview theme even though the rest of the app (QSS-driven)
+        # already shows the preview.
+        self._current_palette: dict = theme.palette
         self._preferences_win: Optional[PreferencesWindowQt] = None
         self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
         self._audio_effects_win: Optional[AudioEffectsWindowQt] = None
@@ -502,13 +510,13 @@ class MainWindowQt(QWidget):
         self._open_booklet(self.state.playlist[index])
 
     def _open_track_info(self, filepath: str) -> None:
-        win = MediaInfoWindowQt(self, filepath, self.theme.palette, metadata_saved_callback=self._on_metadata_saved)
+        win = MediaInfoWindowQt(self, filepath, self._current_palette, metadata_saved_callback=self._on_metadata_saved)
         self._track_info_windows.append(win)
         win.finished.connect(lambda _: self._track_info_windows.remove(win) if win in self._track_info_windows else None)
         win.show()
 
     def _open_booklet(self, filepath: str) -> None:
-        win = BookletViewerWindowQt(self, filepath, self.theme.palette)
+        win = BookletViewerWindowQt(self, filepath, self._current_palette)
         self._track_booklet_windows.append(win)
         win.finished.connect(lambda _: self._track_booklet_windows.remove(win) if win in self._track_booklet_windows else None)
         win.show()
@@ -571,13 +579,13 @@ class MainWindowQt(QWidget):
             self._audio_effects_win.raise_()
             self._audio_effects_win.activateWindow()
             return
-        win = AudioEffectsWindowQt(self, self.player, self.theme.palette)
+        win = AudioEffectsWindowQt(self, self.player, self._current_palette, self.theme_signal)
         win.finished.connect(lambda _: setattr(self, "_audio_effects_win", None))
         self._audio_effects_win = win
         win.show()
 
     def _on_open_about(self) -> None:
-        win = AboutWindowQt(self, self.theme.palette)
+        win = AboutWindowQt(self, self._current_palette)
         win.show()
 
     def _play_index(self, index: int) -> None:
@@ -722,12 +730,13 @@ class MainWindowQt(QWidget):
             self._playback_features_win.raise_()
             self._playback_features_win.activateWindow()
             return
-        win = PlaybackFeaturesWindowQt(self, self.state, self.settings, self.player, self.theme.palette)
+        win = PlaybackFeaturesWindowQt(self, self.state, self.settings, self.player, self._current_palette, self.theme_signal)
         win.finished.connect(lambda _: setattr(self, "_playback_features_win", None))
         self._playback_features_win = win
         win.show()
 
     def _on_theme_changed(self, palette: dict) -> None:
+        self._current_palette = palette
         app = QApplication.instance()
         if app is not None:
             apply_theme(app, palette)
@@ -822,7 +831,7 @@ class MainWindowQt(QWidget):
 
     def _show_mini_player(self) -> None:
         if self.mini_player is None:
-            self.mini_player = MiniPlayerWindowQt(self.state, self.controls, self.theme.palette)
+            self.mini_player = MiniPlayerWindowQt(self.state, self.controls, self._current_palette)
             self.mini_player.restore_requested.connect(self._restore_from_mini_player)
             self.mini_player.play_pause_requested.connect(self._on_mini_player_play_pause)
             self.mini_player.prev_requested.connect(self._on_prev)

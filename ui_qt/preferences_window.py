@@ -231,7 +231,16 @@ class PreferencesWindowQt(QDialog):
         # Preview only broadcasts a palette for display; nothing is
         # committed until _on_save().
         self._previewed = True
-        self.theme_signal.changed.emit(_load_palette(name))
+        palette = _load_palette(name)
+        self.theme_signal.changed.emit(palette)
+        # ToggleSwitch self-paints via QPainter rather than QSS, so it
+        # doesn't get restyled for free by the app-wide stylesheet the
+        # broadcast above triggers elsewhere — it needs its own explicit
+        # refresh, including here in the same dialog that's doing the
+        # broadcasting (confirmed via pixel sampling: without this, the
+        # switch keeps showing the previous theme's color throughout the
+        # whole preview, e.g. staying purple after switching to Light).
+        self.checkbox_mini_player.apply_palette(palette)
 
     def _on_save(self) -> None:
         self.settings.theme = "dark" if self.radio_dark.isChecked() else "light"
