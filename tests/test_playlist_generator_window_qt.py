@@ -2,7 +2,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QPushButton
 
 from audio.playlist_generator import (
     GeneratorRules,
@@ -18,31 +18,26 @@ PALETTE = {"bg": "#1e1e1e", "fg": "#ffffff"}
 
 
 def _mock_destination_dialog(monkeypatch, mode):
-    """Replaces the QMessageBox class used by the module with a fake whose
-    .exec()/.clickedButton() resolve to the button matching `mode`, without
-    a real blocking exec() call."""
-    box_instance = MagicMock()
-    buttons = {}
-
-    def add_button(text, _role):
-        btn = MagicMock()
-        buttons[text] = btn
-        return btn
-
-    box_instance.addButton.side_effect = add_button
-    box_instance.exec.return_value = None
-
+    """_ask_generate_destination builds its own themed QDialog (see its
+    docstring — a plain QMessageBox doesn't pick up this app's theme on the
+    user's system). Simulates clicking the button matching `mode` by
+    patching QDialog.exec to find and click it, rather than blocking on a
+    real exec() with no one there to close it."""
     label_for_mode = {
         "replace": "Replace Playlist",
         "append": "Append to Playlist",
         "browser": "Send to Browser",
         None: "Cancel",
     }[mode]
-    box_instance.clickedButton.side_effect = lambda: buttons[label_for_mode]
 
-    monkeypatch.setattr(
-        "ui_qt.playlist_generator_window.QMessageBox", MagicMock(return_value=box_instance)
-    )
+    def fake_exec(dlg_self):
+        for btn in dlg_self.findChildren(QPushButton):
+            if btn.text() == label_for_mode:
+                btn.click()
+                return None
+        return None
+
+    monkeypatch.setattr(QDialog, "exec", fake_exec)
 
 
 @pytest.fixture

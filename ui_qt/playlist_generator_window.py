@@ -811,20 +811,52 @@ class PlaylistGeneratorWindowQt(QDialog):
         self.playlist_generated.emit(songs, mode)
 
     def _ask_generate_destination(self, summary: str) -> Optional[str]:
-        box = QMessageBox(self)
-        box.setWindowTitle("Send Songs")
-        box.setText(summary)
-        box.setInformativeText("Where do you want to send them?")
-        replace_btn = box.addButton("Replace Playlist", QMessageBox.AcceptRole)
-        append_btn = box.addButton("Append to Playlist", QMessageBox.AcceptRole)
-        browser_btn = box.addButton("Send to Browser", QMessageBox.AcceptRole)
-        box.addButton("Cancel", QMessageBox.RejectRole)
-        box.exec()
-        clicked = box.clickedButton()
-        if clicked is replace_btn:
-            return "replace"
-        if clicked is append_btn:
-            return "append"
-        if clicked is browser_btn:
-            return "browser"
-        return None
+        # A plain QMessageBox renders with no app theming at all on this
+        # user's system (native OS chrome, white background, default OS
+        # buttons) — matches why ui/playlist_generator_window.py's own
+        # _ask_generate_destination never used a native tk messagebox
+        # either, building a themed custom Toplevel instead. Mirrored here
+        # the same way every other dialog in this app is built: frameless
+        # + _DialogTitleBar + CompactButton-styled buttons.
+        dlg = QDialog(self)
+        dlg.setObjectName("MainWindow")
+        dlg.setWindowFlag(Qt.FramelessWindowHint)
+        dlg.setModal(True)
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(1, 1, 1, 1)
+        outer.setSpacing(0)
+        outer.addWidget(_DialogTitleBar(dlg, "Send Songs"))
+
+        body = QWidget(dlg)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(10)
+        outer.addWidget(body, 1)
+
+        body_layout.addWidget(QLabel(summary))
+        body_layout.addWidget(QLabel("Where do you want to send them?"))
+
+        button_row = QHBoxLayout()
+        result = {"mode": None}
+
+        def _pick(mode):
+            result["mode"] = mode
+            dlg.accept()
+
+        for text, mode in [("Replace Playlist", "replace"), ("Append to Playlist", "append"),
+                            ("Send to Browser", "browser"), ("Cancel", None)]:
+            btn = QPushButton(text)
+            btn.setObjectName("CompactButton")
+            btn.clicked.connect(lambda checked=False, m=mode: _pick(m))
+            button_row.addWidget(btn)
+        body_layout.addLayout(button_row)
+
+        dlg.adjustSize()
+        parent_geo = self.frameGeometry()
+        dlg.move(
+            parent_geo.x() + (parent_geo.width() - dlg.width()) // 2,
+            parent_geo.y() + (parent_geo.height() - dlg.height()) // 2,
+        )
+        dlg.exec()
+        return result["mode"]
