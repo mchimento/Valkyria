@@ -148,6 +148,7 @@ class TestSettings(unittest.TestCase):
                 settings1.theme = "dark"
                 settings1.window_geometry = "800x600"
                 settings1.show_dj = False
+                settings1.mute = True
                 settings1.save()
 
                 # Load settings in new instance
@@ -156,6 +157,7 @@ class TestSettings(unittest.TestCase):
                 self.assertEqual(settings2.theme, "dark")
                 self.assertEqual(settings2.window_geometry, "800x600")
                 self.assertFalse(settings2.show_dj)
+                self.assertTrue(settings2.mute)
 
 
 if __name__ == '__main__':

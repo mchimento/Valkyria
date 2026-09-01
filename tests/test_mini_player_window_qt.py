@@ -1,6 +1,4 @@
-"""Tests for ui_qt/mini_player_window.py. No Tk oracle exists for this exact
-class shape (ui/mini_player.py is a tkinter Toplevel with no prior test
-coverage), so these are written directly from the ported handler behavior."""
+"""Tests for ui_qt/mini_player_window.py."""
 from unittest.mock import MagicMock, patch
 
 import pytest

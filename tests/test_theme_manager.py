@@ -4,7 +4,6 @@ import tempfile
 import logging
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
-import tkinter as tk
 from themes.theme_manager import ThemeManager
 from app.settings import Settings
 
@@ -104,40 +103,6 @@ class TestThemeManager(unittest.TestCase):
         # Check values are strings
         for value in theme_manager.palette.values():
             self.assertIsInstance(value, str)
-
-    def test_apply_to_root_window(self):
-        """Test that apply_to() applies styles to root window."""
-        theme_manager = ThemeManager(self.mock_settings)
-        theme_manager.palette = {
-            'bg': '#ffffff',
-            'fg': '#000000',
-            'accent': '#0078d4'
-        }
-
-        mock_root = Mock(spec=tk.Tk)
-
-        with patch('themes.theme_manager.apply_base_styles') as mock_apply:
-            theme_manager.apply_to(mock_root)
-
-            # Verify apply_base_styles was called
-            mock_apply.assert_called_once_with(mock_root, theme_manager.palette)
-
-            # Verify root.configure was called
-            mock_root.configure.assert_called_once_with(bg='#ffffff')
-
-    def test_apply_to_handles_errors_gracefully(self):
-        """Test that apply_to() handles errors gracefully."""
-        theme_manager = ThemeManager(self.mock_settings)
-
-        mock_root = Mock(spec=tk.Tk)
-        mock_root.configure.side_effect = Exception("Test error")
-
-        with patch('themes.theme_manager.apply_base_styles'):
-            # Should not raise exception
-            try:
-                theme_manager.apply_to(mock_root)
-            except Exception as e:
-                self.fail(f"apply_to() raised exception: {e}")
 
     def test_reload_updates_palette(self):
         """Test that calling reload() updates the palette."""

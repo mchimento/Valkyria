@@ -18,13 +18,13 @@ from PySide6.QtCore import Qt, QEvent, QTimer, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
+from app.documentation_view import open_documentation as open_doc_in_browser
 from app.paths import get_generator_templates_path, get_resource_path
 from app.state import AppState
 from audio import m3u as m3u_module
 from audio.audio_player import filter_selectable_audio_devices
 from audio.bpm import analysis_manager
 from audio.metadata import metadata_extractor
-from ui.documentation_view import open_documentation as open_doc_in_browser
 from ui_qt.about_window import AboutWindowQt
 from ui_qt.audio_effects_window import AudioEffectsWindowQt
 from ui_qt.booklet_viewer_window import BookletViewerWindowQt
@@ -560,7 +560,7 @@ class MainWindowQt(QWidget):
             self.status_view._start_time_limit_updates(self.controls)
 
     def _on_track_ended(self) -> None:
-        """Connected to PlayerBridge.track_ended (see main_qt.py). Advancing
+        """Connected to PlayerBridge.track_ended (see main.py). Advancing
         calls _play_index directly rather than the full stop/reset path so
         moving between tracks doesn't visibly flash to a stopped state."""
         if self.state.current_index is None or not self.state.playlist:

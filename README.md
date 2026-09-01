@@ -57,6 +57,7 @@ python main.py
 ## Dependencies
 
 -   Python 3.8+
+-   PySide6
 -   sounddevice
 -   soundfile
 -   numpy
@@ -68,7 +69,7 @@ python main.py
 
 -   `main.py`: Entry point for the application.
 -   `app/`: Core application logic and state management.
--   `ui/`: User interface components (windows, views, controls).
+-   `ui_qt/`: User interface components (windows, views, controls).
 -   `audio/`: Audio playback handling.
 -   `themes/`: Theme definitions and management.
 -   `README.md`: Documentation for the tool.

@@ -1,4 +1,4 @@
-"""Tests for ui_qt/controls.py. Additive to the tkinter test suite."""
+"""Tests for ui_qt/controls.py."""
 import threading
 from unittest.mock import MagicMock, patch
 

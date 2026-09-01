@@ -1,6 +1,5 @@
 """
-Tests for the PySide6 foundation (ui_qt/). Additive to the existing
-tkinter-based test suite — not a replacement, until final cutover.
+Tests for the PySide6 main window (ui_qt/).
 """
 from unittest.mock import MagicMock, patch
 

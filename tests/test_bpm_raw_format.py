@@ -20,7 +20,6 @@ from audio.metadata import (
     normalize_bpm, set_bpm_preference, BPM_PREFERENCE,
     metadata_extractor
 )
-from ui.media_info_window import MediaInfoWindow
 
 
 class TestBPMRawFormat(unittest.TestCase):
@@ -229,47 +228,6 @@ class TestBPMRawFormat(unittest.TestCase):
             # Analysis might fail in test environment, which is acceptable
             self.assertIsNone(result)
 
-    @patch('tkinter.Toplevel')
-    @patch('audio.metadata.get_file_info')
-    def test_media_info_window_shows_raw_bpm(self, mock_get_file_info, mock_toplevel):
-        """Test that media info window shows raw BPM values."""
-        # Setup mock file info with high BPM
-        mock_file_info = {
-            'filename': 'test.mp3',
-            'path': self.test_file,
-            'size': 5000000,
-            'duration': 180,
-            'format': 'mp3',
-            'codec': 'MP3',
-            'bitrate': 320000,
-            'sample_rate': 44100,
-            'channels': 2,
-            'metadata': {
-                'title': 'Test Song',
-                'artist': 'Test Artist',
-                'album': 'Test Album',
-                'bpm': 185.75
-            }
-        }
-        mock_get_file_info.return_value = mock_file_info
-
-        # Mock tkinter components
-        mock_window = MagicMock()
-        mock_toplevel.return_value = mock_window
-
-        # Create media info window
-        try:
-            media_window = MediaInfoWindow(None, self.test_file)
-
-            # The window should process the BPM data
-            # We can't easily test the actual display without a full GUI,
-            # but we can verify the data was processed correctly
-            mock_get_file_info.assert_called_with(self.test_file)
-
-        except Exception as e:
-            # GUI components might fail in test environment, but the data processing should work
-            pass
-
     def test_bpm_preference_persistence(self):
         """Test that BPM preference changes persist correctly."""
         # Test setting to raw
@@ -338,63 +296,6 @@ class TestBPMRawFormat(unittest.TestCase):
 
                 # Verify the raw value is still accessible
                 self.assertIsInstance(float(raw_bpm), float, "Raw BPM should remain as float")
-
-    def test_media_info_window_display_rounding(self):
-        """Test that media info window displays rounded BPM while storing raw value."""
-        from unittest.mock import Mock, patch
-        from ui.media_info_window import MediaInfoWindow
-        from audio.metadata import metadata_extractor
-
-        with patch('audio.metadata.get_file_info') as mock_get_file_info, \
-             patch('ui.media_info_window.center_window'), \
-             patch.object(metadata_extractor, 'register_bpm_listener'):
-
-            # Mock file info with raw BPM
-            mock_file_info = {
-                'filename': 'test.mp3',
-                'path': '/test/test.mp3',
-                'size': 5000000,
-                'duration': 180,
-                'format': 'mp3',
-                'codec': 'mp3',
-                'bitrate': 320000,
-                'sample_rate': 44100,
-                'channels': 2,
-                'metadata': {
-                    'bpm': 128.75,  # Raw BPM value
-                    'title': 'Test Song',
-                    'artist': 'Test Artist'
-                }
-            }
-            mock_get_file_info.return_value = mock_file_info
-
-            # Create media info window (mock parent to avoid GUI)
-            mock_parent = Mock()
-            mock_parent.winfo_exists.return_value = True
-
-            with patch('tkinter.Toplevel') as mock_toplevel:
-                mock_window = Mock()
-                mock_toplevel.return_value = mock_window
-
-                # Test with perceived preference
-                set_bpm_preference('perceived')
-
-                # We can't easily test full GUI, but we can verify the logic
-                # by checking what media info window would display
-                bpm_val = mock_file_info.get('metadata', {}).get('bpm')
-                if bpm_val is not None and bpm_val != "":
-                    # This is what the media info window does for display
-                    raw_bpm = int(round(float(bpm_val)))
-                    displayed_bpm = str(raw_bpm)
-
-                    # For perceived preference, display should be normalized
-                    expected_display = get_display_bpm(bpm_val)
-                    self.assertEqual(displayed_bpm, str(int(round(float(bpm_val)))),
-                        f"Media info should display rounded BPM '{int(round(float(bpm_val)))}', got '{displayed_bpm}'")
-
-                    # But the stored value should still be raw
-                    self.assertEqual(bpm_val, 128.75,
-                        f"Stored BPM should remain raw '{128.75}', got '{bpm_val}'")
 
 class TestBPMResampling(unittest.TestCase):
     def test_analyze_bpm_resamples_to_target_sr(self):

@@ -227,7 +227,7 @@ class PreferencesWindowQt(QDialog):
         self.settings.mini_player_enabled = self.checkbox_mini_player.isChecked()
         self.settings.bpm_mode = "perceived" if self.radio_bpm_perceived.isChecked() else "raw"
         # Without this, audio.metadata.BPM_PREFERENCE never picks up the
-        # new choice until the next full app restart — main_qt.py only
+        # new choice until the next full app restart — main.py only
         # applies the startup value once.
         try:
             metadata_module.set_bpm_preference(self.settings.bpm_mode)

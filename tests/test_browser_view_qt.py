@@ -1,4 +1,4 @@
-"""Tests for ui_qt/browser_view.py. Additive to the tkinter test suite."""
+"""Tests for ui_qt/browser_view.py."""
 import logging
 from unittest.mock import MagicMock, patch
 

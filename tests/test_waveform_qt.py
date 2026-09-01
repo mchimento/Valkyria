@@ -1,4 +1,4 @@
-"""Tests for ui_qt/waveform_seekbar.py. Additive to the tkinter test suite."""
+"""Tests for ui_qt/waveform_seekbar.py."""
 from unittest.mock import MagicMock
 
 import numpy as np

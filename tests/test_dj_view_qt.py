@@ -1,7 +1,7 @@
-"""Tests for ui_qt/dj_view.py. Mirrors tests/test_dj_frame_view.py (Tk) for
-intent, plus regression coverage for this port's two deliberate fixes: the
-overall-LUFS sentinel no longer blanks the live meters, and BPM/Key save
-now unifies which cached estimate stays available for re-save."""
+"""Tests for ui_qt/dj_view.py, including regression coverage for two
+deliberate fixes: the overall-LUFS sentinel no longer blanks the live
+meters, and BPM/Key save now unifies which cached estimate stays
+available for re-save."""
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -133,9 +133,8 @@ def test_bpm_and_key_both_stay_cached_after_successful_save(view):
 
 
 def test_analysis_manager_scheduler_is_framework_agnostic():
-    """Regression test for the audio/bpm.py root_widget -> scheduler
-    refactor: any plain scheduler(func, *args) callable works, decoupled
-    from both Tk and Qt."""
+    """AnalysisManager accepts any plain scheduler(func, *args) callable —
+    it isn't tied to a specific UI framework's event loop."""
     from audio.bpm import AnalysisManager
 
     manager = AnalysisManager()

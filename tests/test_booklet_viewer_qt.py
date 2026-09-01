@@ -74,8 +74,6 @@ def test_multiple_images_nav_bounds_and_counter(qtbot):
 def test_corrupt_image_shows_error_without_raising(qtbot):
     win = _make_window(qtbot, [(b"not-a-real-image", "desc", "APIC Type 3")])
     assert win.image_label.text() == "Error loading image: image data is corrupted"
-    # Counter/nav state still correctly set, unlike tkinter which leaves
-    # Prev/Next stuck at stale state when an image fails to decode.
     assert win.counter_label.text() == "Image 1 of 1"
     assert not win.prev_button.isEnabled()
     assert not win.next_button.isEnabled()

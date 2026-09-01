@@ -90,9 +90,8 @@ def test_key_entry_edit_branches(window, typed, expected_display, expected_raw):
 
 
 def test_save_uses_raw_key_not_displayed_camelot(window):
-    # Regression test: tkinter only tracks a raw value for BPM, not Key,
-    # so saving after a Calculate-Key/mapped-edit writes the Camelot
-    # string into the real key tag instead of the actual key name.
+    # Regression test: saving after a Calculate-Key/mapped-edit must write
+    # the actual key name, not the Camelot display string, into the tag.
     saved = {}
     with patch("ui_qt.media_info_window.save_metadata", side_effect=lambda fp, d: (saved.update(d), True)[1]), \
          patch("ui_qt.media_info_window.get_file_info", return_value=_info()), \

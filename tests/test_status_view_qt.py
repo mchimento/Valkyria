@@ -1,6 +1,4 @@
-"""Tests for ui_qt/status_view.py. No Tk oracle exists for this component
-(ui/status_frame_view.py has zero prior test coverage), so these are
-written directly from the ported handler behavior."""
+"""Tests for ui_qt/status_view.py."""
 from unittest.mock import MagicMock, patch
 
 import pytest

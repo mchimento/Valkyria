@@ -1,4 +1,4 @@
-"""Tests for ui_qt/playlist_view.py. Additive to the tkinter test suite."""
+"""Tests for ui_qt/playlist_view.py."""
 import logging
 
 from unittest.mock import patch
