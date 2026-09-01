@@ -174,6 +174,15 @@ def test_audio_effects_reuses_single_instance(window):
     first.close()
 
 
+def test_playlist_generator_reuses_single_instance(window):
+    window._on_open_playlist_generator()
+    first = window._playlist_generator_win
+    assert first is not None
+    window._on_open_playlist_generator()
+    assert window._playlist_generator_win is first
+    first.close()
+
+
 def test_open_folder_menu_action_populates_playlist(qtbot, window, tmp_path):
     from PySide6.QtWidgets import QFileDialog
 
@@ -656,3 +665,46 @@ def test_dialogs_opened_during_live_preview_use_previewed_palette(window):
     with patch("ui_qt.main_window.AboutWindowQt") as mock_cls:
         window._on_open_about()
     mock_cls.assert_called_once_with(window, preview_palette)
+
+
+def test_playlist_generated_replace_mode_stops_and_resets_playlist(window, mock_player):
+    # Ports ui/main_window.py:1093-1110's "replace" branch — stopping must
+    # go through controls.stopped (waveform/UI reset), the same path
+    # playlist_view.clear() uses, not a bare player.stop().
+    window.state.playlist = ["/tmp/old.mp3"]
+    window.state.current_index = 0
+    stopped_spy = MagicMock()
+    window.controls.stopped.connect(stopped_spy)
+
+    window._on_playlist_generated(["/tmp/new1.mp3", "/tmp/new2.mp3"], "replace")
+
+    assert window.state.playlist == ["/tmp/new1.mp3", "/tmp/new2.mp3"]
+    assert window.state.current_index == 0
+    mock_player.stop.assert_called_once()
+    stopped_spy.assert_called_once()
+
+
+def test_playlist_generated_replace_mode_empty_songs_clears_current_index(window, mock_player):
+    window.state.playlist = ["/tmp/old.mp3"]
+    window.state.current_index = 0
+
+    window._on_playlist_generated([], "replace")
+
+    assert window.state.playlist == []
+    assert window.state.current_index is None
+    mock_player.stop.assert_called_once()
+
+
+def test_playlist_generated_append_mode_extends_playlist(window, mock_player):
+    window.state.playlist = ["/tmp/a.mp3"]
+
+    window._on_playlist_generated(["/tmp/b.mp3"], "append")
+
+    assert window.state.playlist == ["/tmp/a.mp3", "/tmp/b.mp3"]
+    mock_player.stop.assert_not_called()
+
+
+def test_playlist_generated_browser_mode_populates_browser_files(window):
+    window._on_playlist_generated(["/tmp/x.mp3"], "browser")
+
+    assert window.state.browser_files == ["/tmp/x.mp3"]

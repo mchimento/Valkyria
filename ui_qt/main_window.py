@@ -21,7 +21,7 @@ from PySide6.QtCore import Qt, QEvent, QTimer, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
-from app.paths import get_resource_path
+from app.paths import get_generator_templates_path, get_resource_path
 from app.state import AppState
 from audio import m3u as m3u_module
 from audio.audio_player import filter_selectable_audio_devices
@@ -38,6 +38,7 @@ from ui_qt.media_info_window import MediaInfoWindowQt
 from ui_qt.menu_bar import CustomMenuBarQt
 from ui_qt.mini_player_window import MiniPlayerWindowQt
 from ui_qt.playback_features_window import PlaybackFeaturesWindowQt
+from ui_qt.playlist_generator_window import PlaylistGeneratorWindowQt
 from ui_qt.playlist_view import PlaylistViewQt
 from ui_qt.preferences_window import PreferencesWindowQt
 from ui_qt.status_view import StatusViewQt
@@ -76,6 +77,7 @@ class MainWindowQt(QWidget):
         self._preferences_win: Optional[PreferencesWindowQt] = None
         self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
         self._audio_effects_win: Optional[AudioEffectsWindowQt] = None
+        self._playlist_generator_win: Optional[PlaylistGeneratorWindowQt] = None
         self.mini_player: Optional[MiniPlayerWindowQt] = None
         theme_signal.changed.connect(self._on_theme_changed)
 
@@ -289,7 +291,7 @@ class MainWindowQt(QWidget):
             {"label": "Audio Effects and Filters", "command": self._on_open_audio_effects, "accelerator": "F7"},
             {"label": "Playback features", "command": self._on_open_playback_features, "accelerator": "F8"},
             {"separator": True},
-            {"label": "Playlist Generator", "accelerator": "F6"},
+            {"label": "Playlist Generator", "command": self._on_open_playlist_generator, "accelerator": "F6"},
             {"separator": True},
             {"label": "Preferences", "command": self._on_open_preferences, "accelerator": "Ctrl+P"},
         ]
@@ -734,6 +736,37 @@ class MainWindowQt(QWidget):
         win.finished.connect(lambda _: setattr(self, "_playback_features_win", None))
         self._playback_features_win = win
         win.show()
+
+    def _on_open_playlist_generator(self) -> None:
+        if self._playlist_generator_win is not None:
+            self._playlist_generator_win.show()
+            self._playlist_generator_win.raise_()
+            self._playlist_generator_win.activateWindow()
+            return
+        win = PlaylistGeneratorWindowQt(self, str(get_generator_templates_path()), self._current_palette)
+        win.playlist_generated.connect(self._on_playlist_generated)
+        win.finished.connect(lambda _: setattr(self, "_playlist_generator_win", None))
+        self._playlist_generator_win = win
+        win.show()
+
+    def _on_playlist_generated(self, songs: list, mode: str) -> None:
+        # Ports ui/main_window.py:1093-1110.
+        if mode == "browser":
+            self.state.browser_files = list(songs)
+            self.browser_view.refresh()
+            return
+        if mode == "replace":
+            self.state.playlist = list(songs)
+            self.state.current_index = None
+            self.player.stop()
+            # Same cleanup a real Stop press gets (waveform reset, etc) —
+            # see playlist_view.clear()'s identical pattern.
+            self.controls.stopped.emit()
+            if songs:
+                self.state.current_index = 0
+        else:  # append
+            self.state.playlist = self.state.playlist + list(songs)
+        self.playlist_view.refresh()
 
     def _on_theme_changed(self, palette: dict) -> None:
         self._current_palette = palette
