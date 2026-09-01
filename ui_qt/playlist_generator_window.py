@@ -74,6 +74,7 @@ class PlaylistGeneratorWindowQt(QDialog):
         self._selected_template_name = ""
         self._selected_group: Optional[Group] = None
         self._updating = False
+        self._sized_once = False
 
         self.setObjectName("MainWindow")
         self.setWindowTitle("Playlist Generator")
@@ -97,7 +98,7 @@ class PlaylistGeneratorWindowQt(QDialog):
         main_area.setSpacing(12)
         main_area.addWidget(self._build_left_panel())
         main_area.addWidget(self._build_right_panel(), 1)
-        body_layout.addLayout(main_area, 1)
+        body_layout.addLayout(main_area)
 
         body_layout.addLayout(self._build_bottom_bar())
 
@@ -109,7 +110,23 @@ class PlaylistGeneratorWindowQt(QDialog):
         self._load_global_rules_to_ui()
         self._set_group_rules_visible(False)
 
-        self.resize(960, 680)
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._sized_once:
+            self._sized_once = True
+            # Deliberately deferred to the first real show rather than
+            # done in __init__: a not-yet-shown/polished QSS-styled
+            # widget tree this deep can report an inflated sizeHint(), so
+            # sizing before show() left this window still close to
+            # tkinter's original fixed 960x680 (with the same dead space
+            # below the button grid/rules boxes that prompted this fix)
+            # despite measuring correctly tight when checked headless.
+            # adjustSize() computes width too, which would come out
+            # narrower than we want for a two-column layout — call it
+            # first for the natural (tight) height, then explicitly
+            # re-widen to a fixed 960 while keeping that computed height.
+            self.adjustSize()
+            self.resize(960, self.height())
         self._center_on_parent()
 
     def _center_on_parent(self) -> None:
@@ -159,10 +176,17 @@ class PlaylistGeneratorWindowQt(QDialog):
         canvas_layout = QVBoxLayout(canvas_group)
         self._tree = QTreeWidget()
         self._tree.setHeaderHidden(True)
+        # Explicit height rather than an expanding stretch factor — this
+        # window's total height is sized off its actual content (see
+        # __init__'s adjustSize() call), so nothing forces this panel
+        # taller than its natural size; without a real height here the
+        # tree would collapse to whatever tiny default an empty
+        # QTreeWidget's sizeHint happens to be.
+        self._tree.setMinimumHeight(320)
         self._tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
         self._tree.itemDoubleClicked.connect(self._on_tree_double_clicked)
         canvas_layout.addWidget(self._tree)
-        layout.addWidget(canvas_group, 1)
+        layout.addWidget(canvas_group)
 
         rows = [
             [("Add Group", self._on_add_group), ("Add Subgroup", self._on_add_subgroup), ("Remove", self._on_remove)],
@@ -186,6 +210,13 @@ class PlaylistGeneratorWindowQt(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._build_global_rules_group())
         layout.addWidget(self._build_group_rules_group())
+        # QHBoxLayout forces every column in main_area to the same row
+        # height (the taller left column, canvas+buttons) regardless of
+        # what's in this one — without this trailing stretch to absorb
+        # that leftover height as blank space, Qt instead grows the
+        # Global Rules QGroupBox itself to fill it (QGroupBox's default
+        # size policy allows that), since it'd otherwise be the only
+        # visible child left to claim the extra space.
         layout.addStretch(1)
         return panel
 
