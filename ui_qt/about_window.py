@@ -7,6 +7,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from app.paths import get_resource_path
+from app.version import __version__
 from ui_qt.preferences_window import _DialogTitleBar
 
 
@@ -49,7 +50,7 @@ class AboutWindowQt(QDialog):
         desc_label.setFixedWidth(350)
         body_layout.addWidget(desc_label)
 
-        version_label = QLabel("Version 1.0.0")
+        version_label = QLabel(f"Version {__version__}")
         version_label.setAlignment(Qt.AlignCenter)
         body_layout.addWidget(version_label)
 

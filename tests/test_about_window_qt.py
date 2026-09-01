@@ -1,6 +1,7 @@
 """Tests for ui_qt/about_window.py."""
 from PySide6.QtWidgets import QLabel, QPushButton
 
+from app.version import __version__
 from ui_qt.about_window import AboutWindowQt
 
 PALETTE = {"accent": "#BB86FC"}
@@ -24,7 +25,7 @@ def test_shows_description_and_version_text(qtbot):
     qtbot.addWidget(win)
     texts = [label.text() for label in win.findChildren(QLabel)]
     assert any("audio player" in t for t in texts)
-    assert "Version 1.0.0" in texts
+    assert f"Version {__version__}" in texts
 
 
 def test_logo_pixmap_loads_from_real_asset(qtbot):
