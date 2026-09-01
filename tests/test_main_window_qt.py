@@ -631,3 +631,10 @@ def test_play_for_time_menu_resolves_via_selection(qtbot, window):
         window._on_play_for_time_menu()
 
     assert window.state.play_limits["/tmp/b.mp3"] == 15.0
+
+
+def test_open_about_shows_dialog(window):
+    with patch("ui_qt.main_window.AboutWindowQt") as mock_cls:
+        window._on_open_about()
+    mock_cls.assert_called_once_with(window, window.theme.palette)
+    mock_cls.return_value.show.assert_called_once()

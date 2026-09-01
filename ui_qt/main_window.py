@@ -28,6 +28,7 @@ from audio.audio_player import filter_selectable_audio_devices
 from audio.bpm import analysis_manager
 from audio.metadata import metadata_extractor
 from ui.documentation_view import open_documentation as open_doc_in_browser
+from ui_qt.about_window import AboutWindowQt
 from ui_qt.audio_effects_window import AudioEffectsWindowQt
 from ui_qt.booklet_viewer_window import BookletViewerWindowQt
 from ui_qt.browser_view import BrowserViewQt
@@ -293,7 +294,7 @@ class MainWindowQt(QWidget):
         help_items = [
             {"label": "Documentation", "submenu": documentation_submenu},
             {"separator": True},
-            {"label": "About", "accelerator": "F1"},
+            {"label": "About", "command": self._on_open_about, "accelerator": "F1"},
         ]
         self.menubar.add_menu("&Help", help_items)
 
@@ -573,6 +574,10 @@ class MainWindowQt(QWidget):
         win = AudioEffectsWindowQt(self, self.player, self.theme.palette)
         win.finished.connect(lambda _: setattr(self, "_audio_effects_win", None))
         self._audio_effects_win = win
+        win.show()
+
+    def _on_open_about(self) -> None:
+        win = AboutWindowQt(self, self.theme.palette)
         win.show()
 
     def _play_index(self, index: int) -> None:
