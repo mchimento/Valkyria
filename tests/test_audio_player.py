@@ -369,5 +369,44 @@ class TestAudioPlayerMetricsVolumeIndependence(unittest.TestCase):
         self.assertAlmostEqual(unmuted_energy, muted_energy, places=3)
 
 
+class TestAudioPlayerEffectsGetters(unittest.TestCase):
+    """Regression tests for the getters added so ui_qt/audio_effects_window.py
+    can initialize its Compressor/Spatializer sliders from live player state
+    instead of only the saved config file (ui/audio_effects_window.py has no
+    such live override for these two sections' numeric values)."""
+
+    def test_get_compressor_settings_reflects_live_values(self):
+        player = AudioPlayer()
+        player.set_compressor(enabled=True, threshold=-15.0, ratio=4.0, attack=10.0,
+                               release=200.0, makeup_gain=3.0, knee=2.0, use_rms=False)
+        settings = player.get_compressor_settings()
+        self.assertEqual(settings, {
+            "threshold": -15.0, "ratio": 4.0, "attack": 10.0, "release": 200.0,
+            "makeup_gain": 3.0, "knee": 2.0, "use_rms": False,
+        })
+
+    def test_get_spatializer_settings_reflects_live_values(self):
+        player = AudioPlayer()
+        player.set_spatializer(enabled=True, size=0.5, width=0.3, wet=0.2, dry=0.9, damp=0.1)
+        settings = player.get_spatializer_settings()
+        self.assertEqual(settings, {
+            "size": 0.5, "width": 0.3, "wet": 0.2, "dry": 0.9, "damp": 0.1,
+        })
+
+    def test_equalizer_and_rate_setters_still_work_under_lock(self):
+        # Regression: set_equalizer_enabled/preamp/band and set_playback_rate
+        # were unlocked while every sibling effects setter already used
+        # self._lock — wrapping them must not change their actual behavior.
+        player = AudioPlayer()
+        player.set_equalizer_enabled(True)
+        player.set_equalizer_preamp(5.0)
+        player.set_equalizer_band(0, -3.0)
+        player.set_playback_rate(1.5)
+        self.assertTrue(player.get_equalizer_enabled())
+        self.assertEqual(player.get_equalizer_preamp(), 5.0)
+        self.assertEqual(player.get_equalizer_band(0), -3.0)
+        self.assertEqual(player.get_playback_rate(), 1.5)
+
+
 if __name__ == '__main__':
     unittest.main()

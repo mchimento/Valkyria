@@ -37,6 +37,25 @@ def mock_player():
     player.get_length.return_value = 0
     player.get_mute_state.return_value = False
     player.trigger_fade_out.return_value = 0
+    # Audio Effects dialog init reads these — real numeric/dict values so
+    # its sliders' initial formatting (f"{value:.1f}") doesn't choke on a
+    # bare MagicMock.
+    player.get_equalizer_enabled.return_value = False
+    player.get_equalizer_preamp.return_value = 0.0
+    player.get_equalizer_band.return_value = 0.0
+    player.get_compressor_enabled.return_value = False
+    player.get_compressor_settings.return_value = {
+        "threshold": -11.0, "ratio": 3.0, "attack": 25.0, "release": 100.0,
+        "makeup_gain": 6.0, "knee": 5.0, "use_rms": True,
+    }
+    player.get_spatializer_enabled.return_value = False
+    player.get_spatializer_settings.return_value = {
+        "size": 0.85, "width": 0.5, "wet": 0.4, "dry": 0.5, "damp": 0.5,
+    }
+    player.get_playback_rate.return_value = 1.0
+    player.get_channel_mode.return_value = "stereo"
+    player.get_vocal_remover_enabled.return_value = False
+    player.get_vocal_remover_intensity.return_value = 0.5
     return player
 
 
@@ -143,6 +162,15 @@ def test_preferences_reuses_single_instance(window):
     assert first is not None
     window._on_open_preferences()
     assert window._preferences_win is first
+    first.close()
+
+
+def test_audio_effects_reuses_single_instance(window):
+    window._on_open_audio_effects()
+    first = window._audio_effects_win
+    assert first is not None
+    window._on_open_audio_effects()
+    assert window._audio_effects_win is first
     first.close()
 
 

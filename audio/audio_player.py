@@ -1171,21 +1171,24 @@ class AudioPlayer:
 
     def set_equalizer_enabled(self, enabled):
         """Enable or disable the equalizer."""
-        self.effects.set_equalizer_enabled(enabled)
+        with self._lock:
+            self.effects.set_equalizer_enabled(enabled)
 
     def get_equalizer_enabled(self):
         return self.effects.get_equalizer_enabled()
 
     def set_equalizer_preamp(self, preamp):
         """Set preamp level in dB (-20 to 20)."""
-        self.effects.set_equalizer_preamp(preamp)
+        with self._lock:
+            self.effects.set_equalizer_preamp(preamp)
 
     def get_equalizer_preamp(self):
         return self.effects.get_equalizer_preamp()
 
     def set_equalizer_band(self, band_index, value):
         """Set gain for a specific band in dB (-20 to 20)."""
-        self.effects.set_equalizer_band(band_index, value)
+        with self._lock:
+            self.effects.set_equalizer_band(band_index, value)
 
     def get_equalizer_band(self, band_index):
         return self.effects.get_equalizer_band(band_index)
@@ -1197,7 +1200,8 @@ class AudioPlayer:
             rate: Speed factor (e.g. 1.0 is normal, 0.5 is half speed, 2.0 is double).
         """
         # Clamp rate to reasonable limits
-        self._playback_rate = max(0.1, min(4.0, float(rate)))
+        with self._lock:
+            self._playback_rate = max(0.1, min(4.0, float(rate)))
 
     def get_playback_rate(self):
         """Get current playback rate."""
@@ -1225,6 +1229,10 @@ class AudioPlayer:
         with self._lock:
             return self.effects.get_compressor_enabled()
 
+    def get_compressor_settings(self):
+        with self._lock:
+            return self.effects.get_compressor_settings()
+
     def set_spatializer(self, enabled, size=0.85, width=0.5, wet=0.4, dry=0.5, damp=0.5):
         """Configure spatializer."""
         with self._lock:
@@ -1232,6 +1240,10 @@ class AudioPlayer:
 
     def get_spatializer_enabled(self):
         return self.effects.get_spatializer_enabled()
+
+    def get_spatializer_settings(self):
+        with self._lock:
+            return self.effects.get_spatializer_settings()
 
     def set_channel_mode(self, mode):
         """

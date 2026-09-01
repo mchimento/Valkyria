@@ -133,6 +133,21 @@ def build_stylesheet(palette: dict) -> str:
         background: transparent;
     }}
 
+    QGroupBox {{
+        color: {fg};
+        border: 1px solid {border};
+        border-radius: 6px;
+        margin-top: 10px;
+        padding-top: 12px;
+        font-weight: bold;
+    }}
+    QGroupBox::title {{
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        left: 10px;
+        padding: 0 4px;
+    }}
+
     QWidget#MiniPlayerWindow {{
         background-color: {bg};
         border: 1px solid {border};

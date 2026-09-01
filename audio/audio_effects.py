@@ -319,6 +319,17 @@ class AudioEffects:
     def get_compressor_enabled(self):
         return self._compressor_enabled
 
+    def get_compressor_settings(self):
+        return {
+            "threshold": self._compressor_threshold,
+            "ratio": self._compressor_ratio,
+            "attack": self._compressor_attack,
+            "release": self._compressor_release,
+            "makeup_gain": self._compressor_makeup,
+            "knee": self._compressor_knee,
+            "use_rms": self._compressor_use_rms,
+        }
+
     # --- Spatializer Methods ---
 
     def set_spatializer(self, enabled, size=0.85, width=0.5, wet=0.4, dry=0.5, damp=0.5):
@@ -337,6 +348,15 @@ class AudioEffects:
 
     def get_spatializer_enabled(self):
         return self._spatializer_enabled
+
+    def get_spatializer_settings(self):
+        return {
+            "size": self._spat_size,
+            "width": self._spat_width,
+            "wet": self._spat_wet,
+            "dry": self._spat_dry,
+            "damp": self._spat_damp,
+        }
 
     def _apply_spatializer(self, data):
         """Apply spatializer effect (Width + Simple Cross-Delay)."""

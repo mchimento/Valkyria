@@ -28,6 +28,7 @@ from audio.audio_player import filter_selectable_audio_devices
 from audio.bpm import analysis_manager
 from audio.metadata import metadata_extractor
 from ui.documentation_view import open_documentation as open_doc_in_browser
+from ui_qt.audio_effects_window import AudioEffectsWindowQt
 from ui_qt.booklet_viewer_window import BookletViewerWindowQt
 from ui_qt.browser_view import BrowserViewQt
 from ui_qt.controls import ControlsBarQt
@@ -65,6 +66,7 @@ class MainWindowQt(QWidget):
         self.theme_signal = theme_signal
         self._preferences_win: Optional[PreferencesWindowQt] = None
         self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
+        self._audio_effects_win: Optional[AudioEffectsWindowQt] = None
         self.mini_player: Optional[MiniPlayerWindowQt] = None
         theme_signal.changed.connect(self._on_theme_changed)
 
@@ -275,7 +277,7 @@ class MainWindowQt(QWidget):
 
         tools_items = [
             {"label": "Audio Device", "submenu": self._build_audio_device_items()},
-            {"label": "Audio Effects and Filters", "accelerator": "F7"},
+            {"label": "Audio Effects and Filters", "command": self._on_open_audio_effects, "accelerator": "F7"},
             {"label": "Playback features", "command": self._on_open_playback_features, "accelerator": "F8"},
             {"separator": True},
             {"label": "Playlist Generator", "accelerator": "F6"},
@@ -563,7 +565,15 @@ class MainWindowQt(QWidget):
             self.dj_view.update_info()
 
     def _on_open_audio_effects(self) -> None:
-        logger.info("[ui_qt stub] Audio Effects window not ported yet")
+        if self._audio_effects_win is not None:
+            self._audio_effects_win.show()
+            self._audio_effects_win.raise_()
+            self._audio_effects_win.activateWindow()
+            return
+        win = AudioEffectsWindowQt(self, self.player, self.theme.palette)
+        win.finished.connect(lambda _: setattr(self, "_audio_effects_win", None))
+        self._audio_effects_win = win
+        win.show()
 
     def _play_index(self, index: int) -> None:
         if not (0 <= index < len(self.state.playlist)):
