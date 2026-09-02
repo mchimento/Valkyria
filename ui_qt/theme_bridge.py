@@ -149,12 +149,8 @@ def build_stylesheet(palette: dict) -> str:
     }}
 
     QWidget#MiniPlayerWindow {{
-        /* Background/border are hand-painted in MiniPlayerWindowQt.paintEvent
-           instead — QSS background-color/border-radius on a plain QWidget
-           fills the full bounding rect regardless of radius (confirmed by
-           pixel sampling), which left square corners peeking past the
-           window's rounded mask. */
-        background: transparent;
+        background-color: {bg};
+        border: 1px solid {border};
     }}
     QLabel#MiniPlayerArtwork {{
         /* Rounding is baked into the pixmap itself (see _round_pixmap) —

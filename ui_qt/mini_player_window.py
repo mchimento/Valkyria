@@ -8,7 +8,7 @@ import logging
 import os
 
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRegion
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QProgressBar, QVBoxLayout, QWidget
 
 from audio.metadata import get_best_artwork, get_metadata
@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 ARTWORK_SIZE = 56
 ARTWORK_RADIUS = 10
 WINDOW_WIDTH = 460
-CORNER_RADIUS = 16
 
 
 class MiniPlayerWindowQt(QWidget):
@@ -35,9 +34,6 @@ class MiniPlayerWindowQt(QWidget):
         self.palette = palette
         self._last_artwork_path = False  # sentinel: never equals a real path or None
         self._sized_once = False
-        self._bg_top = QColor(palette.get("bg", "#1E1E1E"))
-        self._bg_bottom = QColor(palette.get("tree_bg", "#252526"))
-        self._border_color = QColor(palette.get("border", "#3E3E3E"))
 
         self.setObjectName("MiniPlayerWindow")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -129,39 +125,6 @@ class MiniPlayerWindowQt(QWidget):
 
     # ---------- lifecycle ----------
 
-    def _rounded_path(self) -> QPainterPath:
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), CORNER_RADIUS, CORNER_RADIUS)
-        return path
-
-    def _apply_rounded_mask(self) -> None:
-        # A hard window-shape mask clips to a rounded rect without needing
-        # compositing (Qt.WA_TranslucentBackground can lose the whole
-        # background without one) — reapplied in showEvent too, since a
-        # mask set before the native window surface exists can get dropped.
-        self.setMask(QRegion(self._rounded_path().toFillPolygon().toPolygon()))
-
-    def paintEvent(self, event) -> None:
-        # QSS background-color/border-radius on a plain QWidget fills the
-        # full bounding rect regardless of radius (confirmed by pixel
-        # sampling) — the mask alone then has to do all the rounding, with
-        # no antialiasing. The actual corner-cutting is left entirely to
-        # _apply_rounded_mask(); this always fills the *whole* rect (not
-        # just the rounded path) so that if the window-shape mask doesn't
-        # take effect on a given window manager, the fallback is a plain
-        # square dark window rather than unpainted (black) corners.
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, self._bg_top)
-        gradient.setColorAt(1.0, self._bg_bottom)
-        painter.fillRect(self.rect(), gradient)
-        pen = QPen(self._border_color)
-        pen.setWidthF(1.0)
-        painter.setPen(pen)
-        painter.drawPath(self._rounded_path())
-
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if not self._sized_once:
@@ -174,7 +137,6 @@ class MiniPlayerWindowQt(QWidget):
             self.adjustSize()
             self.setFixedSize(WINDOW_WIDTH, self.height())
             self._position_bottom_right()
-        self._apply_rounded_mask()
 
     def start_updates(self) -> None:
         self._update_ui()
