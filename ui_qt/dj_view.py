@@ -198,7 +198,10 @@ class DJViewQt(QWidget):
         title_font.setPointSize(11)
         title_font.setBold(True)
         title.setFont(title_font)
-        title.setFixedWidth(50)
+        # Widest of the actual meter-row titles ("ENERGY") plus PEAK/LIMIT's
+        # own fixed 50px, not just PEAK/LIMIT's width — a bare 50px clipped
+        # "ENERGY" down to "ENERG".
+        title.setFixedWidth(max(50, QFontMetrics(title_font).horizontalAdvance(title_text) + 4))
         title.setFixedHeight(ROW_HEIGHT)
         row.addWidget(title, 0, Qt.AlignVCenter)
         meter = MeterBar(meter_width)
