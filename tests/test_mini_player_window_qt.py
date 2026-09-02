@@ -151,7 +151,7 @@ def test_position_bottom_right_uses_available_geometry(win):
     win._position_bottom_right()
     if screen is not None:
         avail = screen.availableGeometry()
-        expected_x = avail.x() + avail.width() - 470
-        expected_y = avail.y() + avail.height() - 170
+        expected_x = avail.x() + avail.width() - win.width() - 20
+        expected_y = avail.y() + avail.height() - win.height() - 40
         assert win.pos().x() == expected_x
         assert win.pos().y() == expected_y

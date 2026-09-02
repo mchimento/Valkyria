@@ -2,6 +2,13 @@
 
 All notable changes to Valkyria are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Mini Player: redesigned with rounded album artwork, a larger accent-
+  colored play/pause button, ghost-style secondary/window buttons, and a
+  thinner progress bar for a more modern look.
+
 ## [0.2.0] - 2026-09-02
 
 ### Changed

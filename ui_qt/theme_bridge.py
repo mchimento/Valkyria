@@ -149,18 +149,88 @@ def build_stylesheet(palette: dict) -> str:
     }}
 
     QWidget#MiniPlayerWindow {{
-        background-color: {bg};
-        border: 1px solid {border};
-        border-radius: 12px;
+        /* Background/border are hand-painted in MiniPlayerWindowQt.paintEvent
+           instead — QSS background-color/border-radius on a plain QWidget
+           fills the full bounding rect regardless of radius (confirmed by
+           pixel sampling), which left square corners peeking past the
+           window's rounded mask. */
+        background: transparent;
+    }}
+    QLabel#MiniPlayerArtwork {{
+        /* Rounding is baked into the pixmap itself (see _round_pixmap) —
+           a QSS background-color here wouldn't clip to border-radius on a
+           plain QLabel and would show square behind the rounded image. */
+        background: transparent;
+    }}
+    QLabel#MiniPlayerTitle {{
+        color: {fg};
+        font-weight: 600;
+        font-size: 12pt;
+        background: transparent;
+    }}
+    QLabel#MiniPlayerSubtitle {{
+        color: {fg_dim};
+        font-size: 9pt;
+        background: transparent;
     }}
     QProgressBar#MiniPlayerProgress {{
         background-color: {scrollbar_track};
         border: none;
-        border-radius: 4px;
+        border-radius: 2px;
     }}
     QProgressBar#MiniPlayerProgress::chunk {{
         background-color: {accent};
-        border-radius: 4px;
+        border-radius: 2px;
+    }}
+
+    QPushButton#MiniPlayerWinBtn {{
+        background-color: transparent;
+        color: {fg_dim};
+        border: none;
+        border-radius: 10px;
+        font-size: 9pt;
+    }}
+    QPushButton#MiniPlayerWinBtn:hover {{
+        background-color: {hover_bg};
+        color: {fg};
+    }}
+    QWidget#MiniPlayerWindow QPushButton#WinBtnClose {{
+        background-color: transparent;
+        color: {fg_dim};
+        border: none;
+        border-radius: 10px;
+        font-size: 9pt;
+    }}
+    QWidget#MiniPlayerWindow QPushButton#WinBtnClose:hover {{
+        color: #ffffff;
+    }}
+
+    QPushButton#MiniPlayButton {{
+        background-color: {button_bg};
+        color: {button_fg};
+        border: none;
+        border-radius: 24px;
+        font-size: 14pt;
+    }}
+    QPushButton#MiniPlayButton:hover {{
+        background-color: {button_hover};
+    }}
+    QPushButton#MiniPlayButton:pressed {{
+        background-color: {button_pressed};
+    }}
+
+    QPushButton#MiniSecondaryButton {{
+        background-color: transparent;
+        color: {fg};
+        border: none;
+        border-radius: 17px;
+        font-size: 11pt;
+    }}
+    QPushButton#MiniSecondaryButton:hover {{
+        background-color: {hover_bg};
+    }}
+    QPushButton#MiniSecondaryButton:pressed {{
+        background-color: {select_bg};
     }}
 
     QWidget#CentralArea {{
