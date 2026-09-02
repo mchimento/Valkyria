@@ -256,8 +256,6 @@ class MainWindowQt(QWidget):
             {"label": "Show Playback", "checkbutton": True, "checked": bool(getattr(self.settings, "show_playlist", True)), "accelerator": "F9", "command": self._toggle_playlist_visibility},
             {"label": "Show Browser", "checkbutton": True, "checked": bool(getattr(self.settings, "show_browser", True)), "accelerator": "F10", "command": self._toggle_browser_visibility},
             {"label": "Show Live Audio Analysis", "checkbutton": True, "checked": bool(getattr(self.settings, "show_dj", True)), "accelerator": "F11", "command": self._toggle_dj_visibility},
-            {"separator": True},
-            {"label": "Always on Top", "state": "disabled"},
         ]
         self.menubar.add_menu("&View", view_items)
 
