@@ -56,8 +56,12 @@ class _BrowserTree(QTreeWidget):
 
     def dropEvent(self, event) -> None:
         if event.source() is self:
+            # Captured before the native move: Qt's own internal reorder
+            # (remove + reinsert the same item object) clears its selected
+            # state, even though it's the same QTreeWidgetItem afterward.
+            dragged_paths = {item.data(0, Qt.UserRole) for item in self.selectedItems()}
             super().dropEvent(event)
-            self._owner._resync_from_internal_move()
+            self._owner._resync_from_internal_move(dragged_paths)
             return
         event.ignore()
 
@@ -209,11 +213,16 @@ class BrowserViewQt(QWidget):
             item.setFlags(item.flags() & ~Qt.ItemIsDropEnabled)
             self._tree.addTopLevelItem(item)
 
-    def _resync_from_internal_move(self) -> None:
+    def _resync_from_internal_move(self, dragged_paths: Optional[set] = None) -> None:
         self.state.browser_files = [
             self._tree.topLevelItem(i).data(0, Qt.UserRole)
             for i in range(self._tree.topLevelItemCount())
         ]
+        if dragged_paths:
+            for i in range(self._tree.topLevelItemCount()):
+                item = self._tree.topLevelItem(i)
+                if item.data(0, Qt.UserRole) in dragged_paths:
+                    item.setSelected(True)
 
     def _remove_selected_from_browser(self) -> None:
         selected_paths = {item.data(0, Qt.UserRole) for item in self._tree.selectedItems()}
