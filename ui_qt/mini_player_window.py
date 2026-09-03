@@ -7,17 +7,14 @@ handlers its own transport bar uses."""
 import logging
 import os
 
-from PySide6.QtCore import QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QProgressBar, QVBoxLayout, QWidget
 
-from audio.metadata import get_best_artwork, get_metadata
+from audio.metadata import get_metadata
 from ui_qt.controls import _format_ms
 
 logger = logging.getLogger(__name__)
 
-ARTWORK_SIZE = 56
-ARTWORK_RADIUS = 10
 WINDOW_WIDTH = 460
 
 
@@ -32,7 +29,6 @@ class MiniPlayerWindowQt(QWidget):
         self.state = state
         self.controls = controls
         self.palette = palette
-        self._last_artwork_path = False  # sentinel: never equals a real path or None
         self._sized_once = False
 
         self.setObjectName("MiniPlayerWindow")
@@ -84,12 +80,6 @@ class MiniPlayerWindowQt(QWidget):
         main_row.addLayout(transport_row)
         main_row.setAlignment(transport_row, Qt.AlignVCenter)
 
-        self.artwork_label = QLabel()
-        self.artwork_label.setObjectName("MiniPlayerArtwork")
-        self.artwork_label.setFixedSize(ARTWORK_SIZE, ARTWORK_SIZE)
-        self.artwork_label.setAlignment(Qt.AlignCenter)
-        main_row.addWidget(self.artwork_label, 0, Qt.AlignVCenter)
-
         info_col = QVBoxLayout()
         info_col.setSpacing(3)
         info_col.addStretch(1)
@@ -116,8 +106,6 @@ class MiniPlayerWindowQt(QWidget):
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setFixedHeight(4)
         outer.addWidget(self.progress_bar)
-
-        self._update_artwork(None)
 
         self._timer = QTimer(self)
         self._timer.setInterval(500)
@@ -169,57 +157,6 @@ class MiniPlayerWindowQt(QWidget):
             self.restore_requested.emit()
         super().mouseDoubleClickEvent(event)
 
-    # ---------- artwork ----------
-
-    def _update_artwork(self, filepath) -> None:
-        if filepath == self._last_artwork_path:
-            return
-        self._last_artwork_path = filepath
-
-        pixmap = None
-        if filepath:
-            try:
-                data = get_best_artwork(filepath)
-            except Exception:
-                data = None
-            if data:
-                candidate = QPixmap()
-                if candidate.loadFromData(data):
-                    scaled = candidate.scaled(
-                        ARTWORK_SIZE, ARTWORK_SIZE, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-                    )
-                    x = max(0, (scaled.width() - ARTWORK_SIZE) // 2)
-                    y = max(0, (scaled.height() - ARTWORK_SIZE) // 2)
-                    pixmap = scaled.copy(x, y, ARTWORK_SIZE, ARTWORK_SIZE)
-        if pixmap is None:
-            pixmap = self._placeholder_pixmap()
-        self.artwork_label.setPixmap(self._round_pixmap(pixmap))
-
-    def _placeholder_pixmap(self) -> QPixmap:
-        pixmap = QPixmap(ARTWORK_SIZE, ARTWORK_SIZE)
-        pixmap.fill(QColor(self.palette.get("tree_bg", "#252526")))
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QColor(self.palette.get("fg_dim", "#888888")))
-        font = QFont()
-        font.setPointSize(20)
-        painter.setFont(font)
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "♫")
-        painter.end()
-        return pixmap
-
-    def _round_pixmap(self, pixmap: QPixmap) -> QPixmap:
-        rounded = QPixmap(pixmap.size())
-        rounded.fill(Qt.transparent)
-        painter = QPainter(rounded)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(pixmap.rect()), ARTWORK_RADIUS, ARTWORK_RADIUS)
-        painter.setClipPath(path)
-        painter.drawPixmap(0, 0, pixmap)
-        painter.end()
-        return rounded
-
     # ---------- polling ----------
 
     def _update_ui(self) -> None:
@@ -239,7 +176,6 @@ class MiniPlayerWindowQt(QWidget):
             self.title_label.setText(title)
         else:
             self.title_label.setText("No track loaded")
-        self._update_artwork(filepath)
 
         try:
             length_ms = self.controls.player.get_length()

@@ -152,12 +152,6 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {bg};
         border: 1px solid {border};
     }}
-    QLabel#MiniPlayerArtwork {{
-        /* Rounding is baked into the pixmap itself (see _round_pixmap) —
-           a QSS background-color here wouldn't clip to border-radius on a
-           plain QLabel and would show square behind the rounded image. */
-        background: transparent;
-    }}
     QLabel#MiniPlayerTitle {{
         color: {fg};
         font-weight: 600;
