@@ -85,8 +85,12 @@ class _PlaylistTree(QTreeWidget):
 
     def dropEvent(self, event) -> None:
         if event.source() is self:
+            # Captured before the native move, since Qt's own reordering
+            # doesn't know about our UserRole+2 "actual index" bookkeeping
+            # — matching back up by path afterwards is what stays correct.
+            dragged_paths = {item.data(0, Qt.UserRole) for item in self.selectedItems()}
             super().dropEvent(event)
-            self._owner._resync_from_internal_move()
+            self._owner._resync_from_internal_move(dragged_paths)
             return
 
         mime = event.mimeData()
@@ -321,7 +325,7 @@ class PlaylistViewQt(QWidget):
 
     # ---------- drag-drop ----------
 
-    def _resync_from_internal_move(self) -> None:
+    def _resync_from_internal_move(self, dragged_paths: Optional[set] = None) -> None:
         if self._search_text:
             # Reordering a filtered/partial view has no well-defined
             # mapping back onto the full playlist — undo the visual move
@@ -344,22 +348,28 @@ class PlaylistViewQt(QWidget):
                 self.state.current_index = new_order.index(old_current_path)
             except ValueError:
                 self.state.current_index = None
-        self.refresh()
+
+        select = None
+        if dragged_paths:
+            select = [i for i, path in enumerate(new_order) if path in dragged_paths]
+        self.refresh(select=select)
 
     def _insert_external_files(self, paths: List[str], index: int) -> None:
-        self.add_files(paths, index)
+        self.add_files(paths, index, select_added=True)
 
-    def add_files(self, paths: List[str], index: Optional[int] = None) -> None:
+    def add_files(self, paths: List[str], index: Optional[int] = None, select_added: bool = False) -> None:
         """Insert paths at `index` (default: append at the end). Public —
         used by both the drag-drop path above and BrowserViewQt's
-        Add/Add Below buttons (ui_qt/browser_view.py)."""
+        Add/Add Below buttons (ui_qt/browser_view.py); those callers don't
+        pass select_added, so they keep the prior selection untouched."""
         if index is None:
             index = len(self.state.playlist)
         for offset, path in enumerate(paths):
             self.state.playlist.insert(index + offset, path)
         if self.state.current_index is not None and self.state.current_index >= index:
             self.state.current_index += len(paths)
-        self.refresh()
+        select = list(range(index, index + len(paths))) if select_added else None
+        self.refresh(select=select)
 
     # ---------- context menu ----------
 
