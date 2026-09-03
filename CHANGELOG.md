@@ -2,24 +2,20 @@
 
 All notable changes to Valkyria are documented in this file.
 
-## [Unreleased]
+## [0.2.0] - 2026-09-02
 
 ### Added
-- Track titles that don't fit their label (Mini Player, the main window's
-  status panel) now scroll in a looping marquee instead of being clipped.
-
-### Changed
-- Mini Player: redesigned with a larger accent-colored play/pause button,
-  ghost-style secondary/window buttons, and a thinner progress bar for a
-  more modern look; layout reordered to controls, then track info.
-
-## [0.2.0] - 2026-09-02
+- Track titles that don't fit their label (Mini Player, the main window's status panel) now scroll in a looping marquee instead of being clipped.
 
 ### Changed
 - UI overhaul: migrated the entire interface from tkinter/customtkinter to
   PySide6 (Qt), for better performance (batched waveform rendering, native
   window move/resize) especially on Linux. All features from 0.1.0 carry
   over unchanged; the tkinter UI has been removed.
+
+- Mini Player: redesigned with a larger accent-colored play/pause button,
+  ghost-style secondary/window buttons, and a thinner progress bar for a
+  more modern look; layout reordered to controls, then track info.
 
 ## [0.1.0] - 2025-11-09
 

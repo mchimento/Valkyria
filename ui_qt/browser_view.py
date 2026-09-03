@@ -7,7 +7,8 @@ import re
 import threading
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QPoint, QRectF, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QDrag, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -58,6 +59,59 @@ class _BrowserTree(QTreeWidget):
             self._owner._resync_from_internal_move()
             return
         event.ignore()
+
+    def startDrag(self, supportedActions) -> None:
+        # Replaces Qt's default (plain, theme-blind) drag pixmap with a
+        # small floating chip naming what's being dragged, so dropping a
+        # song onto the playlist reads as moving *that* track, not just an
+        # anonymous cursor change. Deliberately doesn't replicate Qt's
+        # default post-drag row removal on a completed MoveAction — files
+        # dragged out of the browser stay listed there; only the explicit
+        # Delete-key path (_remove_selected_from_browser) removes them.
+        items = self.selectedItems()
+        if not items:
+            return
+        drag = QDrag(self)
+        drag.setMimeData(self.mimeData(items))
+        pixmap = self._drag_pixmap(items)
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(QPoint(-12, pixmap.height() // 2))
+        drag.exec(supportedActions, Qt.MoveAction)
+
+    def _drag_pixmap(self, items) -> QPixmap:
+        label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
+        icon = "♫"
+
+        font = self.font()
+        metrics = QFontMetrics(font)
+        text = metrics.elidedText(label, Qt.ElideMiddle, 220)
+        icon_width = metrics.horizontalAdvance(icon)
+        text_width = metrics.horizontalAdvance(text)
+
+        pad_x, pad_y, gap = 12, 8, 6
+        width = pad_x * 2 + icon_width + gap + text_width
+        height = pad_y * 2 + metrics.height()
+
+        pixmap = QPixmap(width, height)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0.5, 0.5, width - 1, height - 1), 10, 10)
+        painter.fillPath(path, QColor(20, 20, 20, 235))
+        pen = QPen(QColor(255, 255, 255, 60))
+        pen.setWidthF(1.0)
+        painter.setPen(pen)
+        painter.drawPath(path)
+
+        painter.setFont(font)
+        painter.setPen(QColor(255, 255, 255))
+        y = pad_y + metrics.ascent()
+        painter.drawText(pad_x, y, icon)
+        painter.drawText(pad_x + icon_width + gap, y, text)
+        painter.end()
+        return pixmap
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Delete:
