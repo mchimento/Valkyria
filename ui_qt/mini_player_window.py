@@ -1,4 +1,4 @@
-"""Small always-on-top floating window with transport controls + track
+"""Small floating window with transport controls + track
 info, shown while the main window is minimized. No duplicate playback
 logic: it polls the shared AppState/ControlsBarQt for display and emits
 Signals for every user action, which MainWindowQt connects to the same
