@@ -9,6 +9,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from audio.metadata import get_best_artwork, get_metadata
+from ui_qt.marquee_label import MarqueeLabel
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class StatusViewQt(QWidget):
         text_col = QVBoxLayout()
         text_col.setSpacing(4)
 
-        self.title_label = QLabel("")
+        self.title_label = MarqueeLabel("")
         title_font = QFont()
         title_font.setPointSize(20)
         title_font.setBold(True)

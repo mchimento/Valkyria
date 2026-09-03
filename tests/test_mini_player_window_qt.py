@@ -112,7 +112,9 @@ def test_title_uses_metadata_title(win):
     assert win.title_label.text() == "Real Title"
 
 
-def test_title_truncated_when_long():
+def test_title_not_truncated_when_long():
+    # Long titles are shown in full — MarqueeLabel scrolls to reveal the
+    # rest instead of the title being clipped/truncated to a fixed length.
     long_title = "A" * 80
     state = AppState(playlist=["/tmp/x.mp3"], current_index=0)
     controls = MagicMock()
@@ -123,7 +125,7 @@ def test_title_truncated_when_long():
     with patch("ui_qt.mini_player_window.get_metadata", return_value={"title": long_title}):
         w = MiniPlayerWindowQt(state, controls, PALETTE)
         w._update_ui()
-    assert w.title_label.text() == "A" * 47 + "..."
+    assert w.title_label.text() == long_title
 
 
 def test_no_track_loaded_shows_placeholder(win, state):

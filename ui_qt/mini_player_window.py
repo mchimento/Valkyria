@@ -12,10 +12,11 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QP
 
 from audio.metadata import get_metadata
 from ui_qt.controls import _format_ms
+from ui_qt.marquee_label import MarqueeLabel
 
 logger = logging.getLogger(__name__)
 
-WINDOW_WIDTH = 460
+WINDOW_WIDTH = 380
 
 
 class MiniPlayerWindowQt(QWidget):
@@ -83,7 +84,7 @@ class MiniPlayerWindowQt(QWidget):
         info_col = QVBoxLayout()
         info_col.setSpacing(3)
         info_col.addStretch(1)
-        self.title_label = QLabel("No track loaded")
+        self.title_label = MarqueeLabel("No track loaded")
         self.title_label.setObjectName("MiniPlayerTitle")
         info_col.addWidget(self.title_label)
         self.time_label = QLabel("0:00 / 0:00")
@@ -171,8 +172,6 @@ class MiniPlayerWindowQt(QWidget):
             filepath = self.state.playlist[idx]
             meta = get_metadata(filepath)
             title = meta.get("title") or os.path.basename(filepath)
-            if len(title) > 50:
-                title = title[:47] + "..."
             self.title_label.setText(title)
         else:
             self.title_label.setText("No track loaded")

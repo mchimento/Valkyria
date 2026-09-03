@@ -152,7 +152,7 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {bg};
         border: 1px solid {border};
     }}
-    QLabel#MiniPlayerTitle {{
+    #MiniPlayerTitle {{
         color: {fg};
         font-weight: 600;
         font-size: 12pt;
