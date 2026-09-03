@@ -7,8 +7,8 @@ import re
 import threading
 from typing import List, Optional
 
-from PySide6.QtCore import QPoint, QRectF, Qt, QUrl, Signal
-from PySide6.QtGui import QColor, QDrag, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QRectF, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QCursor, QDrag, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from audio.audio_player import AudioPlayer, filter_selectable_audio_devices
+from ui_qt import drag_ghost
 
 logger = logging.getLogger(__name__)
 
@@ -60,23 +61,48 @@ class _BrowserTree(QTreeWidget):
             return
         event.ignore()
 
+    def dragEnterEvent(self, event) -> None:
+        drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        # Hovering back over the browser itself during its own drag (e.g.
+        # an internal reorder) — keeps the ghost tracking there too.
+        drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        super().dragMoveEvent(event)
+
     def startDrag(self, supportedActions) -> None:
-        # Replaces Qt's default (plain, theme-blind) drag pixmap with a
-        # small floating chip naming what's being dragged, so dropping a
-        # song onto the playlist reads as moving *that* track, not just an
-        # anonymous cursor change. Deliberately doesn't replicate Qt's
-        # default post-drag row removal on a completed MoveAction — files
-        # dragged out of the browser stay listed there; only the explicit
-        # Delete-key path (_remove_selected_from_browser) removes them.
+        # Shows a small floating chip naming what's being dragged, so
+        # dropping a song onto the playlist reads as moving *that* track,
+        # not just an anonymous cursor change. Deliberately doesn't
+        # replicate Qt's default post-drag row removal on a completed
+        # MoveAction — files dragged out of the browser stay listed there;
+        # only the explicit Delete-key path (_remove_selected_from_browser)
+        # removes them.
         items = self.selectedItems()
         if not items:
             return
         drag = QDrag(self)
         drag.setMimeData(self.mimeData(items))
         pixmap = self._drag_pixmap(items)
-        drag.setPixmap(pixmap)
-        drag.setHotSpot(QPoint(-12, pixmap.height() // 2))
-        drag.exec(supportedActions, Qt.MoveAction)
+        # No drag.setPixmap()/setHotSpot(): on this app's target window
+        # manager the native drag icon renders as a static image fixed at
+        # the drag's start position rather than tracking the cursor — worse
+        # than no native icon, since it doubles up with the ghost below
+        # (which does track, via dragMoveEvent/dragEnterEvent — see
+        # drag_ghost.py's docstring).
+        ghost = drag_ghost.DragGhost(pixmap, self.window())
+        ghost.show()
+        ghost.raise_()
+        ghost.follow(QCursor.pos())
+        drag_ghost.set_active(ghost)
+
+        try:
+            drag.exec(supportedActions, Qt.MoveAction)
+        finally:
+            drag_ghost.set_active(None)
+            ghost.close()
+            ghost.deleteLater()
 
     def _drag_pixmap(self, items) -> QPixmap:
         label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
@@ -92,15 +118,21 @@ class _BrowserTree(QTreeWidget):
         width = pad_x * 2 + icon_width + gap + text_width
         height = pad_y * 2 + metrics.height()
 
+        # Fully opaque, no transparent fill anywhere: DragGhost shows this
+        # in a plain (non-translucent) window, so any transparent pixel
+        # here would just show whatever raw color the backing store
+        # happens to have instead of blending — solid fill first, rounded
+        # border drawn on top, same fallback-safe order as the mini
+        # player's own background paint.
+        chip_color = QColor(20, 20, 20)
         pixmap = QPixmap(width, height)
-        pixmap.fill(Qt.transparent)
+        pixmap.fill(chip_color)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
         path = QPainterPath()
         path.addRoundedRect(QRectF(0.5, 0.5, width - 1, height - 1), 10, 10)
-        painter.fillPath(path, QColor(20, 20, 20, 235))
-        pen = QPen(QColor(255, 255, 255, 60))
+        pen = QPen(QColor(255, 255, 255, 90))
         pen.setWidthF(1.0)
         painter.setPen(pen)
         painter.drawPath(path)

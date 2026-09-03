@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from audio import playback
 from audio.metadata import get_display_title, get_metadata
+from ui_qt import drag_ghost
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,16 @@ class _PlaylistTree(QTreeWidget):
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QAbstractItemView.DragDrop)
         self.setDefaultDropAction(Qt.MoveAction)
+
+    def dragEnterEvent(self, event) -> None:
+        drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        # Keeps the browser's floating drag chip (drag_ghost.py) tracking
+        # the cursor while it's hovering the playlist.
+        drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        super().dragMoveEvent(event)
 
     def dropEvent(self, event) -> None:
         if event.source() is self:

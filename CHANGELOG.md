@@ -2,6 +2,15 @@
 
 All notable changes to Valkyria are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Dragging a song from the browser now shows a floating chip naming the
+  track (or a count for a multi-selection) that follows the cursor,
+  instead of Qt's default cursor — driven by a manually-positioned window
+  rather than QDrag's native drag-icon pixmap, since several Linux window
+  managers never render that native icon at all.
+
 ## [0.2.0] - 2026-09-02
 
 ### Added
@@ -10,12 +19,9 @@ All notable changes to Valkyria are documented in this file.
 ### Changed
 - UI overhaul: migrated the entire interface from tkinter/customtkinter to
   PySide6 (Qt), for better performance (batched waveform rendering, native
-  window move/resize) especially on Linux. All features from 0.1.0 carry
-  over unchanged; the tkinter UI has been removed.
+  window move/resize) especially on Linux. All features from 0.1.0 carry over unchanged; the tkinter UI has been removed.
 
-- Mini Player: redesigned with a larger accent-colored play/pause button,
-  ghost-style secondary/window buttons, and a thinner progress bar for a
-  more modern look; layout reordered to controls, then track info.
+- Mini Player: redesigned with a larger accent-colored play/pause button, and a thinner progress bar for a more modern look; layout reordered to controls, then track info.
 
 ## [0.1.0] - 2025-11-09
 
