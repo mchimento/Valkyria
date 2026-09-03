@@ -5,11 +5,10 @@ All notable changes to Valkyria are documented in this file.
 ## [Unreleased]
 
 ### Added
-- Dragging a song from the browser now shows a floating chip naming the
-  track (or a count for a multi-selection) that follows the cursor,
-  instead of Qt's default cursor — driven by a manually-positioned window
-  rather than QDrag's native drag-icon pixmap, since several Linux window
-  managers never render that native icon at all.
+- Dragging a song from the browser, or reordering within the playlist,
+  now shows a floating chip naming the track (or a count for a
+  multi-selection) that follows the cursor, instead of Qt's default
+  cursor.
 
 ## [0.2.0] - 2026-09-02
 

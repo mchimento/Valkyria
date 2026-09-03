@@ -9,7 +9,7 @@ import threading
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QCursor, QDrag
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -54,10 +54,34 @@ class _PlaylistTree(QTreeWidget):
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:
-        # Keeps the browser's floating drag chip (drag_ghost.py) tracking
-        # the cursor while it's hovering the playlist.
+        # Keeps the drag chip (drag_ghost.py) tracking the cursor while
+        # it's hovering the playlist, regardless of whether the drag
+        # started here (reordering) or in the browser.
         drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
         super().dragMoveEvent(event)
+
+    def startDrag(self, supportedActions) -> None:
+        # Same floating "what's being dragged" chip as the browser (see
+        # drag_ghost.py) for reordering within the playlist itself.
+        items = self.selectedItems()
+        if not items:
+            return
+        drag = QDrag(self)
+        drag.setMimeData(self.mimeData(items))
+        label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
+        pixmap = drag_ghost.build_chip_pixmap(self.font(), label)
+        ghost = drag_ghost.DragGhost(pixmap, self.window())
+        ghost.show()
+        ghost.raise_()
+        ghost.follow(QCursor.pos())
+        drag_ghost.set_active(ghost)
+
+        try:
+            drag.exec(supportedActions, Qt.MoveAction)
+        finally:
+            drag_ghost.set_active(None)
+            ghost.close()
+            ghost.deleteLater()
 
     def dropEvent(self, event) -> None:
         if event.source() is self:

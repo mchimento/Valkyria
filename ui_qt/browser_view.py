@@ -7,8 +7,8 @@ import re
 import threading
 from typing import List, Optional
 
-from PySide6.QtCore import QRectF, Qt, QUrl, Signal
-from PySide6.QtGui import QColor, QCursor, QDrag, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QCursor, QDrag
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -84,7 +84,8 @@ class _BrowserTree(QTreeWidget):
             return
         drag = QDrag(self)
         drag.setMimeData(self.mimeData(items))
-        pixmap = self._drag_pixmap(items)
+        label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
+        pixmap = drag_ghost.build_chip_pixmap(self.font(), label)
         # No drag.setPixmap()/setHotSpot(): on this app's target window
         # manager the native drag icon renders as a static image fixed at
         # the drag's start position rather than tracking the cursor — worse
@@ -103,47 +104,6 @@ class _BrowserTree(QTreeWidget):
             drag_ghost.set_active(None)
             ghost.close()
             ghost.deleteLater()
-
-    def _drag_pixmap(self, items) -> QPixmap:
-        label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
-        icon = "♫"
-
-        font = self.font()
-        metrics = QFontMetrics(font)
-        text = metrics.elidedText(label, Qt.ElideMiddle, 220)
-        icon_width = metrics.horizontalAdvance(icon)
-        text_width = metrics.horizontalAdvance(text)
-
-        pad_x, pad_y, gap = 12, 8, 6
-        width = pad_x * 2 + icon_width + gap + text_width
-        height = pad_y * 2 + metrics.height()
-
-        # Fully opaque, no transparent fill anywhere: DragGhost shows this
-        # in a plain (non-translucent) window, so any transparent pixel
-        # here would just show whatever raw color the backing store
-        # happens to have instead of blending — solid fill first, rounded
-        # border drawn on top, same fallback-safe order as the mini
-        # player's own background paint.
-        chip_color = QColor(20, 20, 20)
-        pixmap = QPixmap(width, height)
-        pixmap.fill(chip_color)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0.5, 0.5, width - 1, height - 1), 10, 10)
-        pen = QPen(QColor(255, 255, 255, 90))
-        pen.setWidthF(1.0)
-        painter.setPen(pen)
-        painter.drawPath(path)
-
-        painter.setFont(font)
-        painter.setPen(QColor(255, 255, 255))
-        y = pad_y + metrics.ascent()
-        painter.drawText(pad_x, y, icon)
-        painter.drawText(pad_x + icon_width + gap, y, text)
-        painter.end()
-        return pixmap
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Delete:
