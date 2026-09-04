@@ -329,10 +329,10 @@ def test_repeat_toggle_cycles_none_one_all_none(window):
 
 def test_repeat_toggle_updates_button_icon(window):
     window.controls.btn_repeat.click()
-    assert window.controls.btn_repeat.text() == "🔂"
+    assert window.controls.btn_repeat.text() == "↻¹"
 
     window.controls.btn_repeat.click()
-    assert window.controls.btn_repeat.text() == "🔁"
+    assert window.controls.btn_repeat.text() == "↻"
     assert "background-color" in window.controls.btn_repeat.styleSheet()
 
 

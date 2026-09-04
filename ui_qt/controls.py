@@ -85,8 +85,8 @@ class ControlsBarQt(QWidget):
 
         row.addStretch(1)
 
-        self.btn_repeat = QPushButton("🔁")
-        self.btn_effects = QPushButton("🎚")
+        self.btn_repeat = QPushButton("↻")
+        self.btn_effects = QPushButton("🎚🎚🎚")
         for btn in (self.btn_repeat, self.btn_effects):
             btn.setObjectName("TransportButton")
             btn.setFixedSize(48, 40)
@@ -175,13 +175,13 @@ class ControlsBarQt(QWidget):
     def set_repeat_icon(self, mode: str) -> None:
         pressed = self.palette.get("button_pressed", "#6023CB")
         if mode == "one":
-            self.btn_repeat.setText("🔂")
+            self.btn_repeat.setText("↻¹")
             self.btn_repeat.setStyleSheet(f"background-color: {pressed};")
         elif mode == "all":
-            self.btn_repeat.setText("🔁")
+            self.btn_repeat.setText("↻")
             self.btn_repeat.setStyleSheet(f"background-color: {pressed};")
         else:
-            self.btn_repeat.setText("🔁")
+            self.btn_repeat.setText("↻")
             self.btn_repeat.setStyleSheet("")
         self.btn_repeat.setToolTip(f"Repeat Mode: {mode.title()}")
 
