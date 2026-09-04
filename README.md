@@ -37,6 +37,9 @@ For the full list of the available features please refer to the user guide docum
 pip install -r requirements.txt
 ```
 
+Prebuilt installers (Windows) and a portable AppImage (Linux) can also be
+built from this repo — see [packaging/README.md](packaging/README.md).
+
 ## Usage
 
 1.  Run the Python script:

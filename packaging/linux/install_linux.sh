@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DESKTOP_FILE="$SCRIPT_DIR/valkyria.desktop"
 BINARY="$REPO_ROOT/dist/Valkyria"
 APPLICATIONS_DIR="$HOME/.local/share/applications"
