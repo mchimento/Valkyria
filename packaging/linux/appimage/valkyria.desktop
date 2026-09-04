@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Valkyria
+Comment=Desktop audio player
+Exec=Valkyria
+Icon=valkyria
+Terminal=false
+Categories=AudioVideo;Audio;Player;Qt;
+StartupWMClass=Valkyria

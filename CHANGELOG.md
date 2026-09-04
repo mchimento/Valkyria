@@ -2,7 +2,7 @@
 
 All notable changes to Valkyria are documented in this file.
 
-## [Unreleased]
+## [0.2.1] - 2026-09-04
 
 ### Added
 - Packaging for distributable installers: a Windows installer (Inno Setup) and a portable Linux AppImage, alongside the existing raw-binary
