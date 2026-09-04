@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from audio import playback
 from audio.metadata import get_display_title, get_metadata
-from ui_qt import drag_ghost
+from ui_qt import drag_ghost, drop_indicator
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,19 @@ class _PlaylistTree(QTreeWidget):
     def __init__(self, owner: "PlaylistViewQt"):
         super().__init__(owner)
         self._owner = owner
+        self._drop_line_y: Optional[int] = None
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
+        # Native indicator replaced by a hand-painted one (see paintEvent
+        # and drop_indicator.py) — QSS can't control its thickness.
+        self.setDropIndicatorShown(False)
         self.setDragDropMode(QAbstractItemView.DragDrop)
         self.setDefaultDropAction(Qt.MoveAction)
 
     def dragEnterEvent(self, event) -> None:
         drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        self._drop_line_y = drop_indicator.compute_drop_line_y(self, event.position().toPoint())
+        self.viewport().update()
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:
@@ -58,7 +63,20 @@ class _PlaylistTree(QTreeWidget):
         # it's hovering the playlist, regardless of whether the drag
         # started here (reordering) or in the browser.
         drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        self._drop_line_y = drop_indicator.compute_drop_line_y(self, event.position().toPoint())
+        self.viewport().update()
         super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:
+        self._drop_line_y = None
+        self.viewport().update()
+        super().dragLeaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._drop_line_y is not None:
+            accent = self._owner.palette.get("accent", "#BB86FC")
+            drop_indicator.paint_drop_line(self, self._drop_line_y, accent)
 
     def startDrag(self, supportedActions) -> None:
         # Same floating "what's being dragged" chip as the browser (see
@@ -84,6 +102,7 @@ class _PlaylistTree(QTreeWidget):
             ghost.deleteLater()
 
     def dropEvent(self, event) -> None:
+        self._drop_line_y = None
         if event.source() is self:
             # Captured before the native move, since Qt's own reordering
             # doesn't know about our UserRole+2 "actual index" bookkeeping

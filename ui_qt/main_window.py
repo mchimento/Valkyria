@@ -125,7 +125,10 @@ class MainWindowQt(QWidget):
         # setHandleWidth() is what actually reserves this layout space.
         splitter.setHandleWidth(16)
         self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, player=self.player, parent=splitter)
-        self.browser_view = BrowserViewQt(self.state, self.settings, playlist_view=self.playlist_view, player=self.player, parent=splitter)
+        self.browser_view = BrowserViewQt(
+            self.state, self.settings, playlist_view=self.playlist_view, player=self.player, parent=splitter,
+            palette=self.theme.palette,
+        )
         splitter.addWidget(self.playlist_view)
         splitter.addWidget(self.browser_view)
         # The playlist absorbs all extra width on resize; the browser only

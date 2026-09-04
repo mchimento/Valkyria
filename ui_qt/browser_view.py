@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from audio.audio_player import AudioPlayer, filter_selectable_audio_devices
-from ui_qt import drag_ghost
+from ui_qt import drag_ghost, drop_indicator
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,13 @@ class _BrowserTree(QTreeWidget):
     def __init__(self, owner: "BrowserViewQt", parent=None):
         super().__init__(parent)
         self._owner = owner
+        self._drop_line_y: Optional[int] = None
+        self.setObjectName("BrowserTree")
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
+        # Native indicator replaced by a hand-painted one (see paintEvent
+        # and drop_indicator.py) — QSS can't control its thickness.
+        self.setDropIndicatorShown(False)
         self.setDragDropMode(QAbstractItemView.DragDrop)
         self.setDefaultDropAction(Qt.MoveAction)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -55,6 +59,7 @@ class _BrowserTree(QTreeWidget):
         return mime
 
     def dropEvent(self, event) -> None:
+        self._drop_line_y = None
         if event.source() is self:
             # Captured before the native move: Qt's own internal reorder
             # (remove + reinsert the same item object) clears its selected
@@ -67,13 +72,28 @@ class _BrowserTree(QTreeWidget):
 
     def dragEnterEvent(self, event) -> None:
         drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        self._drop_line_y = drop_indicator.compute_drop_line_y(self, event.position().toPoint())
+        self.viewport().update()
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:
         # Hovering back over the browser itself during its own drag (e.g.
         # an internal reorder) — keeps the ghost tracking there too.
         drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
+        self._drop_line_y = drop_indicator.compute_drop_line_y(self, event.position().toPoint())
+        self.viewport().update()
         super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:
+        self._drop_line_y = None
+        self.viewport().update()
+        super().dragLeaveEvent(event)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._drop_line_y is not None:
+            accent = self._owner.palette.get("accent", "#BB86FC")
+            drop_indicator.paint_drop_line(self, self._drop_line_y, accent)
 
     def startDrag(self, supportedActions) -> None:
         # Shows a small floating chip naming what's being dragged, so
@@ -119,11 +139,12 @@ class _BrowserTree(QTreeWidget):
 class BrowserViewQt(QWidget):
     _preview_ended = Signal()
 
-    def __init__(self, state, settings, playlist_view=None, player=None, parent=None):
+    def __init__(self, state, settings, playlist_view=None, player=None, parent=None, palette: Optional[dict] = None):
         super().__init__(parent)
         self.state = state
         self.settings = settings
         self.playlist_view = playlist_view
+        self.palette = palette or {}
         self._main_player = player
         self._preview_devices: List[tuple] = []
         self._current_preview_path = None

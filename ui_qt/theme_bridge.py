@@ -305,14 +305,6 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {button_pressed};
     }}
 
-    /* Same visual style as #DialogButton, but a separate objectName so its
-       wider min-width doesn't also widen Preferences' Save/Cancel buttons
-       (which share #DialogButton) — QSS box-model properties like
-       min-width override a widget's own setMinimumWidth() call entirely
-       once the stylesheet is applied, so the width has to be set here,
-       not in Python (confirmed empirically — "Add Below"'s label stayed
-       clipped despite btn.setMinimumWidth(140) in browser_view.py, because
-       the shared #DialogButton rule's min-width: 60px silently won). */
     QPushButton#BrowserActionButton {{
         background-color: {button_bg};
         color: {button_fg};
@@ -445,9 +437,7 @@ def build_stylesheet(palette: dict) -> str:
         outline: 0;
         font-size: 10pt;
     }}
-    /* Deliberately differs from the generic QTreeWidget style the browser
-       uses: no border and background={bg} not tree_bg, so it blends into
-       the surrounding panel rather than reading as its own framed box. */
+    
     QTreeWidget#PlaylistTree {{
         background-color: {bg};
         border: none;
@@ -456,14 +446,7 @@ def build_stylesheet(palette: dict) -> str:
     QTreeWidget::item {{
         padding: 7px 6px;
     }}
-    /* No `border` property here (even `border: none`): Qt's item delegate
-       treats specifying any box-model property on ::item as an opt-in to
-       fully custom box painting, which silently stops honoring per-item
-       Qt::BackgroundRole overrides (used for the now-playing row) — the
-       same class of surprise as WA_StyledBackground earlier in this file's
-       history, just for QAbstractItemView's item delegate instead of
-       QWidget. Confirmed empirically: with `border: none;` present, a
-       QTreeWidgetItem.setBackground() call renders as if never called. */
+    
     QTreeWidget::item:hover {{
         background-color: {hover_bg};
     }}
@@ -484,10 +467,6 @@ def build_stylesheet(palette: dict) -> str:
         font-size: 10pt;
     }}
 
-    /* Handle size is set via QSplitter.setHandleWidth() in
-       ui_qt/main_window.py, not here — QSS `width` on QSplitter::handle
-       is silently ignored by Qt (confirmed empirically); this rule only
-       controls its color. */
     QSplitter::handle {{
         background-color: transparent;
     }}
@@ -495,8 +474,7 @@ def build_stylesheet(palette: dict) -> str:
         background-color: {menubar_hover};
     }}
 
-    /* dropdown_shortcut is applied per-widget (QAction shortcut text color
-       isn't stylable via QSS); kept here as a documented palette key. */
+    
     """
 
 
