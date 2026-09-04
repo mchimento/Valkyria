@@ -94,7 +94,6 @@ class _BrowserTree(QTreeWidget):
         drag.setMimeData(self.mimeData(items))
         label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
         pixmap = drag_ghost.build_chip_pixmap(self.font(), label)
-        
         ghost = drag_ghost.DragGhost(pixmap, self.window())
         ghost.show()
         ghost.raise_()

@@ -1,6 +1,6 @@
 """
 ControlsBar: Play/Pause/Prev/Stop/Next, volume/mute, time labels, waveform
-seekbar, and the repeat/effects buttons. 
+seekbar, and the repeat/effects buttons.
 """
 
 import logging

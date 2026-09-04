@@ -433,7 +433,6 @@ def build_stylesheet(palette: dict) -> str:
         outline: 0;
         font-size: 10pt;
     }}
-    
     QTreeWidget#PlaylistTree {{
         background-color: {bg};
         border: none;
@@ -442,7 +441,6 @@ def build_stylesheet(palette: dict) -> str:
     QTreeWidget::item {{
         padding: 7px 6px;
     }}
-    
     QTreeWidget::item:hover {{
         background-color: {hover_bg};
     }}
@@ -469,8 +467,6 @@ def build_stylesheet(palette: dict) -> str:
     QSplitter::handle:hover {{
         background-color: {menubar_hover};
     }}
-
-    
     """
 
 
