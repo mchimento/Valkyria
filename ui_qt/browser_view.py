@@ -156,7 +156,7 @@ class BrowserViewQt(QWidget):
         preview_row = QHBoxLayout()
         preview_row.setSpacing(6)
         self.btn_preview_play = QPushButton("▶")
-        self.btn_preview_stop = QPushButton("⏹")
+        self.btn_preview_stop = QPushButton("■")
         for btn in (self.btn_preview_play, self.btn_preview_stop):
             btn.setObjectName("TransportButton")
             btn.setFixedSize(44, 36)  # matches ControlsBarQt's transport buttons
