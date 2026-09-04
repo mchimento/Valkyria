@@ -30,22 +30,17 @@ def suppress_c_stderr():
     Useful for silencing libmpg123 warnings.
     """
     try:
-        # Open a null file
         with open(os.devnull, 'w') as fnull:
-            # Save the original stderr file descriptor
             original_stderr_fd = sys.stderr.fileno()
             saved_stderr_fd = os.dup(original_stderr_fd)
 
             try:
-                # Redirect stderr to null
                 os.dup2(fnull.fileno(), original_stderr_fd)
                 yield
             finally:
-                # Restore stderr
                 os.dup2(saved_stderr_fd, original_stderr_fd)
                 os.close(saved_stderr_fd)
     except Exception:
-        # If anything goes wrong (e.g. no fileno), just execute code
         yield
 
 
@@ -66,14 +61,12 @@ class AudioBuffer:
     Decouples file I/O from the audio callback to prevent underruns.
     """
     def __init__(self, file_path, capacity_frames=176400): # ~4 seconds at 44.1k
-        # Suppress libmpg123 warnings during file opening
         with suppress_c_stderr():
             self.file = sf.SoundFile(file_path)
         self.samplerate = self.file.samplerate
         self.channels = self.file.channels
         self.capacity = capacity_frames
 
-        # Ring buffer
         self.buffer = np.zeros((self.capacity, self.channels), dtype='float32')
         self.write_pos = 0
         self.read_pos = 0
@@ -84,26 +77,21 @@ class AudioBuffer:
         self.running = True
         self.eof = False
 
-        # Start producer thread
         self.thread = threading.Thread(target=self._producer_loop, daemon=True)
         self.thread.start()
 
     def _producer_loop(self):
         while self.running:
-            # Determine how much space is available
             with self.lock:
                 space = self.capacity - self.count
 
-            # If buffer is nearly full, sleep a bit
             if space < 4096:
                 time.sleep(0.01)
                 continue
 
-            # Read a chunk (without holding lock)
             read_size = min(space, 8192)
 
             try:
-                # Suppress libmpg123 warnings during read
                 with suppress_c_stderr():
                     data = self.file.read(read_size, dtype='float32')
             except Exception as e:
@@ -116,13 +104,11 @@ class AudioBuffer:
                 time.sleep(0.05)
                 continue
 
-            # Ensure 2D
             if data.ndim == 1:
                 data = data[:, np.newaxis]
 
             n = len(data)
 
-            # Write to buffer (holding lock)
             with self.lock:
                 if not self.running:
                     break
@@ -161,7 +147,6 @@ class AudioBuffer:
             self.count -= n
             self.absolute_read_pos += n
 
-            # If we requested more than available, pad with zeros (underrun)
             if n < frames:
                 padding = np.zeros((frames - n, self.channels), dtype='float32')
                 data = np.concatenate((data, padding))
@@ -219,27 +204,22 @@ class AudioPlayer:
         self._device_id = None
         self._playback_rate = AUDIO_CONFIG['playback']['default_rate']
         self._rate_remainder = 0.0
-        # Stateful resampler buffer (keeps continuity between callbacks)
         self._resample_buffer = None
         self._resample_pos = 0.0
 
-        # Audio metrics calculation (LUFS, Peak dBFS, Energy)
         self._audio_metrics_callback = None
         self._audio_metrics_accumulator = []
         self._overall_lufs = -60.0  # Pre-computed overall track LUFS
         self._metrics_last_update = 0
         self._metrics_update_interval = 0.05  # Update every 50ms
 
-        # Initialize Audio Effects Processor
         self.effects = AudioEffects(AUDIO_CONFIG, AUDIO_DEFAULTS)
 
-        # Fade settings
         self.fade_in_enabled = False
         self.fade_in_duration = 3
         self.fade_out_enabled = False
         self.fade_out_duration = 3
 
-        # Silence detection
         self.silence_detection_enabled = False
         self._silence_threshold = -50.0  # dB
         self._silence_duration = 1.5  # seconds
@@ -258,7 +238,6 @@ class AudioPlayer:
     def __del__(self):
         """Ensure cleanup when AudioPlayer is destroyed."""
         try:
-            # Stop any active playback
             if hasattr(self, '_stream') and self._stream:
                 try:
                     self._stream.stop()
@@ -267,7 +246,6 @@ class AudioPlayer:
                     pass
                 self._stream = None
 
-            # Close buffer
             if hasattr(self, '_buffer') and self._buffer:
                 try:
                     self._buffer.close()
@@ -275,7 +253,6 @@ class AudioPlayer:
                     pass
                 self._buffer = None
 
-            # Reset audio metrics for UI as part of cleanup (ensure UI is reset)
             try:
                 if self._audio_metrics_callback:
                     threading.Thread(
@@ -285,7 +262,6 @@ class AudioPlayer:
             except Exception:
                 pass
 
-            # Stop all sounddevice operations
             import sounddevice as sd
             try:
                 sd.stop()
@@ -293,7 +269,6 @@ class AudioPlayer:
                 pass
 
         except Exception:
-            # Ensure cleanup doesn't raise exceptions
             logger.error("Error cleaning up audio player")
             pass
 
@@ -302,10 +277,8 @@ class AudioPlayer:
         if status:
             logger.warning(f"Audio callback status: {status}")
 
-        # Clear output buffer first to prevent residual audio
         outdata.fill(0)
 
-        # If stop was requested, abort immediately — don't process any more old audio
         if self._stopped_manually:
             raise sd.CallbackAbort
 
@@ -313,7 +286,6 @@ class AudioPlayer:
         frames_to_read = frames
 
         with self._lock:
-            # Check for silence-triggered stop first
             if self._silence_detected:
                 outdata[:] = 0
                 raise sd.CallbackStop
@@ -322,17 +294,14 @@ class AudioPlayer:
                 outdata[:] = 0
                 raise sd.CallbackAbort
 
-            # Calculate frames to read based on rate
             if abs(self._playback_rate - 1.0) < 0.01:
                 frames_to_read = frames
                 self._rate_remainder = 0.0
             else:
-                # Accumulate fractional frames to keep sync over time
                 target_read = frames * self._playback_rate + self._rate_remainder
                 frames_to_read = int(target_read)
                 self._rate_remainder = target_read - frames_to_read
 
-            # Read data from buffer
             data = self._buffer.read(frames_to_read)
 
             if data is None:
@@ -340,10 +309,8 @@ class AudioPlayer:
                 outdata[:] = 0
                 raise sd.CallbackStop
 
-        # Resample if needed (stateful resampler for smoother speed changes)
         rate = self._playback_rate
         if abs(rate - 1.0) < 0.01:
-            # Direct copy with padding/truncation to match frames
             n = data.shape[0]
             if n >= frames:
                 outdata[:] = data[:frames]
@@ -353,21 +320,16 @@ class AudioPlayer:
                 if frames > n:
                     outdata[n:frames] = 0
         else:
-            # Initialize resample state if missing
             if not hasattr(self, '_resample_buffer') or self._resample_buffer is None:
-                # Create empty buffer with proper channels
                 self._resample_buffer = np.zeros((0, data.shape[1]), dtype='float32')
                 self._resample_pos = 0.0
 
-            # Append new samples to the resample buffer
             if data.shape[0] > 0:
                 self._resample_buffer = np.concatenate((self._resample_buffer, data), axis=0)
 
-            # Use a high-quality sinc (windowed) resampler
             out, consumed = self._sinc_resample(frames, rate)
             outdata[:] = out
 
-            # Drop consumed frames from buffer and update position
             if consumed > 0:
                 buf_len = self._resample_buffer.shape[0]
                 channels = self._resample_buffer.shape[1] if buf_len > 0 else data.shape[1]
@@ -378,7 +340,6 @@ class AudioPlayer:
 
                 self._resample_pos = (self._resample_pos + frames * rate) - consumed
 
-            # Trim buffer if it grows too large
             max_buf = 44100 * 5  # 5 seconds guard
             if self._resample_buffer.shape[0] > max_buf:
                 drop = self._resample_buffer.shape[0] - max_buf
@@ -389,7 +350,6 @@ class AudioPlayer:
         outdata[:] = self.effects.process(outdata)
 
         # Apply fade in/out logic
-        # Copy values locally to minimize locking
         current_frames_played = 0
         current_total_frames = 0
         fade_in_len = 0
@@ -409,7 +369,6 @@ class AudioPlayer:
             is_manual_stopping = self._is_stopping
             manual_stop_start = self._stopping_start_frame
 
-            # Update position for next callback
             self._frames_played += frames
 
         # Apply Fade In
@@ -420,11 +379,8 @@ class AudioPlayer:
             length = end_idx - start_idx
 
             if length > 0:
-                # Generate linear ramp 0..1
-                # The segment corresponds to [start_idx, end_idx)
                 ramp = np.linspace(start_idx / fade_in_len, end_idx / fade_in_len, length, dtype='float32')
 
-                # Apply to first 'length' frames
                 if outdata.ndim == 2:
                     outdata[:length] *= ramp[:, np.newaxis]
                 else:
@@ -432,26 +388,18 @@ class AudioPlayer:
 
         # Apply Fade Out
         if do_fade_out and fade_out_len > 0:
-            # 1. Natural end of track fade out
             frames_remaining = current_total_frames - current_frames_played
 
             if frames_remaining < fade_out_len + frames and current_total_frames > 0:
-                # Calculate start frame relative to fade out start
-                # Fade starts at (total - fade_out_len)
                 fade_start_pos = max(0, current_total_frames - fade_out_len)
 
-                # Current chunk start/end absolute positions
                 chunk_start = current_frames_played
                 chunk_end = current_frames_played + frames
-
-                # Intersect chunk with fade region [fade_start_pos, total_frames]
-                # We only fade the part that is >= fade_start_pos
 
                 f_start = max(chunk_start, fade_start_pos)
                 f_end = min(chunk_end, current_total_frames + fade_out_len) # Allow fading slightly past end if needed or clamp
 
                 if f_end > f_start:
-                    # Relative indices in outdata
                     out_start = f_start - chunk_start
                     out_end = f_end - chunk_start
 
@@ -468,12 +416,7 @@ class AudioPlayer:
                     else:
                         outdata[out_start:out_end] *= ramp
 
-            # 2. Manual stop fade out
             if is_manual_stopping:
-                # Fade out from manual_stop_start over fade_out_len
-                # frames_played has progressed since manual_stop_start
-                # The manual stop creates a virtual "zero point" at manual_stop_start + fade_out_len
-
                 chunk_start = current_frames_played
                 chunk_end = current_frames_played + frames
                 rel_start = chunk_start - manual_stop_start
@@ -482,12 +425,9 @@ class AudioPlayer:
                 vol_s = 1.0 - rel_start / fade_out_len
                 vol_e = 1.0 - rel_end / fade_out_len
 
-                # Clamp
                 vol_s = max(0.0, min(1.0, vol_s))
                 vol_e = max(0.0, min(1.0, vol_e))
 
-                # Only apply if we have something to fade
-                # If vol_s and vol_e are both 0, we can just zero out
                 if vol_s <= 0 and vol_e <= 0:
                     outdata[:] = 0
                 else:
@@ -497,10 +437,7 @@ class AudioPlayer:
                     else:
                         outdata[:] *= ramp
 
-        # LUFS/peak/limiter/energy metrics reflect the track's own content,
-        # like a real DJ mixer's meters — snapshot before mute/volume (the
-        # monitor level) are applied, not after. Only copy when something's
-        # actually listening — this runs on every real-time audio callback.
+        # LUFS/peak/limiter/energy metrics reflect the track's own content
         metrics_source = outdata.copy() if self._audio_metrics_callback is not None else None
 
         if self._muted:
@@ -510,8 +447,6 @@ class AudioPlayer:
             vol = self._volume / 100.0
             outdata[:] *= vol
 
-        # Silence Detection — measured on raw `data`, not volume-scaled
-        # `outdata`, so it isn't affected by the volume/mute/fade settings.
         with self._lock:
             if self.silence_detection_enabled and not self._silence_detected and self._buffer and len(data) > 0:
                 rms = np.sqrt(np.mean(data ** 2))
@@ -522,27 +457,16 @@ class AudioPlayer:
                     sr = self._buffer.samplerate
                     silence_duration = self._silence_frames_count / sr
 
-                    # Requires 30s of playback already elapsed (not proximity
-                    # to the file's reported end) before allowing a trigger —
-                    # avoids mistaking a quiet intro for dead air without
-                    # capping how much trailing silence it can skip. Gating
-                    # on remaining-time-to-end instead let files with long
-                    # silent tails play out nearly the whole tail before ever
-                    # reaching that window, defeating the feature for exactly
-                    # the files it's meant to help with (confirmed via real
-                    # playback logs).
                     if silence_duration >= self._silence_duration and self._frames_played >= sr * 30:
                         self._silence_detected = True
                 else:
                     self._silence_frames_count = 0
 
-        # Calculate audio metrics if callback is registered
         if metrics_source is not None:
             self._update_audio_metrics(metrics_source)
 
     def _on_stream_finished(self):
         """Called when stream finishes (stops or ends)."""
-        # Only trigger track end if it wasn't stopped manually or paused
         if not self._stopped_manually and not self._paused:
             if callable(self.on_track_end):
                 try:
@@ -552,15 +476,9 @@ class AudioPlayer:
 
     def _sinc_resample(self, frames, rate, kernel_size=64):
         """High-quality stateful sinc resampler.
-
-        Uses a windowed sinc kernel (Hann window) and linear convolution across a
-        kernel of size `kernel_size` to interpolate arbitrary fractional positions.
-        This keeps state in `self._resample_buffer` and `self._resample_pos`.
-        Returns (out, consumed_frames) where `out` is (frames, channels).
         """
         buf = self._resample_buffer
         if buf is None or buf.shape[0] == 0:
-            # Nothing available; return silence
             channels = self._buffer.channels if self._buffer else 2
             return np.zeros((frames, channels), dtype='float32'), 0
 
@@ -572,36 +490,27 @@ class AudioPlayer:
             kernel_size += 1
         half = kernel_size // 2
 
-        # Positions in source frames for each output frame
         positions = self._resample_pos + np.arange(frames) * rate
         centers = np.floor(positions).astype(np.int64)
 
-        # Prepare index grid and offsets
         n_range = np.arange(-half + 1, half + 1)  # length kernel_size
         indices = centers[:, None] + n_range[None, :]
 
-        # Clip indices to buffer range for safe gathering and mark validity
         valid_mask = (indices >= 0) & (indices < buf_len)
         clipped = np.clip(indices, 0, buf_len - 1)
 
-        # Gather samples: shape (frames, kernel_size, channels)
         samples = buf[clipped]
 
-        # Offsets for sinc: how far each tap is from the source position
         offsets = positions[:, None] - indices  # shape (frames, kernel_size)
 
-        # Hann window applied to the sinc kernel
         win = 0.5 * (1.0 + np.cos(np.pi * offsets / half))
         win[np.abs(offsets) > half] = 0.0
 
-        # Sinc function: np.sinc uses sin(pi x)/(pi x)
         kernel = np.sinc(offsets) * win
         kernel *= valid_mask.astype('float32')
 
-        # Perform convolution for each channel using einsum for clarity
         out = np.einsum('ij,ijk->ik', kernel, samples)
 
-        # Compute how many source frames we can drop: max floor index used + 1
         row_valid = valid_mask.any(axis=1)
         if np.any(row_valid):
             consumed = int(np.max(centers[row_valid])) + 1
@@ -627,10 +536,8 @@ class AudioPlayer:
                 self._overall_lufs = val
             logger.info(f"Overall LUFS for track (async): {self._overall_lufs:.1f}")
 
-            # If a UI callback is registered, send an update with conservative realtime metrics
             try:
                 if self._audio_metrics_callback:
-                    # Provide placeholder current metrics (they will be updated by the regular audio metrics path)
                     self._audio_metrics_callback(-60.0, self._overall_lufs, -60.0, 0.0, 0.0)
             except Exception:
                 pass
@@ -654,14 +561,11 @@ class AudioPlayer:
                 peak_dbfs = -60.0
             peak_dbfs = max(-60.0, min(0.0, peak_dbfs))
 
-            # Accumulate samples for averaging (current LUFS)
             self._audio_metrics_accumulator.append(rms)
-            # Store peak values for periodic update
             if not hasattr(self, '_peak_accumulator'):
                 self._peak_accumulator = []
             self._peak_accumulator.append(peak_dbfs)
 
-            # Calculate metrics periodically
             current_time = time.time()
             if current_time - self._metrics_last_update >= self._metrics_update_interval:
                 if self._audio_metrics_accumulator:
@@ -683,24 +587,15 @@ class AudioPlayer:
                     else:
                         max_peak_dbfs = -60.0
 
-                    # Calculate limiter activity based on how close the peak is to clipping
-                    # -12 dBFS = 0.0 activity (safe)
-                    # 0 dBFS = 1.0 activity (clipping risk)
-                    # This represents how "hot" the signal is
                     limiter_activity = 0.0
                     if max_peak_dbfs > -12.0:
                         # Normalize from -12..0 to 0..1
                         limiter_activity = (max_peak_dbfs + 12.0) / 12.0
                         limiter_activity = max(0.0, min(1.0, limiter_activity))
 
-                    # Calculate energy level (normalized 0.0 to 1.0)
-                    # Map RMS to energy: 0.0 = silence, 1.0 = maximum
-                    # Use exponential scaling for better visual representation
                     energy = min(1.0, avg_rms * 3.0)  # Scale factor to make typical music reach good levels
                     energy = max(0.0, energy)
 
-                    # Call the callback asynchronously to avoid blocking audio thread
-                    # Use threading to prevent UI blocking from affecting audio
                     if self._audio_metrics_callback:
                         callback = self._audio_metrics_callback
                         threading.Thread(
@@ -708,7 +603,6 @@ class AudioPlayer:
                             daemon=True
                         ).start()
 
-                    # Reset accumulators
                     self._audio_metrics_accumulator = []
                     self._peak_accumulator = []
                     self._metrics_last_update = current_time
@@ -718,13 +612,11 @@ class AudioPlayer:
     def _calculate_overall_lufs(self, path):
         """Pre-calculate overall LUFS for entire track."""
         try:
-            # Open file separately for analysis
             with suppress_c_stderr():
                 with sf.SoundFile(path) as audio_file:
                     samplerate = audio_file.samplerate
                     channels = audio_file.channels
 
-                    # Read and analyze in chunks to avoid memory issues
                     chunk_size = 44100  # 1 second at 44.1kHz
                     rms_values = []
 
@@ -733,15 +625,12 @@ class AudioPlayer:
                         if len(data) == 0:
                             break
 
-                        # Ensure 2D
                         if data.ndim == 1:
                             data = data[:, np.newaxis]
 
-                        # Calculate RMS for this chunk
                         rms = np.sqrt(np.mean(data ** 2))
                         rms_values.append(rms)
 
-                    # Calculate overall LUFS from all chunks
                     if rms_values:
                         overall_rms = np.mean(rms_values)
                         if overall_rms > 0:
@@ -763,47 +652,36 @@ class AudioPlayer:
             path: Path to the audio file to play.
         """
         self.stop()
-
-        # Delay to ensure stop() completes and hardware buffers are fully cleared
-        # This prevents ghost sounds from previous track
         time.sleep(0.06)
 
         with self._lock:
             try:
-                # Reset audio metrics tracking for new track
                 self._audio_metrics_accumulator = []
                 self._metrics_last_update = 0
                 self._rate_remainder = 0.0
 
-                # Start playback immediately; calculate overall LUFS in background to avoid blocking
                 self._buffer = AudioBuffer(path)
                 self._paused = False
                 self._stopped_manually = False
                 self._is_stopping = False
                 self._stopping_start_frame = 0
 
-                # Setup fade frames based on samplerate
                 sr = self._buffer.samplerate
                 self._fade_in_frames = int(self.fade_in_duration * sr)
                 self._fade_out_frames = int(self.fade_out_duration * sr)
                 self._frames_played = 0
 
-                # Reset silence detection for new track
                 self._silence_frames_count = 0
                 self._silence_detected = False
 
-                # Try to get total frames for natural fade out
                 try:
                     self._total_frames = self._buffer.file.frames
                 except:
                     self._total_frames = 0
 
-                # Compute overall LUFS asynchronously and notify listeners/UI when ready
-                # Only compute if an audio metrics callback is registered (i.e., UI is listening)
                 if self._audio_metrics_callback:
                     threading.Thread(target=self._compute_and_notify_overall_lufs, args=(path,), daemon=True).start()
 
-                # Determine device index if set
                 device = None
                 if self._device_id is not None:
                     try:
@@ -811,13 +689,9 @@ class AudioPlayer:
                     except (ValueError, TypeError):
                         device = None
 
-                # Prepare effects for this file BEFORE creating stream
                 self.effects.prepare(self._buffer.samplerate, self._buffer.channels)
-
-                # Reset effects state to prevent ghost sounds from previous tracks
                 self.effects.reset_state()
 
-                # Reset resampler state for new track
                 self._resample_buffer = None
                 self._resample_pos = 0.0
 
@@ -833,7 +707,6 @@ class AudioPlayer:
                 self._stream.start()
             except Exception:
                 logger.error(f"Failed to play: {path}", exc_info=True)
-                # Cleanup manually since we can't call stop() safely inside lock if it blocks
                 if self._stream:
                     self._stream.close()
                     self._stream = None
@@ -880,21 +753,15 @@ class AudioPlayer:
                 self._buffer = None
             self._paused = False
 
-            # Clear resampler state to prevent ghost sounds
             self._resample_buffer = None
             self._resample_pos = 0.0
 
-            # Reset effects state on stop to ensure no residual audio in buffers
             if hasattr(self, 'effects'):
                 self.effects.reset_state()
 
-        # Perform cleanup outside lock to avoid deadlock with callback
         if stream_to_close:
             try:
-                # Use abort() instead of stop() to immediately discard buffered audio
-                # This prevents "ghost sounds" from previous track when changing songs
                 stream_to_close.abort()
-                # Delay to ensure hardware buffer is completely flushed
                 time.sleep(0.07)
                 stream_to_close.close()
             except Exception:
@@ -906,16 +773,13 @@ class AudioPlayer:
             except Exception:
                 logger.error("Failed to close buffer", exc_info=True)
 
-        # Reset audio metrics for UI (ensure overall LUFS resets when playback stops)
         try:
             if self._audio_metrics_callback:
-                # Use a thread to avoid blocking
                 threading.Thread(
                     target=lambda: self._audio_metrics_callback(-60.0, -60.0, -60.0, 0.0, 0.0),
                     daemon=True
                 ).start()
         except Exception:
-            # Don't let metrics reset failures interrupt stop
             pass
 
     def set_fade_in_enabled(self, enabled):
@@ -1043,19 +907,9 @@ class AudioPlayer:
         with self._lock:
             try:
                 if self._buffer:
-                    # Convert ms to frames
                     frame_pos = int((time_ms / 1000.0) * self._buffer.samplerate)
                     self._buffer.seek(frame_pos)
-                    # Reset filter state on seek to prevent artifacts
                     self.effects.reset_state()
-                    # frames_played must track the seeked-to position, not
-                    # just keep counting from wherever it was — otherwise the
-                    # "has enough playback elapsed to allow a silence-skip"
-                    # check reads a stale value and can block a genuine skip
-                    # for up to 30s after the seek, even while sitting in
-                    # real silence the whole time. Also clear the in-progress
-                    # silence run, since it was measuring audio from the old
-                    # position.
                     self._frames_played = frame_pos
                     self._silence_frames_count = 0
                     self._silence_detected = False
@@ -1072,21 +926,15 @@ class AudioPlayer:
         """
         try:
             devices = []
-
-            # Query sounddevice
             sd_devices = sd.query_devices()
-
-            # Add default option
             devices.append(('__DEFAULT__', 'Default Audio Device'))
 
-            # Filter duplicates by using the host API of the system default output device
             target_hostapi = None
             default_out_idx = sd.default.device[1]
 
             if default_out_idx >= 0 and default_out_idx < len(sd_devices):
                 target_hostapi = sd_devices[default_out_idx]['hostapi']
 
-            # Fallback: if no default device, pick the API of the first available output device
             if target_hostapi is None:
                 for dev in sd_devices:
                     if dev['max_output_channels'] > 0:
@@ -1094,16 +942,13 @@ class AudioPlayer:
                         break
 
             for idx, dev in enumerate(sd_devices):
-                # Filter for output devices
                 if dev['max_output_channels'] > 0:
-                    # If we have a target API, skip devices from other APIs to avoid duplicates
                     if target_hostapi is not None and dev['hostapi'] != target_hostapi:
                         continue
 
                     name = dev['name']
                     if isinstance(name, bytes):
                         name = name.decode('utf-8', errors='ignore')
-                    # Use index as ID
                     devices.append((str(idx), name))
 
             return devices
@@ -1153,7 +998,6 @@ class AudioPlayer:
 
                 logger.info(f"Audio device set to: {device_id}")
 
-                # If currently playing or paused, restart stream to apply new device
                 if self._stream and self._buffer:
                     restart_needed = True
                     restart_path = self._buffer.file.name
@@ -1199,7 +1043,6 @@ class AudioPlayer:
         Args:
             rate: Speed factor (e.g. 1.0 is normal, 0.5 is half speed, 2.0 is double).
         """
-        # Clamp rate to reasonable limits
         with self._lock:
             self._playback_rate = max(0.1, min(4.0, float(rate)))
 

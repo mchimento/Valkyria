@@ -40,8 +40,6 @@ class MiniPlayerWindowQt(QWidget):
         outer.setContentsMargins(14, 10, 10, 10)
         outer.setSpacing(8)
 
-        # Window controls stay pinned to the top-right of the view — a
-        # separate row, right-aligned, added before the content below.
         window_btn_row = QHBoxLayout()
         window_btn_row.setSpacing(2)
         window_btn_row.addStretch(1)
@@ -118,11 +116,6 @@ class MiniPlayerWindowQt(QWidget):
         super().showEvent(event)
         if not self._sized_once:
             self._sized_once = True
-            # Deferred to the first real show, not done in __init__: a
-            # not-yet-shown/polished QSS-styled widget tree can report an
-            # inflated sizeHint() (see CLAUDE.md's Qt gotchas). adjustSize()
-            # computes the natural height; width is then forced to the
-            # fixed design width.
             self.adjustSize()
             self.setFixedSize(WINDOW_WIDTH, self.height())
             self._position_bottom_right()

@@ -96,29 +96,21 @@ class AudioEffects:
 
     def process(self, data):
         """Apply all enabled effects to the audio data."""
-        # Apply Equalizer
         if self.equalizer_enabled and self._eq_sos is not None:
-            # Apply Preamp
             if self._eq_preamp != 0.0:
                 data[:] *= (10 ** (self._eq_preamp / 20.0))
 
-            # Apply SOS filters
-            # Check if ZI shape matches current channels (zi shape is (n_sections, 2, channels))
             if self._eq_zi is not None and self._eq_zi.shape[2] == data.shape[1]:
                 data[:], self._eq_zi = scipy.signal.sosfilt(self._eq_sos, data, axis=0, zi=self._eq_zi)
 
-        # Apply Compressor
         if self._compressor_enabled:
             data[:] = self._apply_compressor(data)
 
-        # Apply Spatializer
         if self._spatializer_enabled:
             data[:] = self._apply_spatializer(data)
 
-        # Apply Channel Mode
         data[:] = self._apply_channel_mode(data)
 
-        # Apply Vocal Remover
         if self._vocal_remover_enabled:
             data[:] = self._apply_vocal_remover(data)
 
@@ -199,7 +191,6 @@ class AudioEffects:
         self._eq_sos = np.vstack(sos_list)
 
         # Initialize state if needed
-        # Shape must be (n_sections, 2, channels) for scipy.signal.sosfilt with axis=0
         if self._eq_zi is None or self._eq_zi.shape != (len(self._eq_bands), 2, self.channels):
             self._eq_zi = np.zeros((len(self._eq_bands), 2, self.channels))
 
@@ -240,27 +231,21 @@ class AudioEffects:
         makeup_linear = 10 ** (self._compressor_makeup / 20.0)
         knee_db = self._compressor_knee
 
-        # Process each sample
         compressed = np.zeros_like(data)
 
-        # Pre-calculate RMS alpha if needed (approximate window average)
         rms_window = len(self._compressor_rms_buffer)
         rms_alpha = 1.0 - np.exp(-1.0 / rms_window)
 
         for i in range(len(data)):
-            # Get input level based on detection mode
             if self._compressor_use_rms:
-                # RMS detection using Exponential Moving Average (EMA)
                 sample_power = np.mean(data[i] ** 2)
                 current_ms = self._compressor_rms_buffer[0]
                 new_ms = rms_alpha * sample_power + (1 - rms_alpha) * current_ms
                 self._compressor_rms_buffer[0] = new_ms
                 input_level = np.sqrt(new_ms)
             else:
-                # Peak detection
                 input_level = np.max(np.abs(data[i]))
 
-            # Envelope follower
             if input_level > self._compressor_envelope:
                 self._compressor_envelope = attack_coef * self._compressor_envelope + (1 - attack_coef) * input_level
             else:
@@ -271,7 +256,6 @@ class AudioEffects:
             threshold_db = self._compressor_threshold
 
             if knee_db > 0:
-                # Soft knee
                 knee_lower = threshold_db - knee_db / 2
                 knee_upper = threshold_db + knee_db / 2
 
@@ -285,7 +269,6 @@ class AudioEffects:
                     knee_ratio = over_db / knee_db
                     gain_reduction_db = knee_ratio * knee_ratio * knee_db * (1.0 - 1.0 / self._compressor_ratio) / 2
             else:
-                # Hard knee
                 if envelope_db > threshold_db:
                     over_db = envelope_db - threshold_db
                     gain_reduction_db = over_db * (1.0 - 1.0 / self._compressor_ratio)
@@ -361,8 +344,6 @@ class AudioEffects:
     def _apply_spatializer(self, data):
         """Apply spatializer effect (Width + Simple Cross-Delay)."""
         if not self._spat_initialized:
-            # Init simple buffers
-            # 100ms max delay
             size = int(0.1 * self.samplerate)
             self._spat_buffer = np.zeros((size, 2))
             self._spat_write_pos = 0
@@ -381,28 +362,19 @@ class AudioEffects:
         delay_samples = int(self._spat_size * 0.1 * self.samplerate)
         if delay_samples == 0: delay_samples = 1
 
-        # Read from buffer (circular)
         num_frames = len(data)
         buffer_len = len(self._spat_buffer)
 
-        # Create indices
         read_indices = (np.arange(num_frames) + self._spat_write_pos - delay_samples) % buffer_len
         write_indices = (np.arange(num_frames) + self._spat_write_pos) % buffer_len
-
-        # Read delayed signal
         delayed = self._spat_buffer[read_indices]
-
-        # Cross-feed: L gets delayed R, R gets delayed L
         reverb_signal = np.column_stack((delayed[:, 1], delayed[:, 0]))
 
-        # Write current input to buffer (with some feedback for tail)
-        # Use damp as feedback control
         feedback = self._spat_damp * 0.6
         self._spat_buffer[write_indices] = data + reverb_signal * feedback
 
         self._spat_write_pos = (self._spat_write_pos + num_frames) % buffer_len
 
-        # Mix
         return dry_signal * self._spat_dry + reverb_signal * self._spat_wet
 
     # --- Channel Mode Methods ---
@@ -471,7 +443,6 @@ class AudioEffects:
             low = max(20, low_cut) / nyq
             high = min(nyq - 100, high_cut) / nyq
 
-            # Use Chebyshev Type II filter for very high stopband attenuation (60dB)
             self._vocal_remover_sos = scipy.signal.cheby2(
                 8, 60, [low, high],
                 btype='bandstop',

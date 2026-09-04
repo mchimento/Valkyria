@@ -1,10 +1,6 @@
 """
 Main application window: chrome/menu, waveform + playback controls,
 browser/playlist, DJ view, status bar, and secondary dialogs.
-
-Reuses app.settings.Settings and themes.theme_manager.ThemeManager as-is —
-only Settings' plain fields and ThemeManager's .palette/.reload() are
-touched.
 """
 
 import logging
@@ -52,9 +48,6 @@ _GEOMETRY_RE = re.compile(r"^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$")
 
 
 class MainWindowQt(QWidget):
-    # Emitted from the Prev/Next fade-out worker thread once the fade wait
-    # completes, carrying the target playlist index — Qt auto-queues
-    # delivery to the main thread (same pattern as ControlsBarQt.stopped).
     _track_switch_ready = Signal(int)
 
     def __init__(self, settings, theme, player, theme_signal):
@@ -63,11 +56,6 @@ class MainWindowQt(QWidget):
         self.theme = theme
         self.player = player
         self.theme_signal = theme_signal
-        # Tracks whatever palette is actually on screen, which can be a
-        # live, uncommitted Preferences preview — self.theme.palette only
-        # updates on Save. Dialogs must be built from this, not
-        # self.theme.palette, or QPainter-painted widgets (ToggleSwitch)
-        # start out on the stale, pre-preview theme.
         self._current_palette: dict = theme.palette
         self._preferences_win: Optional[PreferencesWindowQt] = None
         self._playback_features_win: Optional[PlaybackFeaturesWindowQt] = None
@@ -93,10 +81,6 @@ class MainWindowQt(QWidget):
         self._build_menu()
         self.menubar.setup_window_controls(self._on_quit, show_maximize=True)
 
-        # Looked up by label rather than threading QAction references out
-        # of _build_menu()'s item dicts, since add_menu() only returns the
-        # top-level QMenu. Kept up to date by _update_menu_state() so these
-        # actions disable when meaningless (empty playlist, nothing playing).
         self._action_save_playlist = self._find_action(self.menubar._menus["&Media"], "Save Playlist")
         self._action_save_playlist_as = self._find_action(self.menubar._menus["&Media"], "Save Playlist As...")
         self._action_play_after_current = self._find_action(self.menubar._menus["&Playback"], "Play After Current Song")
@@ -106,9 +90,6 @@ class MainWindowQt(QWidget):
         self._track_booklet_windows = []
 
         self.state = AppState(exts=tuple(getattr(settings, "supported_extensions", ()) or ()))
-        # silence_detection_enabled is deliberately NOT also pushed onto
-        # self.player here — only the Playback Features dialog's own
-        # toggle handler does that, never at launch.
         self.state.play_on_double = bool(getattr(settings, "play_on_double", True))
         self.state.crossfade_enabled = bool(getattr(settings, "crossfade_enabled", False))
         self.state.crossfade_duration = int(getattr(settings, "crossfade_duration", 5))
@@ -121,8 +102,6 @@ class MainWindowQt(QWidget):
         central_layout.setSpacing(8)
 
         splitter = QSplitter(Qt.Horizontal, self.central_area)
-        # QSS `width` on QSplitter::handle is silently ignored —
-        # setHandleWidth() is what actually reserves this layout space.
         splitter.setHandleWidth(16)
         self.playlist_view = PlaylistViewQt(self.state, self.theme.palette, player=self.player, parent=splitter)
         self.browser_view = BrowserViewQt(
@@ -131,8 +110,6 @@ class MainWindowQt(QWidget):
         )
         splitter.addWidget(self.playlist_view)
         splitter.addWidget(self.browser_view)
-        # The playlist absorbs all extra width on resize; the browser only
-        # changes size if the user drags the handle.
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
         central_layout.addWidget(splitter, 1)
@@ -153,8 +130,6 @@ class MainWindowQt(QWidget):
         central_layout.addWidget(self.bottom_info_bar)
         show_dj = bool(getattr(settings, "show_dj", True))
         self.dj_view.setVisible(show_dj)
-        # dj_view.isVisible() isn't reliable yet here — the window itself
-        # hasn't been shown, so it would read False regardless of show_dj.
         if not show_dj:
             self.player.set_audio_metrics_callback(None)
 
@@ -177,7 +152,6 @@ class MainWindowQt(QWidget):
         self.playlist_view.show_booklet_requested.connect(lambda i: self._open_booklet(self.state.playlist[i]))
         self.playlist_view.set_time_limit_requested.connect(self._set_time_limit)
         self.playlist_view.clear_time_limit_requested.connect(self._clear_time_limit)
-        # Relays into the same cleanup a real Stop press gets (waveform reset, etc).
         self.playlist_view.playback_stopped.connect(self.controls.stopped)
         self._update_menu_state()
 
@@ -191,10 +165,7 @@ class MainWindowQt(QWidget):
         whenever this top-level window has focus, regardless of which
         child widget inside it does — same mechanism the menu bar's own
         QAction shortcuts already use.
-
-        Buttons are triggered via .click() rather than calling their
-        handler methods directly, exercising the same code path (and
-        visual press feedback) a real mouse click would."""
+        """
 
         def shortcut(key: str, slot) -> None:
             QShortcut(QKeySequence(key), self, activated=slot)
@@ -447,9 +418,6 @@ class MainWindowQt(QWidget):
             self._action_track_booklet.setEnabled(has_target)
 
     def _resolve_track_target_index(self):
-        # Gates both the menu's enabled state and what a click actually
-        # opens — selection wins, falling back to whatever's current, so
-        # Track Info/Booklet always agree on what they'd act on.
         selected = self.playlist_view.get_selected_indices()
         if selected:
             return selected[0]
@@ -598,8 +566,6 @@ class MainWindowQt(QWidget):
         self._save_settings_safe()
 
     def _toggle_dj_visibility(self) -> None:
-        # Register/unregister the metrics callback, not just hide the widget —
-        # AudioPlayer._update_audio_metrics skips its work entirely when unset.
         visible = not self.dj_view.isVisible()
         self.dj_view.setVisible(visible)
         if visible:
@@ -612,7 +578,6 @@ class MainWindowQt(QWidget):
         self._save_settings_safe()
 
     def _build_audio_device_items(self) -> list:
-        # Built once at menu-construction time, not rebuilt on every menu open.
         try:
             devices = self.player.get_audio_devices()
         except Exception:
@@ -622,7 +587,6 @@ class MainWindowQt(QWidget):
         if not devices:
             return [{"label": "No devices found", "state": "disabled"}]
         current_id = getattr(self.player, "_device_id", None)
-        # Show what "Default" actually resolves to (e.g. a Bluetooth sink).
         try:
             _alsa_card, default_description = self.player.get_default_output_info()
         except Exception:
@@ -701,8 +665,6 @@ class MainWindowQt(QWidget):
             self.state.playlist = list(songs)
             self.state.current_index = None
             self.player.stop()
-            # Same cleanup a real Stop press gets (waveform reset, etc) —
-            # see playlist_view.clear()'s identical pattern.
             self.controls.stopped.emit()
             if songs:
                 self.state.current_index = 0
@@ -723,11 +685,6 @@ class MainWindowQt(QWidget):
     # ---------- geometry persistence ----------
 
     def _apply_initial_geometry(self) -> None:
-        # A restored geometry is clamped to the CURRENT screen's bounds
-        # (at least 150px reachable) rather than trusted as-is — a saved
-        # geometry from a monitor layout that no longer exists (e.g. an
-        # unplugged second display) could otherwise restore fully
-        # off-screen with no native titlebar to drag it back by.
         self.setMinimumSize(*MIN_SIZE)
         screen = QApplication.primaryScreen()
         avail = screen.availableGeometry() if screen is not None else None
@@ -820,12 +777,6 @@ class MainWindowQt(QWidget):
     def _restore_from_mini_player(self) -> None:
         self._hide_mini_player()
         self.showNormal()
-        # Deferred a tick: some window managers (GNOME/Mutter's
-        # focus-stealing prevention) treat an activation request for a
-        # different top-level window than the one that just received the
-        # click as unsolicited and won't actually focus it — running this
-        # outside the click's own call stack is a common mitigation, though
-        # WM policy may not always fully cooperate.
         QTimer.singleShot(0, self._focus_after_restore)
 
     def _focus_after_restore(self) -> None:

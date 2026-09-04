@@ -1,14 +1,6 @@
 """
 Data-driven menu bar built on native QMenuBar/QMenu/QAction, plus the
 window chrome (min/max/close) and a draggable spacer (startSystemMove()).
-
-add_menu(label, items) builds a menu from a list of item dicts:
-    {"label": str, "command": Callable, "state": "normal"|"disabled",
-     "accelerator": str, "separator": True, "submenu": [items...],
-     "checkbutton": True, "checked": bool,
-     "radiobutton": True, "group": str, "value": Any, "checked": bool}
-Checkbuttons/radiobuttons carry a plain initial "checked" bool, or a
-"group" name (one QActionGroup per group per menu) for radio items.
 """
 
 import logging
@@ -28,9 +20,6 @@ class CustomMenuBarQt(QWidget):
         self.parent_window = parent_window if parent_window is not None else parent
 
         self.setObjectName("MenuBarContainer")
-        # Without this, the area behind the transparent min/max/close
-        # buttons and drag spacer falls through to the window's base bg
-        # instead of menubar_bg.
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFixedHeight(30)
 

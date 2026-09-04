@@ -23,13 +23,6 @@ def build_chip_pixmap(font, label: str) -> QPixmap:
     width = pad_x * 2 + icon_width + gap + text_width
     height = pad_y * 2 + metrics.height()
 
-    # Fully opaque, no transparent fill anywhere: DragGhost shows this in a
-    # plain (non-translucent) child widget, so any transparent pixel here
-    # would just show whatever raw color the backing store happens to have
-    # instead of blending. Square, not rounded — a rounded border stroke
-    # drawn over this same square fill left the actual corners looking
-    # visibly cut off rather than rounded (the fill itself was never
-    # clipped to the curve, only the outline followed it).
     pixmap = QPixmap(width, height)
     pixmap.fill(QColor(20, 20, 20))
     painter = QPainter(pixmap)
@@ -57,11 +50,6 @@ class DragGhost(QLabel):
         self.setFixedSize(pixmap.size())
 
     def follow(self, global_pos: QPoint) -> None:
-        # raise_() is deliberately not called here — every move update
-        # would re-trigger it, and re-raising a widget that's already on
-        # top dozens of times a second seems to be part of what was making
-        # this flicker. show() (called once, before the first follow())
-        # already puts a freshly-created widget above its siblings.
         parent = self.parentWidget()
         if parent is None:
             return

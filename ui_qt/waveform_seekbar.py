@@ -268,17 +268,10 @@ class WaveformSeekbarQt(QWidget):
                 painter.setBrush(QColor(self.played_color))
                 painter.drawRects(played_rects)
 
-                # Explicit playhead marker: the played/unplayed color split
-                # alone is easy to miss on a loud/heavily-compressed track
-                # where bars are all near max height and look "solid" either
-                # way — a visible line makes progress unmistakable.
                 marker_color = QColor(self.played_color).lighter(160)
                 painter.setPen(marker_color)
                 painter.drawLine(QPointF(self.playhead_x, 0), QPointF(self.playhead_x, h))
 
-        # drawRect() fills with the current brush as well as stroking the
-        # outline — without resetting it, this border draw would fill the
-        # whole widget with whatever brush color the bars loop left set.
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QColor(self.border_color))
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))

@@ -39,16 +39,12 @@ class _BrowserTree(QTreeWidget):
         self.setObjectName("BrowserTree")
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
-        # Native indicator replaced by a hand-painted one (see paintEvent
-        # and drop_indicator.py) — QSS can't control its thickness.
         self.setDropIndicatorShown(False)
         self.setDragDropMode(QAbstractItemView.DragDrop)
         self.setDefaultDropAction(Qt.MoveAction)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
     def mimeData(self, items):
-        # Augment (not replace) Qt's own mimeData, which internal row-move
-        # drop handling needs, with a text/uri-list for external drops.
         mime = super().mimeData(items)
         urls = []
         for item in items:
@@ -61,9 +57,6 @@ class _BrowserTree(QTreeWidget):
     def dropEvent(self, event) -> None:
         self._drop_line_y = None
         if event.source() is self:
-            # Captured before the native move: Qt's own internal reorder
-            # (remove + reinsert the same item object) clears its selected
-            # state, even though it's the same QTreeWidgetItem afterward.
             dragged_paths = {item.data(0, Qt.UserRole) for item in self.selectedItems()}
             super().dropEvent(event)
             self._owner._resync_from_internal_move(dragged_paths)
@@ -77,8 +70,6 @@ class _BrowserTree(QTreeWidget):
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:
-        # Hovering back over the browser itself during its own drag (e.g.
-        # an internal reorder) — keeps the ghost tracking there too.
         drag_ghost.update_position(self.mapToGlobal(event.position().toPoint()))
         self._drop_line_y = drop_indicator.compute_drop_line_y(self, event.position().toPoint())
         self.viewport().update()
@@ -96,13 +87,6 @@ class _BrowserTree(QTreeWidget):
             drop_indicator.paint_drop_line(self, self._drop_line_y, accent)
 
     def startDrag(self, supportedActions) -> None:
-        # Shows a small floating chip naming what's being dragged, so
-        # dropping a song onto the playlist reads as moving *that* track,
-        # not just an anonymous cursor change. Deliberately doesn't
-        # replicate Qt's default post-drag row removal on a completed
-        # MoveAction — files dragged out of the browser stay listed there;
-        # only the explicit Delete-key path (_remove_selected_from_browser)
-        # removes them.
         items = self.selectedItems()
         if not items:
             return
@@ -110,12 +94,7 @@ class _BrowserTree(QTreeWidget):
         drag.setMimeData(self.mimeData(items))
         label = items[0].text(0) if len(items) == 1 else f"{len(items)} tracks"
         pixmap = drag_ghost.build_chip_pixmap(self.font(), label)
-        # No drag.setPixmap()/setHotSpot(): on this app's target window
-        # manager the native drag icon renders as a static image fixed at
-        # the drag's start position rather than tracking the cursor — worse
-        # than no native icon, since it doubles up with the ghost below
-        # (which does track, via dragMoveEvent/dragEnterEvent — see
-        # drag_ghost.py's docstring).
+        
         ghost = drag_ghost.DragGhost(pixmap, self.window())
         ghost.show()
         ghost.raise_()
@@ -171,7 +150,6 @@ class BrowserViewQt(QWidget):
         self.btn_add = QPushButton("Add")
         self.btn_add_below = QPushButton("Add Below")
         for btn in (self.btn_open_folder, self.btn_open_files, self.btn_add, self.btn_add_below):
-            # Wider min-width (vs shared DialogButton) set via QSS, not setMinimumWidth().
             btn.setObjectName("BrowserActionButton")
             button_col.addWidget(btn)
 
@@ -230,7 +208,6 @@ class BrowserViewQt(QWidget):
         for path in self.state.browser_files:
             item = QTreeWidgetItem([os.path.basename(path)])
             item.setData(0, Qt.UserRole, path)
-            # Prevents a drop-on-row from nesting instead of reordering.
             item.setFlags(item.flags() & ~Qt.ItemIsDropEnabled)
             self._tree.addTopLevelItem(item)
 
@@ -289,8 +266,6 @@ class BrowserViewQt(QWidget):
         paths = self._selected_paths()
         if not paths or self.playlist_view is None:
             return
-        # Prefer the last-selected playlist row; fall back to right after
-        # the currently-playing track; then the end.
         insert_pos = len(self.state.playlist)
         pl_selected = self.playlist_view.get_selected_indices()
         if pl_selected:
@@ -311,7 +286,6 @@ class BrowserViewQt(QWidget):
             all_devices = self._main_player.get_audio_devices()
         except Exception:
             return []
-        # Same alias-collapsing as the Tools menu, so both lists agree.
         all_devices = filter_selectable_audio_devices(all_devices)
 
         def hw_card(name: str) -> Optional[str]:
@@ -323,10 +297,8 @@ class BrowserViewQt(QWidget):
         except Exception:
             default_alsa_card, default_description = None, None
 
-        # Fallback guess if get_default_output_info() couldn't resolve anything.
         fallback_card = next((hw_card(name) for _did, name in all_devices if hw_card(name) is not None), None)
 
-        # Sentinel distinct from any real (digit-string) card number.
         NON_ALSA = "non-alsa-default"
 
         def default_effective_card() -> Optional[str]:
@@ -350,7 +322,6 @@ class BrowserViewQt(QWidget):
             main_card = default_effective_card()
 
         def displayed_name(device_id: str, name: str) -> str:
-            # Mirrors the Tools menu: show what "Default" actually reaches.
             if device_id == "__DEFAULT__" and default_description:
                 return f"{name} (currently: {default_description})"
             return name
@@ -361,7 +332,6 @@ class BrowserViewQt(QWidget):
         ]
 
     def _refresh_preview_devices(self) -> None:
-        # Preserve the current selection across a refresh if it's still valid.
         previous_selection = self.preview_device_combo.currentText()
         devices = self._get_preview_devices()
         self._preview_devices = devices

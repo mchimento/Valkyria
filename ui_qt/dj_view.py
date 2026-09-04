@@ -14,8 +14,7 @@ from audio.metadata import get_display_bpm, get_metadata, key_to_camelot, metada
 
 logger = logging.getLogger(__name__)
 
-ROW_HEIGHT = 26  # fixed per-row height so both columns' rows line up and
-                 # don't shift when the save buttons show/hide.
+ROW_HEIGHT = 26
 
 
 def _peak_color(normalized: float) -> str:
@@ -141,9 +140,6 @@ class DJViewQt(QWidget):
         self.key_title, self.key_label = self._add_value_row(right_column, "KEY", "Estimating...")
         self.energy_title, self.energy_meter = self._add_meter_row(right_column, "ENERGY", 100)
 
-        # Fixed-height container, not just a layout, so this row keeps
-        # reserving space even when both buttons are hidden (a plain
-        # QHBoxLayout collapses to zero height with no visible children).
         button_container = QWidget()
         button_container.setObjectName("DJButtonRow")
         button_container.setFixedHeight(ROW_HEIGHT)
@@ -182,7 +178,6 @@ class DJViewQt(QWidget):
         value_font.setPointSize(15)
         value_font.setBold(True)
         value.setFont(value_font)
-        # Fixed width so "Estimating..."/short values don't reflow the row.
         value.setFixedWidth(QFontMetrics(value_font).horizontalAdvance(widest_text) + 4)
         value.setFixedHeight(ROW_HEIGHT)
         row.addWidget(value, 0, Qt.AlignVCenter)
@@ -198,9 +193,6 @@ class DJViewQt(QWidget):
         title_font.setPointSize(11)
         title_font.setBold(True)
         title.setFont(title_font)
-        # Widest of the actual meter-row titles ("ENERGY") plus PEAK/LIMIT's
-        # own fixed 50px, not just PEAK/LIMIT's width — a bare 50px clipped
-        # "ENERGY" down to "ENERG".
         title.setFixedWidth(max(50, QFontMetrics(title_font).horizontalAdvance(title_text) + 4))
         title.setFixedHeight(ROW_HEIGHT)
         row.addWidget(title, 0, Qt.AlignVCenter)
@@ -213,8 +205,6 @@ class DJViewQt(QWidget):
     # ---------- theming ----------
 
     def apply_palette(self, palette: dict) -> None:
-        # See StatusViewQt._apply_colors: the app-wide QSS paints a solid
-        # rect behind every QLabel unless overridden to transparent.
         self.palette = palette
         meta_fg = palette.get("status_fg", "#505050")
         dj_fg = palette.get("status_meta_fg", "#202020")
@@ -251,8 +241,6 @@ class DJViewQt(QWidget):
     def _on_metrics_ready(self, lufs, overall_lufs, peak_dbfs, limiter_activity, energy_level):
         self.overall_lufs_value = overall_lufs
         self.overall_lufs_label.setText(f"{overall_lufs:.1f}")
-        # Overall-LUFS-only updates carry placeholder values for the rest —
-        # skip them so the live meters don't blank for a frame.
         if (lufs, peak_dbfs, limiter_activity, energy_level) == (-60.0, -60.0, 0.0, 0.0):
             return
         self.lufs_value = lufs
@@ -460,7 +448,6 @@ class DJViewQt(QWidget):
 
     def _on_bpm_save_complete(self, filepath, success) -> None:
         if success:
-            # Keep the cached estimate so it can be re-saved if the tag is later removed.
             self.save_btn.setVisible(False)
         else:
             self._reset_bpm_button()
@@ -506,7 +493,6 @@ class DJViewQt(QWidget):
 
     def _on_key_save_complete(self, filepath, success) -> None:
         if success:
-            # Keep the cached estimate so it can be re-saved if the tag is later removed.
             self.save_key_btn.setVisible(False)
         else:
             self._reset_key_button()

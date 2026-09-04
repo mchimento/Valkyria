@@ -1,12 +1,6 @@
 """
 ControlsBar: Play/Pause/Prev/Stop/Next, volume/mute, time labels, waveform
-seekbar, and the repeat/effects buttons. Play/Prev/Next/repeat-toggle/
-effects-open are emitted as signals rather than handled here directly —
-the actual "which track" / "which index is next" / "open the effects
-window" policy lives in MainWindowQt, which owns state and playlist_view.
-Play in particular needs playlist_view's current selection (play whatever
-is selected, not just whatever was last loaded), which this widget alone
-can't determine.
+seekbar, and the repeat/effects buttons. 
 """
 
 import logging
@@ -31,11 +25,6 @@ def _format_ms(ms) -> str:
 
 
 class ControlsBarQt(QWidget):
-    # Emitted from the stop-sequence worker thread once the fade-out wait
-    # and player.stop() complete; Qt auto-queues delivery to the main
-    # thread. Public because MainWindowQt also needs it — clearing
-    # state.current_index and the now-playing highlight on stop is policy
-    # that lives at that level, same as play/prev/next.
     stopped = Signal()
 
     play_requested = Signal()
@@ -81,13 +70,10 @@ class ControlsBarQt(QWidget):
         self.btn_stop.setToolTip("Stop (S)")
         self.btn_next.setToolTip("Next Track (→)")
 
-        # Balances the stretch after total_time_label so the waveform group is centered.
         row.addStretch(1)
 
         self.current_time_label = QLabel("--:--")
         self.total_time_label = QLabel("--:--")
-        # Fixed width stops these labels reflowing the row (and shifting
-        # the waveform sideways) as the elapsed-time text changes length.
         time_width = QFontMetrics(self.current_time_label.font()).horizontalAdvance("00:00") + 10
         for label in (self.current_time_label, self.total_time_label):
             label.setFixedWidth(time_width)
@@ -111,7 +97,7 @@ class ControlsBarQt(QWidget):
         self.btn_mute = QPushButton("🔊")
         self.btn_mute.setObjectName("TransportButton")
         self.btn_mute.setFixedSize(44, 36)
-        # Tooltip set dynamically by _init_mute()/_update_mute_tooltip() below.
+
         row.addWidget(self.btn_mute)
 
         self.volume_slider = QSlider(Qt.Horizontal)
@@ -121,7 +107,6 @@ class ControlsBarQt(QWidget):
         row.addWidget(self.volume_slider)
 
         self.volume_label = QLabel("0%")
-        # Fixed width so its text change doesn't reshuffle the right-aligned group.
         volume_label_width = QFontMetrics(self.volume_label.font()).horizontalAdvance("100%") + 10
         self.volume_label.setFixedWidth(volume_label_width)
         self.volume_label.setAlignment(Qt.AlignCenter)
@@ -161,10 +146,6 @@ class ControlsBarQt(QWidget):
             logger.exception("Failed to apply initial volume")
 
     def _init_mute(self) -> None:
-        # settings.mute is the source of truth — the player is always
-        # freshly constructed right before this widget, so get_mute_state()
-        # would just return its constructor default (False), silently
-        # resetting a saved "muted" preference on every launch.
         initial_mute = bool(getattr(self.settings, "mute", False))
         self._is_muted = initial_mute
         self.btn_mute.setText("🔇" if initial_mute else "🔊")
@@ -186,19 +167,12 @@ class ControlsBarQt(QWidget):
     def _update_play_pause_button_states(self) -> None:
         """Whichever of Play/Pause reflects what's currently happening gets
         the button_pressed background, the other goes back to normal.
-        Called from every path that changes playback state (play_file,
-        pause/resume, stop) so it covers Play-button clicks, prev/next,
-        and double-clicking a playlist row alike."""
+        """
         pressed = self.palette.get("button_pressed", "#6023CB")
         self.btn_play.setStyleSheet(f"background-color: {pressed};" if self.is_playing else "")
         self.btn_pause.setStyleSheet(f"background-color: {pressed};" if self.is_paused else "")
 
     def set_repeat_icon(self, mode: str) -> None:
-        """Called by MainWindowQt after it changes state.repeat_mode:
-        'none' is the plain button, 'one' swaps to the single-repeat
-        glyph, 'all' keeps the loop glyph, and 'one'/'all' both get the
-        active (button_pressed) background. Also updates the tooltip to
-        reflect the current mode."""
         pressed = self.palette.get("button_pressed", "#6023CB")
         if mode == "one":
             self.btn_repeat.setText("🔂")
@@ -214,9 +188,6 @@ class ControlsBarQt(QWidget):
     # ---------- transport ----------
 
     def play_file(self, path: str) -> None:
-        # Reset the time labels immediately rather than leaving the
-        # previous track's stale elapsed/total time visible until the
-        # next 500ms timer tick.
         self.current_time_label.setText("00:00")
         self.total_time_label.setText("--:--")
         self._crossfade_fired = False
@@ -228,9 +199,6 @@ class ControlsBarQt(QWidget):
         self._update_play_pause_button_states()
 
     def _on_pause(self) -> None:
-        # With nothing loaded or playing, this must be a no-op — otherwise
-        # clicking Pause with an empty playlist would still flip
-        # is_playing and highlight a button.
         try:
             if not (self.player.is_playing() or self.player.is_paused()):
                 return

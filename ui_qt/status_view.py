@@ -191,9 +191,6 @@ class StatusViewQt(QWidget):
         self._update_artwork(None)
 
     def _apply_colors(self) -> None:
-        # Qt's app-wide "QWidget { background-color: ... }" rule paints a
-        # solid rect behind every QLabel too, not just transparent text —
-        # override it so labels blend into the panel's own background.
         fg = self.palette.get("status_fg", "#202020")
         meta_fg = self.palette.get("status_meta_fg", "#505050")
         accent = self.palette.get("accent", "#0078D4")

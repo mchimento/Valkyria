@@ -1,16 +1,6 @@
 """
 Playback Features dialog — fade in/out, early track advance ("crossfade"),
 silence detection, play-on-double-click.
-
-Every control applies LIVE to state/player the moment it's changed; Save
-only persists current values to settings/disk for next launch, it isn't
-what makes them take effect. Controls are initialized from the LIVE
-state/player, not from settings (fade in/out fall back to settings only
-if the player is unavailable) — reading from settings instead is wrong
-here: since every control applies live, reopening the dialog after an
-unsaved toggle would silently revert the still-in-effect value back to
-whatever was last saved to disk, because init re-invokes each toggle
-handler with whatever value it's constructed with.
 """
 
 import logging
@@ -92,11 +82,6 @@ class PlaybackFeaturesWindowQt(QDialog):
         advance_group = QGroupBox("Advance")
         advance_layout = QVBoxLayout(advance_group)
 
-        # Visible label only — "Crossfade" was misleading (no real audio
-        # blending happens, see _check_crossfade in controls.py); the
-        # internal names (checkbox_crossfade, state.crossfade_enabled,
-        # settings fields) are left as-is to avoid touching saved-config
-        # compatibility for a cosmetic change.
         self.checkbox_crossfade, self.slider_crossfade, self.label_crossfade = self._add_toggle_slider_row(
             advance_layout, "Early Track Advance", bool(getattr(state, "crossfade_enabled", False)),
             int(getattr(state, "crossfade_duration", 5)), minimum=1, maximum=12,
@@ -110,9 +95,6 @@ class PlaybackFeaturesWindowQt(QDialog):
 
         layout.addWidget(advance_group)
 
-        # setChecked() above runs before .toggled.connect(), so it can't
-        # itself fire these handlers — without this explicit call, an
-        # already-True initial value never actually reaches self.player.
         self._on_fade_in_toggle(self.checkbox_fade_in.isChecked())
         self._on_fade_out_toggle(self.checkbox_fade_out.isChecked())
         self._on_crossfade_toggle(self.checkbox_crossfade.isChecked())
@@ -123,10 +105,6 @@ class PlaybackFeaturesWindowQt(QDialog):
             btn = buttons.button(role)
             if btn is not None:
                 btn.setObjectName("DialogButton")
-                # Some Qt styles attach a platform icon to standard dialog
-                # buttons (a checkmark/X glyph next to the text) — cleared
-                # explicitly so the button is plain text only, regardless
-                # of style/platform.
                 btn.setIcon(QIcon())
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.close)
@@ -185,8 +163,6 @@ class PlaybackFeaturesWindowQt(QDialog):
         self.move(x, y)
 
     def _on_theme_changed(self, palette: dict) -> None:
-        # ToggleSwitch self-paints via QPainter, so it isn't restyled for
-        # free by the app-wide stylesheet a theme change already triggers.
         self.palette = palette
         for switch in (self.checkbox_play_on_double, self.checkbox_fade_in, self.checkbox_fade_out,
                        self.checkbox_crossfade, self.checkbox_silence):

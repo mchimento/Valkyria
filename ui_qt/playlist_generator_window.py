@@ -1,17 +1,6 @@
 """Build named, rule-based playlist templates (groups/subgroups/sources
 with BPM/key filters and an ordering strategy) and generate a playlist
 from them.
-
-The data model, generation algorithm, and template JSON persistence all
-live in audio/playlist_generator.py — this file is purely the UI wired to
-that engine.
-
-Every rules widget writes straight into the live self._template object on
-change, same live-apply pattern as ui_qt/playback_features_window.py and
-ui_qt/audio_effects_window.py — there is no separate Apply step. Boolean
-options use QCheckBox rather than ToggleSwitch, which also means nothing
-here needs a theme_signal subscription, since QCheckBox is QSS-styled
-already.
 """
 
 import copy
@@ -113,11 +102,6 @@ class PlaylistGeneratorWindowQt(QDialog):
         super().showEvent(event)
         if not self._sized_once:
             self._sized_once = True
-            # Deferred to the first real show, not done in __init__: a
-            # not-yet-shown/polished QSS-styled widget tree this deep can
-            # report an inflated sizeHint(). adjustSize() computes width
-            # too, narrower than wanted for a two-column layout — call it
-            # first for the natural height, then re-widen to a fixed 960.
             self.adjustSize()
             self.resize(960, self.height())
         self._center_on_parent()
@@ -159,16 +143,10 @@ class PlaylistGeneratorWindowQt(QDialog):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # A QGroupBox (not a plain label) so its title sits at the exact
-        # same layout position as "Global Rules" on the right, guaranteed
-        # to line up regardless of platform Qt style.
         canvas_group = QGroupBox("Playlist Canvas")
         canvas_layout = QVBoxLayout(canvas_group)
         self._tree = QTreeWidget()
         self._tree.setHeaderHidden(True)
-        # Explicit height rather than an expanding stretch factor — the
-        # window's height is sized off actual content (see showEvent), so
-        # an empty QTreeWidget would otherwise collapse to a tiny default.
         self._tree.setMinimumHeight(320)
         self._tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
         self._tree.itemDoubleClicked.connect(self._on_tree_double_clicked)
@@ -197,9 +175,6 @@ class PlaylistGeneratorWindowQt(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._build_global_rules_group())
         layout.addWidget(self._build_group_rules_group())
-        # main_area forces this column to match the taller left column's
-        # row height — without this stretch absorbing the leftover as
-        # blank space, Qt grows the Global Rules QGroupBox itself instead.
         layout.addStretch(1)
         return panel
 

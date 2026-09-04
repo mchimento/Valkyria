@@ -117,8 +117,6 @@ class BookletViewerWindowQt(QDialog):
             return
         target = self.image_label.size()
         pm = self._current_pixmap
-        # Never upscale — QPixmap.scaled() alone will stretch a small
-        # image to fill a larger panel, unlike PIL's min(scale, 1.0) cap.
         if pm.width() <= target.width() and pm.height() <= target.height():
             self.image_label.setPixmap(pm)
         else:

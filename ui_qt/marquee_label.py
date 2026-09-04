@@ -1,9 +1,8 @@
-"""A QLabel-like widget that horizontally scrolls its text in a seamless,
+"""
+A QLabel-like widget that horizontally scrolls its text in a seamless,
 looping marquee when the text is wider than the widget, instead of
-clipping or eliding it. Font/color come from the same QSS/`setStyleSheet`
-mechanisms a QLabel would use — Qt's style engine applies `color`/`font-*`
-properties to any QWidget's palette/font regardless of subclass, it's only
-background/border painting that needs QLabel or WA_StyledBackground."""
+clipping or eliding it.
+"""
 
 from PySide6.QtCore import QSize, QTimer
 from PySide6.QtGui import QPainter

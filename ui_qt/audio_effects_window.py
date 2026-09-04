@@ -2,14 +2,7 @@
 vocal-remover) controls for the shared audio/audio_effects.py DSP chain.
 
 Every control applies LIVE to the player the moment it changes — there is
-no pending/Apply state. Save only persists current values to
-audio/audio_effects_config.json so they become next launch's defaults; it
-has no effect on already-live audio. Close does not revert anything.
-
-Compressor/spatializer controls initialize from the live player via
-player.get_compressor_settings()/get_spatializer_settings(), not from the
-saved config file, so reopening after an unsaved change shows current
-values, not stale ones."""
+no pending/Apply state."""
 
 import json
 import logging
@@ -51,10 +44,6 @@ _CHANNEL_MODES = ["Stereo", "Mono", "Left Channel", "Right Channel", "Side (Diff
 
 
 class _ClickToSeekSlider(QSlider):
-    """Plain QSlider only page-steps toward a click on the track — it
-    never jumps straight to the clicked position unless you drag the
-    handle itself. This makes a click anywhere on the track set the value
-    directly, which is what users actually expect from a slider like this."""
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -75,9 +64,6 @@ class AudioEffectsWindowQt(QDialog):
         self.palette = palette
         if theme_signal is not None:
             theme_signal.changed.connect(self._on_theme_changed)
-        # Fields Save must round-trip but nothing here edits directly
-        # (rms_buffer_size, min_rate/max_rate) — read once so _save_to_config
-        # can preserve them instead of dropping them from the file.
         try:
             with open(_CONFIG_PATH, "r") as f:
                 self._config_on_disk = json.load(f)
@@ -125,8 +111,6 @@ class AudioEffectsWindowQt(QDialog):
         self._center_on_parent()
 
     def _measure_ideal_height(self) -> int:
-        # Sized off the Advanced tab's real content height rather than an
-        # arbitrary constant that leaves empty space under shorter tabs.
         advanced_height = self.tabs.widget(3).sizeHint().height()
         chrome = 30 + self.save_btn.sizeHint().height() + 40  # titlebar + button row + margins
         return advanced_height + self.tabs.tabBar().sizeHint().height() + chrome
@@ -141,8 +125,6 @@ class AudioEffectsWindowQt(QDialog):
         self.move(x, y)
 
     def _on_theme_changed(self, palette: dict) -> None:
-        # ToggleSwitch self-paints via QPainter, so it isn't restyled for
-        # free by the app-wide stylesheet a theme change already triggers.
         self.palette = palette
         for switch in (self.eq_enable, self.comp_enable, self.comp_rms_mode,
                        self.spat_enable, self.vocal_remover_enable):
@@ -165,11 +147,7 @@ class AudioEffectsWindowQt(QDialog):
     def _add_labeled_slider(self, parent_layout, label, minimum, maximum, initial, decimals, on_change, suffix=""):
         """A label + horizontal slider (scaled by 10**decimals so QSlider's
         integer-only range can represent float values) + a live value
-        label. on_change fires with the real float value on every
-        intermediate drag tick, matching the original's continuous-apply
-        semantics. Returns the slider so presets/reset can move it via
-        setValue(), which re-fires on_change the same way a manual drag
-        would."""
+        label."""
         scale = 10 ** decimals
         row = QHBoxLayout()
         row.setSpacing(8)
@@ -273,8 +251,6 @@ class AudioEffectsWindowQt(QDialog):
         self.player.set_equalizer_band(index, value)
 
     def _on_preset_change(self, name: str) -> None:
-        # The blank entry isn't a no-op — it resets to "Flat" (default EQ),
-        # the combo just keeps showing blank rather than jumping to "Flat".
         if not name:
             name = "Flat"
         if name not in self.presets:
@@ -579,10 +555,6 @@ class AudioEffectsWindowQt(QDialog):
                 "max_rate": self._config_on_disk.get("playback", {}).get("max_rate", 4.0),
             },
             "channel_mode": {
-                # Saved as the display-cased string ("Mono", not "mono") —
-                # player.get_channel_mode() returns lowercase, a different
-                # string than what set_channel_mode() accepts and what
-                # this config file stores.
                 "mode": (self.channel_mode_group.checkedButton().text()
                          if self.channel_mode_group.checkedButton() else "Stereo"),
             },

@@ -12,10 +12,6 @@ from PySide6.QtWidgets import QApplication
 
 
 class ThemeSignal(QObject):
-    """Single shared notification path for theme changes. Anything that
-    changes settings.theme + calls theme.reload() emits `changed` with the
-    new palette; nothing fans out manually beyond that (see the class
-    docstring below for why that matters)."""
 
     changed = Signal(dict)
 
