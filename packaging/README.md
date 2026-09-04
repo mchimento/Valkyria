@@ -1,6 +1,10 @@
 # Packaging
 
-All platforms start from the same PyInstaller build:
+Everything below ultimately runs PyInstaller — `build_installer.bat` and
+`build_appimage.sh` both do it themselves as their first step, so you
+don't need to run it separately before using either. It's only a manual
+prerequisite for the raw-binary flow (`install_linux.sh`, last section
+below):
 
 ```bash
 ./.env/bin/pip install pyinstaller   # once, if not already installed
@@ -9,7 +13,10 @@ All platforms start from the same PyInstaller build:
 
 This must run on the target OS — a Linux machine produces `dist/Valkyria`,
 a Windows machine produces `dist\Valkyria.exe`. PyInstaller doesn't
-cross-compile between platforms.
+cross-compile between platforms. It's a real rebuild each time, not
+incremental — running the build scripts always reflects whatever
+`app/version.py` and the rest of the source currently say, never a stale
+binary from an earlier run.
 
 ## Windows: installer (Inno Setup)
 
@@ -43,6 +50,10 @@ Requires `appimagetool` on `PATH` — download
 ```bash
 packaging/linux/appimage/build_appimage.sh
 ```
+
+This rebuilds `dist/Valkyria` with PyInstaller (installing PyInstaller
+into `.env` first if it isn't already there) and packages it into the
+AppImage in one step — no need to run PyInstaller separately first.
 
 Output: `dist/Valkyria-<version>-x86_64.AppImage`, alongside copies of
 `install_appimage.sh` and `uninstall_appimage.sh` placed next to it
