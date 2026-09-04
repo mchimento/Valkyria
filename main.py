@@ -7,9 +7,11 @@ import sys
 import logging
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from app.logging_config import setup_logging
+from app.paths import get_resource_path
 from app.settings import Settings
 import audio.metadata as metadata_module
 from audio.audio_player import AudioPlayer
@@ -49,6 +51,9 @@ def main():
     setup_logging()
 
     app = QApplication(sys.argv)
+    app.setApplicationName("Valkyria")
+    app.setDesktopFileName("valkyria")
+    app.setWindowIcon(QIcon(str(get_resource_path("assets/icon-small.png"))))
 
     settings = Settings()
     theme = ThemeManager(settings)
