@@ -6,9 +6,6 @@ name: Release
 on:
   push:
     tags: [ 'v*' ]
-    # TEMPORARY: build on every push to this branch for testing. The publish
-    # job only runs for tags, so this never creates a release. Remove before merging.
-    branches: [ deployment ]
   workflow_dispatch:
 
 permissions:

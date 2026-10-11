@@ -30,7 +30,42 @@ For the full list of the available features please refer to the user guide docum
 
 ## Installation
 
+### Download a release (recommended)
+
+Ready-to-run installers are attached to each
+[GitHub Release](https://github.com/mchimento/Valkyria/releases/latest) —
+no Python needed. Download the file for your platform from the **Assets**
+section of the latest release:
+
+| Platform | File | How to install |
+|----------|------|----------------|
+| Windows 10/11 (64-bit) | `ValkyriaSetup-<version>.exe` | Run the installer and follow the wizard. |
+| Linux (x86_64) | `Valkyria-<version>-linux-x86_64.zip` | Unzip, then run `./install_appimage.sh` (adds Valkyria to your app menu). |
+
+**Windows:** the installer is not yet code-signed, so Windows SmartScreen
+may show "Windows protected your PC". Click **More info → Run anyway**.
+
+**Linux:** the zip contains the AppImage plus `install_appimage.sh` and
+`uninstall_appimage.sh`. Running the `.AppImage` directly also works
+without installing, but it won't appear in your app menu. If it doesn't
+start, make sure it's executable (`chmod +x Valkyria-*.AppImage`).
+
+**Verifying your download (optional):** each release includes a
+`SHA256SUMS.txt`. Compare it with your file's hash:
+
+``` bash
+# Linux
+sha256sum -c --ignore-missing SHA256SUMS.txt
+```
+
+``` powershell
+# Windows (PowerShell) — compare the output with SHA256SUMS.txt
+Get-FileHash .\ValkyriaSetup-<version>.exe -Algorithm SHA256
+```
+
 ### Building installers
+
+To build the installers yourself instead of downloading them:
 
 Instead of running from source, you can generate a standalone installer
 for your platform — no Python, venv, or this repo needed on the machine
@@ -64,8 +99,8 @@ pip install -r requirements.txt
 
 1.  Launch the app:
 
-    If you installed Valkyria using one of the generated installers
-    (see [Building installers](#building-installers) above), launch it
+    If you installed Valkyria from a release download or one of the
+    generated installers (see [Installation](#installation) above), launch it
     directly — via the Start Menu shortcut / desktop icon on Windows, or
     by running the `.AppImage` file on Linux — no Python needed.
 
