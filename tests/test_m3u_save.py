@@ -17,7 +17,10 @@ class TestM3USaveLoad(unittest.TestCase):
         # which is a no-op for an already-absolute path but silently
         # mangles a path that's only absolute on a *different* OS (e.g. a
         # hardcoded "C:\\..." path isn't absolute per POSIX rules on Linux).
-        music_dir = Path(tempfile.mkdtemp())
+        # Resolved up front because parse_m3u calls Path.resolve(), which on
+        # Windows expands 8.3 short names (e.g. RUNNER~1 -> runneradmin) in
+        # the temp dir path and would otherwise make the comparison differ.
+        music_dir = Path(tempfile.mkdtemp()).resolve()
         test_playlist = [
             str(music_dir / "song1.mp3"),
             str(music_dir / "song2.mp3"),
