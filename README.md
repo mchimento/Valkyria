@@ -30,6 +30,29 @@ For the full list of the available features please refer to the user guide docum
 
 ## Installation
 
+### Building installers
+
+Instead of running from source, you can generate a standalone installer
+for your platform — no Python, venv, or this repo needed on the machine
+that ends up running the app:
+
+``` bash
+# Windows: builds a Valkyria.exe installer (Inno Setup)
+packaging\windows\build_installer.bat
+
+# Linux: builds a portable Valkyria AppImage
+packaging/linux/appimage/build_appimage.sh
+```
+
+The Windows script sets up its own Python virtual environment and
+installs dependencies automatically on first run, so it works even if
+you've never set up a venv before. See
+[packaging/README.md](packaging/README.md) for prerequisites (Inno Setup
+on Windows, `appimagetool` on Linux) and the raw-binary/manual-install
+flow for Linux dev machines.
+
+### From source code
+
 1.  Install Python 3.8 or later.
 2.  Install Python dependencies:
 
@@ -37,12 +60,16 @@ For the full list of the available features please refer to the user guide docum
 pip install -r requirements.txt
 ```
 
-Prebuilt installers (Windows) and a portable AppImage (Linux) can also be
-built from this repo — see [packaging/README.md](packaging/README.md).
-
 ## Usage
 
-1.  Run the Python script:
+1.  Launch the app:
+
+    If you installed Valkyria using one of the generated installers
+    (see [Building installers](#building-installers) above), launch it
+    directly — via the Start Menu shortcut / desktop icon on Windows, or
+    by running the `.AppImage` file on Linux — no Python needed.
+
+    If you're running from source instead, run:
 
 ``` bash
 python main.py
