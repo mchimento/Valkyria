@@ -37,7 +37,7 @@ Welcome to **Valkyria**, a modern audio player with playback features for music 
   * [Spatializer](#spatializer)
   * [Vocal Remover](#vocal-remover)
 * [Playback Features](#playback-features)
-  * [Crossfade](#crossfade)
+  * [Early Track Advance](#early-track-advance)
   * [Fade In](#fade-in)
   * [Fade Out](#fade-out)
   * [Silence Detection](#silence-detection)
@@ -596,30 +596,29 @@ The effect targets the typical vocal frequency range (200Hz-8kHz) while preservi
 
 Access advanced playback options from **Tools → Playback Features**.
 
-### Crossfade
+### Early Track Advance
 
-Smooth transitions between tracks by fading out the ending track while simultaneously fading in the next track. This creates a seamless, DJ-style listening experience without gaps.
+Skips the last stretch of the current track and starts the next one early, instead of waiting for it to reach its natural end. This avoids playing through a long trailing silence or dead air before the next track begins.
+
+Note: this does **not** overlap or blend the two tracks — the current one stops and the next one starts, just earlier than it otherwise would. If you're after an actual DJ-style blended transition, this isn't that.
 
 #### Settings
 
-* **Enable/Disable**: Toggle crossfading on/off
-* **Duration**: Set crossfade length from 0 to 10 seconds
+* **Enable/Disable**: Toggle early advance on/off
+* **Duration**: Set how many seconds before the natural end it should switch, from 0 to 10 seconds
 
 #### How It Works
 
-When crossfade is enabled:
-1. The current track begins fading out when it reaches the point where [Duration] seconds remain
-2. The next track begins fading in simultaneously
-3. Both tracks play together during the crossfade period, creating a smooth blend
+When enabled, the app watches the remaining time on the current track. Once it drops to [Duration] seconds or less, it advances to the next track immediately — the same transition that would happen at a natural track end, just triggered a few seconds sooner.
 
 #### Usage Tips
 
 * **Typical Settings**: 3-5 seconds works well for most music
-* **Longer Crossfades**: 8-10 seconds for ambient or electronic music with long outros/intros
-* **Shorter Crossfades**: 1-2 seconds for quick transitions or when tracks have abrupt endings
-* **Disable for Podcasts**: Crossfading is generally not suitable for spoken content or live albums
+* **Longer Windows**: 8-10 seconds for tracks with long fade-outs or trailing silence you want to skip past
+* **Shorter Windows**: 1-2 seconds if you only want to trim a small gap
+* **Disable for Podcasts**: Cutting in early is generally not suitable for spoken content or live albums, where the natural ending matters
 
-Crossfade respects repeat mode settings. In "Repeat One" mode, the track will crossfade into itself.
+Early Track Advance respects repeat mode settings. In "Repeat One" mode, it restarts the same track early rather than letting it play to the end — and doing so resets repeat mode back to "No Repeat", so it won't keep looping.
 
 ### Fade In
 
@@ -660,16 +659,16 @@ When fade out is enabled, the track begins fading out when it reaches the point 
 * **Typical Settings**: 3-4 seconds works well for most music
 * **Quick Fade**: 1-2 seconds for subtle endings
 * **Extended Fade**: 5-8 seconds for tracks with long natural outros or ambient music
-* **Combine with Crossfade**: Fade out works independently of crossfade. You can use both together for maximum smoothness
+* **Combine with Early Track Advance**: Fade out works independently of early track advance. You can use both together — fade out smooths the last moment of audio that actually plays, early advance decides when that moment is
 * **Session Only**: Fade out settings are cached during your session but not automatically saved to disk. Use the "Save" button in Playback Features to persist changes.
 
-#### Fade In/Out vs. Crossfade
+#### Fade In/Out vs. Early Track Advance
 
-| Feature | Fade In | Fade Out | Crossfade |
+| Feature | Fade In | Fade Out | Early Track Advance |
 |---------|---------|----------|-----------|
 | **Applies To** | Track start | Track end | Track transitions |
-| **Behavior** | Silence → Full volume | Full volume → Silence | Overlapping tracks |
-| **Use Case** | Smooth track entry | Smooth track exit | Seamless transitions |
+| **Behavior** | Silence → Full volume | Full volume → Silence | Switches to the next track early |
+| **Use Case** | Smooth track entry | Smooth track exit | Skip trailing silence/dead air |
 | **Can Combine** | Yes | Yes | Yes |
 
 ### Silence Detection
@@ -1067,7 +1066,7 @@ If a device doesn't appear in the list:
 * **Browser Layout**: Adjust the window to show both playlist and browser simultaneously for efficient library navigation
 * **Queue Management**: Use "Add Below" to build a queue of upcoming tracks without restructuring your entire playlist
 * **Theme for Time of Day**: Switch to dark theme for evening listening sessions to reduce eye strain
-* **Crossfade for Parties**: Enable 5-7 second crossfade for seamless background music
+* **Early Track Advance for Parties**: Enable a 5-7 second early advance to avoid trailing dead air between tracks in background music
 
 ## Troubleshooting
 

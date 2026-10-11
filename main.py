@@ -1,43 +1,87 @@
 #!/usr/bin/env python3
 """
-Entry point for Valkyria
+Entry point for Valkyria.
 """
 import signal
 import sys
 import logging
-from app.application import ValkyriaApp
-from app.logging_config import setup_logging
 
-# Global reference to app for signal handling
-app_instance = None
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication
+
+from app.logging_config import setup_logging
+from app.paths import get_resource_path
+from app.settings import Settings
+import audio.metadata as metadata_module
+from audio.audio_player import AudioPlayer
+from themes.theme_manager import ThemeManager
+from ui_qt.theme_bridge import ThemeSignal, apply_theme
+from ui_qt.main_window import MainWindowQt
+from ui_qt.player_bridge import PlayerBridge
 
 logger = logging.getLogger(__name__)
 
+window_instance = None
+player_instance = None
+
+
 def signal_handler(signum, frame):
-    """Handle system signals for clean shutdown."""
     logger.info(f"Received signal {signum}, shutting down gracefully...")
-    if app_instance and hasattr(app_instance, 'player'):
+    if player_instance is not None:
         try:
-            app_instance.player.__del__()
-            logger.info("Audio cleanup completed")
-        except Exception as e:
-            logger.error(f"Error during audio cleanup: {e}")
+            player_instance.__del__()
+        except Exception:
+            logger.error("Error during audio cleanup", exc_info=True)
+    if window_instance is not None:
+        window_instance.close()
     sys.exit(0)
 
+
 def main():
-    global app_instance
+    global window_instance, player_instance
 
     # Support for Windows multiprocessing
     import multiprocessing
     multiprocessing.freeze_support()
 
-    # Setup signal handlers for clean shutdown
-    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
-    signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     setup_logging()
-    app_instance = ValkyriaApp()
-    app_instance.run()
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("Valkyria")
+    app.setDesktopFileName("valkyria")
+    app.setWindowIcon(QIcon(str(get_resource_path("assets/icon-small.png"))))
+
+    settings = Settings()
+    theme = ThemeManager(settings)
+    theme_signal = ThemeSignal()
+    apply_theme(app, theme.palette)
+
+    bridge = PlayerBridge()
+    player = AudioPlayer(on_track_end=bridge.track_ended.emit)
+    player_instance = player
+
+    player.set_fade_in_enabled(settings.fade_in_enabled)
+    player.set_fade_in_duration(settings.fade_in_duration)
+    player.set_fade_out_enabled(settings.fade_out_enabled)
+    player.set_fade_out_duration(settings.fade_out_duration)
+    player.silence_detection_enabled = settings.silence_detection_enabled
+
+    try:
+        metadata_module.set_bpm_preference(settings.bpm_mode)
+    except Exception:
+        logger.exception("Failed to apply BPM preference at startup")
+
+    window_instance = MainWindowQt(settings, theme, player, theme_signal)
+    bridge.track_ended.connect(window_instance._on_track_ended, Qt.QueuedConnection)
+    window_instance.show()
+
+    logger.info("Valkyria started")
+    sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

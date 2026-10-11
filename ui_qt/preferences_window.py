@@ -1,0 +1,248 @@
+"""
+Preferences dialog: theme (Light/Dark), mini player enabled, BPM mode.
+Playback-specific settings (fade in/out, silence detection) live in their
+own Playback Features dialog instead.
+
+Theme switching gets special care here (see ui_qt/theme_bridge.py's
+ThemeSignal docstring): the only notification path is one
+`theme_signal.changed.emit(palette)` call, with no manual per-widget
+restyle walk in this file — apply_theme() re-skins this dialog the same
+as everything else, since it's just another QWidget under the app-wide
+stylesheet.
+"""
+
+import json
+import logging
+
+import audio.metadata as metadata_module
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from app.paths import get_resource_path
+from ui_qt.toggle_switch import ToggleSwitch
+
+logger = logging.getLogger(__name__)
+
+
+def _load_palette(theme_name: str) -> dict:
+    """Load a theme palette by name without touching settings/ThemeManager —
+    used for live preview so nothing shared/persisted is mutated until Save
+    is actually clicked. Mirrors themes.theme_manager.ThemeManager.reload()'s
+    file-loading logic exactly, just without the settings.theme dependency."""
+    path = get_resource_path(f"themes/{theme_name}.json")
+    if not path.exists():
+        path = get_resource_path("themes/light.json")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+class _DialogTitleBar(QWidget):
+    """Minimal themed titlebar for frameless dialogs — a plain QDialog gets
+    a native OS titlebar that Qt's QSS can't recolor (Wayland/GNOME draws
+    it, not Qt), which is why it stayed system-gray regardless of theme.
+    Reuses the same startSystemMove() drag pattern as
+    ui_qt/menu_bar.py's _DragSpacer."""
+
+    def __init__(self, dialog: QDialog, title: str):
+        super().__init__(dialog)
+        self.dialog = dialog
+        self.setObjectName("DialogTitleBar")
+        # QSS `border-bottom` alone silently doesn't paint on a plain
+        # QWidget without this attribute.
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFixedHeight(30)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 0, 0)
+        layout.setSpacing(0)
+
+        label = QLabel(title)
+        # Without this the label paints its own bg-colored rect on top of
+        # the titlebar's menubar_bg strip.
+        label.setStyleSheet("background: transparent;")
+        layout.addWidget(label)
+        layout.addStretch(1)
+
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("WinBtnClose")
+        close_btn.setFixedSize(36, 30)
+        close_btn.clicked.connect(dialog.reject)
+        layout.addWidget(close_btn)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            handle = self.dialog.windowHandle()
+            if handle is not None:
+                handle.startSystemMove()
+
+
+class PreferencesWindowQt(QDialog):
+    def __init__(self, parent, settings, theme, theme_signal):
+        super().__init__(parent)
+        self.settings = settings
+        self.theme = theme
+        self.theme_signal = theme_signal
+        # Tracks whether _preview_theme() ever actually broadcast a
+        # different palette this dialog session — see reject().
+        self._previewed = False
+
+        self.setObjectName("MainWindow")  # reuses the main window's QSS border treatment
+        self.setWindowTitle("Preferences")
+        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.setModal(False)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(1, 1, 1, 1)
+        outer.setSpacing(0)
+        outer.addWidget(_DialogTitleBar(self, "Preferences"))
+
+        body = QWidget(self)
+        layout = QVBoxLayout(body)
+        layout.setSpacing(12)
+        outer.addWidget(body, 1)
+
+        self.tabs = QTabWidget(body)
+        layout.addWidget(self.tabs, 1)
+
+        # ---------- Interface tab: Theme + Mini Player ----------
+        interface_tab = QWidget()
+        interface_layout = QVBoxLayout(interface_tab)
+        interface_layout.setContentsMargins(20, 20, 20, 20)
+        interface_layout.setSpacing(8)
+
+        interface_layout.addWidget(self._section_header("Theme"))
+        theme_col = QVBoxLayout()
+        self.radio_light = QRadioButton("Light")
+        self.radio_dark = QRadioButton("Dark")
+        self._theme_buttons = QButtonGroup(self)
+        self._theme_buttons.addButton(self.radio_light)
+        self._theme_buttons.addButton(self.radio_dark)
+        if settings.theme == "dark":
+            self.radio_dark.setChecked(True)
+        else:
+            self.radio_light.setChecked(True)
+        theme_col.addWidget(self.radio_light)
+        theme_col.addWidget(self.radio_dark)
+        interface_layout.addLayout(theme_col)
+        self.radio_light.toggled.connect(lambda checked: checked and self._preview_theme("light"))
+        self.radio_dark.toggled.connect(lambda checked: checked and self._preview_theme("dark"))
+
+        interface_layout.addSpacing(14)
+        interface_layout.addWidget(self._section_header("Mini Player"))
+        mini_player_row = QHBoxLayout()
+        mini_player_row.setSpacing(8)
+        self.checkbox_mini_player = ToggleSwitch(theme.palette)
+        self.checkbox_mini_player.setChecked(bool(getattr(settings, "mini_player_enabled", True)))
+        mini_player_row.addWidget(self.checkbox_mini_player)
+        mini_player_row.addWidget(QLabel("Enable Mini Player"))
+        mini_player_row.addStretch(1)
+        interface_layout.addLayout(mini_player_row)
+        interface_layout.addStretch(1)
+
+        self.tabs.addTab(interface_tab, "Interface")
+
+        # ---------- Audio tab: BPM Mode ----------
+        audio_tab = QWidget()
+        audio_layout = QVBoxLayout(audio_tab)
+        audio_layout.setContentsMargins(20, 20, 20, 20)
+        audio_layout.setSpacing(8)
+
+        audio_layout.addWidget(self._section_header("BPM Mode"))
+        bpm_col = QVBoxLayout()
+        self.radio_bpm_perceived = QRadioButton("Perceived (50-100 BPM)")
+        self.radio_bpm_raw = QRadioButton("Raw (detected tempo)")
+        self._bpm_buttons = QButtonGroup(self)
+        self._bpm_buttons.addButton(self.radio_bpm_perceived)
+        self._bpm_buttons.addButton(self.radio_bpm_raw)
+        if getattr(settings, "bpm_mode", "raw") == "perceived":
+            self.radio_bpm_perceived.setChecked(True)
+        else:
+            self.radio_bpm_raw.setChecked(True)
+        bpm_col.addWidget(self.radio_bpm_perceived)
+        bpm_col.addWidget(self.radio_bpm_raw)
+        audio_layout.addLayout(bpm_col)
+        audio_layout.addStretch(1)
+
+        self.tabs.addTab(audio_tab, "Audio")
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.setCenterButtons(True)
+        # The app-wide QPushButton QSS rule is flat/transparent (meant for
+        # the menu bar/window-control buttons), so give these real chrome.
+        for role in (QDialogButtonBox.Save, QDialogButtonBox.Cancel):
+            btn = buttons.button(role)
+            if btn is not None:
+                btn.setObjectName("DialogButton")
+                # Clears a platform icon some Qt styles attach to standard
+                # dialog buttons, so it's plain text only everywhere.
+                btn.setIcon(QIcon())
+        buttons.accepted.connect(self._on_save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self._center_on_parent()
+
+    def _section_header(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("SectionHeader")
+        return label
+
+    def _center_on_parent(self) -> None:
+        self.adjustSize()
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        parent_geo = parent.frameGeometry()
+        x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
+        y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
+        self.move(x, y)
+
+    def _preview_theme(self, name: str) -> None:
+        # Deliberately does not touch self.settings.theme or self.theme —
+        # those are shared, persisted objects, and anything else that calls
+        # settings.save() while this preview is live would otherwise
+        # silently bake the uncommitted preview into config.json.
+        self._previewed = True
+        palette = _load_palette(name)
+        self.theme_signal.changed.emit(palette)
+        # ToggleSwitch self-paints via QPainter, so it doesn't get restyled
+        # for free by the app-wide stylesheet the broadcast above triggers.
+        self.checkbox_mini_player.apply_palette(palette)
+
+    def _on_save(self) -> None:
+        self.settings.theme = "dark" if self.radio_dark.isChecked() else "light"
+        self.theme.reload()
+        self.settings.mini_player_enabled = self.checkbox_mini_player.isChecked()
+        self.settings.bpm_mode = "perceived" if self.radio_bpm_perceived.isChecked() else "raw"
+        # Without this, audio.metadata.BPM_PREFERENCE never picks up the
+        # new choice until the next full app restart — main.py only
+        # applies the startup value once.
+        try:
+            metadata_module.set_bpm_preference(self.settings.bpm_mode)
+        except Exception:
+            logger.exception("Failed to apply BPM preference")
+        try:
+            self.settings.save()
+        except Exception:
+            logger.exception("Failed to save settings")
+        self.accept()
+
+    def reject(self) -> None:
+        # Covers Cancel, the window's X close, and Escape — Qt routes all
+        # three through reject(). Only re-broadcasts if a preview actually
+        # happened, restoring the on-screen palette to theme.palette.
+        if self._previewed:
+            self.theme_signal.changed.emit(self.theme.palette)
+        super().reject()

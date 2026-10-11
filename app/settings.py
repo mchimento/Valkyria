@@ -14,6 +14,10 @@ class Settings:
     def __init__(self) -> None:
         self.theme: str = "light"
         self.window_geometry: Optional[str] = None
+        # Separate from window_geometry: Tk's "WxH+X+Y" string format and Qt's
+        # QRect aren't interchangeable, and both UIs can coexist during the
+        # PySide6 migration.
+        self.window_geometry_qt: Optional[str] = None
         self.volume: int = 80
         self.mute: bool = False
         self.show_playlist: bool = True
@@ -37,6 +41,16 @@ class Settings:
 
         # Silence detection
         self.silence_detection_enabled: bool = False
+
+        # Playback Features dialog (ui/playback_features_view.py): these
+        # three were already being assigned onto a Settings instance by
+        # that dialog's Save button, but never included in save()'s own
+        # data dict, so they silently never persisted across restarts even
+        # when "saved" — adding them here for real, matching the pattern
+        # already used for fade in/out and silence detection.
+        self.play_on_double: bool = True
+        self.crossfade_enabled: bool = False
+        self.crossfade_duration: int = 5
 
         self.load()
 
@@ -66,6 +80,7 @@ class Settings:
                     data = json.load(f)
                 self.theme = data.get("theme", self.theme)
                 self.window_geometry = data.get("window_geometry", self.window_geometry)
+                self.window_geometry_qt = data.get("window_geometry_qt", self.window_geometry_qt)
                 self.volume = data.get("volume", self.volume)
                 self.mute = data.get("mute", self.mute)
                 self.show_playlist = data.get("show_playlist", self.show_playlist)
@@ -79,6 +94,9 @@ class Settings:
                 self.fade_out_enabled = data.get("fade_out_enabled", self.fade_out_enabled)
                 self.fade_out_duration = data.get("fade_out_duration", self.fade_out_duration)
                 self.silence_detection_enabled = data.get("silence_detection_enabled", self.silence_detection_enabled)
+                self.play_on_double = data.get("play_on_double", self.play_on_double)
+                self.crossfade_enabled = data.get("crossfade_enabled", self.crossfade_enabled)
+                self.crossfade_duration = data.get("crossfade_duration", self.crossfade_duration)
 
         except Exception:
             logger.warning(f"Failed to load settings from {self.config_path}", exc_info=True)
@@ -89,6 +107,7 @@ class Settings:
             data = {
                 "theme": self.theme,
                 "window_geometry": self.window_geometry,
+                "window_geometry_qt": self.window_geometry_qt,
                 "volume": self.volume,
                 "mute": self.mute,
                 "show_playlist": self.show_playlist,
@@ -100,7 +119,10 @@ class Settings:
                 "fade_in_duration": self.fade_in_duration,
                 "fade_out_enabled": self.fade_out_enabled,
                 "fade_out_duration": self.fade_out_duration,
-                "silence_detection_enabled": self.silence_detection_enabled
+                "silence_detection_enabled": self.silence_detection_enabled,
+                "play_on_double": self.play_on_double,
+                "crossfade_enabled": self.crossfade_enabled,
+                "crossfade_duration": self.crossfade_duration
             }
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)

@@ -1,12 +1,11 @@
 """
-Theme manager: loads JSON palette and exposes apply_to(root).
+Theme manager: loads a JSON palette (see themes/*.json). Qt applies it via
+ui_qt/theme_bridge.py's QSS stylesheet.
 """
 
 import json
 import logging
 from typing import Dict, Any
-import tkinter as tk
-from ui.styles import apply_base_styles
 
 from app.paths import get_resource_path
 
@@ -58,20 +57,3 @@ class ThemeManager:
             "highlight": "#FFF59D", "ui_font": "Segoe UI"
         }
         logger.info("Loaded default fallback palette")
-
-    def apply_to(self, root: tk.Tk) -> None:
-        """
-        Apply the current theme palette to the root window.
-
-        Args:
-            root: The Tkinter root window to apply styles to.
-        """
-        apply_base_styles(root, self.palette)
-        try:
-            bg_color = self.palette.get("bg", "#ffffff")
-            root.tk.call(root._w, 'configure', '-bg', bg_color)
-        except Exception as e:
-            try:
-                root.configure(bg=self.palette.get("bg"))
-            except Exception as e2:
-                logger.error(f"Failed to apply theme to root window: {e2}", exc_info=True)
