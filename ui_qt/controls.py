@@ -55,11 +55,15 @@ class ControlsBarQt(QWidget):
         row = QHBoxLayout()
         row.setSpacing(6)
 
+        # Built from the Geometric Shapes block (same as ▶/■) rather than the
+        # Miscellaneous Technical "media control" glyphs (⏸/⏮/⏭) — Windows'
+        # emoji font renders those in full color regardless of the text
+        # variation selector, ignoring the button's theme color.
         self.btn_play = QPushButton("▶")
-        self.btn_pause = QPushButton("⏸")
-        self.btn_prev = QPushButton("⏮")
+        self.btn_pause = QPushButton("▮▮")
+        self.btn_prev = QPushButton("◀◀")
         self.btn_stop = QPushButton("■")
-        self.btn_next = QPushButton("⏭")
+        self.btn_next = QPushButton("▶▶")
         for btn in (self.btn_play, self.btn_pause, self.btn_prev, self.btn_stop, self.btn_next):
             btn.setObjectName("TransportButton")
             btn.setFixedSize(44, 36)
