@@ -50,10 +50,12 @@ class PlaylistGeneratorWindowQt(QDialog):
     playlist_generated = Signal(list, str)
     _generation_done = Signal(list)
 
-    def __init__(self, parent, templates_path: str, palette: dict):
+    def __init__(self, parent, templates_path: str, palette: dict, theme_signal=None):
         super().__init__(parent)
         self._templates_path = templates_path
         self.palette = palette
+        if theme_signal is not None:
+            theme_signal.changed.connect(self._on_theme_changed)
 
         self._templates: list = []
         self._template = GeneratorTemplate(name="", groups=[], rules=GeneratorRules())
@@ -112,6 +114,12 @@ class PlaylistGeneratorWindowQt(QDialog):
         x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
         y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
         self.move(x, y)
+
+    def _on_theme_changed(self, palette: dict) -> None:
+        self.palette = palette
+        for switch in (self.total_songs_unlimited, self.total_duration_unlimited,
+                       self.allow_repeats_cb, self.skip_short_cb):
+            switch.apply_palette(palette)
 
     def _prompt_text(self, title: str, label: str, initial: str = "") -> Tuple[str, bool]:
         # A plain QInputDialog renders with no app theming at all (native OS

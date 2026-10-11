@@ -650,7 +650,9 @@ class MainWindowQt(QWidget):
             self._playlist_generator_win.raise_()
             self._playlist_generator_win.activateWindow()
             return
-        win = PlaylistGeneratorWindowQt(self, str(get_generator_templates_path()), self._current_palette)
+        win = PlaylistGeneratorWindowQt(
+            self, str(get_generator_templates_path()), self._current_palette, self.theme_signal
+        )
         win.playlist_generated.connect(self._on_playlist_generated)
         win.finished.connect(lambda _: setattr(self, "_playlist_generator_win", None))
         self._playlist_generator_win = win
