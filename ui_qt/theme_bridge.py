@@ -144,6 +144,36 @@ def build_stylesheet(palette: dict) -> str:
         padding: 0 4px;
     }}
 
+    QRadioButton, QCheckBox {{
+        color: {fg};
+        spacing: 8px;
+        padding: 3px 0;
+    }}
+    QRadioButton::indicator, QCheckBox::indicator {{
+        width: 16px;
+        height: 16px;
+        border: 2px solid {border};
+        background-color: {entry_bg};
+    }}
+    QRadioButton::indicator {{
+        border-radius: 9px;
+    }}
+    QCheckBox::indicator {{
+        border-radius: 4px;
+    }}
+    QRadioButton::indicator:hover, QCheckBox::indicator:hover {{
+        border-color: {accent};
+    }}
+    QRadioButton::indicator:checked {{
+        border: 2px solid {accent};
+        background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
+            stop:0.45 {accent}, stop:0.55 {entry_bg});
+    }}
+    QCheckBox::indicator:checked {{
+        border: 2px solid {accent};
+        background-color: {accent};
+    }}
+
     QWidget#MiniPlayerWindow {{
         background-color: {bg};
         border: 1px solid {border};

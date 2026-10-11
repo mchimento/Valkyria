@@ -86,7 +86,7 @@ class ControlsBarQt(QWidget):
         row.addStretch(1)
 
         self.btn_repeat = QPushButton("↻")
-        self.btn_effects = QPushButton("🎚🎚🎚")
+        self.btn_effects = QPushButton("🎚")
         for btn in (self.btn_repeat, self.btn_effects):
             btn.setObjectName("TransportButton")
             btn.setFixedSize(48, 40)
