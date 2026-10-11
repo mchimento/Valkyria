@@ -21,19 +21,34 @@ binary from an earlier run.
 ## Windows: installer (Inno Setup)
 
 Requires [Inno Setup](https://jrsoftware.org/isinfo.php) installed on the
-Windows machine building the app. Bump `MyAppVersion` in
-`packaging\windows\valkyria.iss` to match `app/version.py` first (Inno
-Setup can't read the Python source directly), then run:
+Windows machine building the app — `build_installer.bat` compiles the
+installer with it but can't install it for you (it's a standalone GUI
+app, not something pip can pull in). Easiest way to get it:
+
+```
+winget install JRSoftware.InnoSetup
+```
+
+or download/run the installer manually from the link above. Bump
+`MyAppVersion` in `packaging\windows\valkyria.iss` to match
+`app/version.py` first (Inno Setup can't read the Python source
+directly), then run:
 
 ```
 packaging\windows\build_installer.bat
 ```
 
-This builds `dist\Valkyria.exe` with PyInstaller (installing PyInstaller
-into `.env` first if it isn't already there) and compiles the installer
-in one step — no need to run PyInstaller separately first. It looks for
-`ISCC.exe` on `PATH` and in Inno Setup's default install locations under
-Program Files.
+If `.env` doesn't exist yet, the script creates it and installs
+`requirements.txt` into it automatically (using `py -3` or `python` from
+`PATH`) before doing anything else — no manual venv setup needed, even
+for someone who's never touched a Python virtual environment. This only
+happens once; later runs reuse the existing `.env`. It then builds
+`dist\Valkyria.exe` with PyInstaller (installing PyInstaller into `.env`
+first if it isn't already there) and compiles the installer in one step —
+no need to run PyInstaller separately first. It looks for `ISCC.exe` on
+`PATH`, in Inno Setup's default install locations under Program Files,
+and under `%LocalAppData%\Programs\Inno Setup 6` (where `winget install`
+puts it).
 
 Output: `dist\installer\ValkyriaSetup-<version>.exe` — a normal installer
 wizard with Start Menu shortcut, optional desktop icon, and an uninstaller
