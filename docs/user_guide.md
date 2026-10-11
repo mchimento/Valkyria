@@ -1051,7 +1051,7 @@ If a device doesn't appear in the list:
 * **Organized Libraries**: Maintain a consistent folder structure (e.g., Artist → Album → Tracks) for easier browsing
 * **Metadata Quality**: Ensure files have accurate ID3 tags for better organization and display
 * **Backup Playlists**: Regularly save important playlists. Consider using relative paths for portable playlists
-* **M3U8 Compatibility**: Valkyria's playlists work in VLC, foobar2000, and most other players
+* **M3U8 Compatibility**: Valkyria's playlists work in foobar2000 and most other players
 
 ### Audio Quality
 

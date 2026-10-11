@@ -18,6 +18,27 @@ incremental — running the build scripts always reflects whatever
 `app/version.py` and the rest of the source currently say, never a stale
 binary from an earlier run.
 
+## Publishing a release (GitHub Actions)
+
+Built installers are never committed (`dist/` is gitignored); they're
+attached to a GitHub Release instead. `.github/workflows/release.yml` does
+this automatically, building on a Windows runner and an Ubuntu 22.04 runner
+(PyInstaller can't cross-compile, and the older glibc keeps the AppImage
+compatible with more distros):
+
+1. Bump `app/version.py` and `MyAppVersion` in `packaging\windows\valkyria.iss`
+   to the new version, and commit.
+2. Tag and push: `git tag v0.2.1 && git push origin v0.2.1`.
+
+The workflow fails early if the tag, `app/version.py`, and the `.iss`
+version disagree. On success the release contains
+`ValkyriaSetup-<version>.exe`, `Valkyria-<version>-linux-x86_64.zip`
+(AppImage + install/uninstall scripts), and `SHA256SUMS.txt`.
+
+To test the builds without publishing, run the workflow manually from the
+Actions tab ("Run workflow"): it uploads both builds as workflow artifacts
+and skips the release step.
+
 ## Windows: installer (Inno Setup)
 
 Requires [Inno Setup](https://jrsoftware.org/isinfo.php) installed on the
