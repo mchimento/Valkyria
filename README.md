@@ -53,7 +53,7 @@ flow for Linux dev machines.
 
 ### From source code
 
-1.  Install Python 3.8 or later.
+1.  Install Python 3.12 or later.
 2.  Install Python dependencies:
 
 ``` bash
@@ -86,7 +86,7 @@ python main.py
 
 ## Dependencies
 
--   Python 3.8+
+-   Python 3.12+
 -   PySide6
 -   sounddevice
 -   soundfile

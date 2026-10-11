@@ -23,7 +23,7 @@ if not exist "%VENV_PY%" (
     )
     if "!BOOTSTRAP_PY!"=="" (
         echo Error: no working Python interpreter found on PATH.
-        echo Install Python 3.10+ from https://www.python.org/downloads/windows/
+        echo Install Python 3.12+ from https://www.python.org/downloads/windows/
         echo ^(check "Add python.exe to PATH" during install^), then re-run this script.
         exit /b 1
     )

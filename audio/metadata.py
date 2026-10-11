@@ -590,7 +590,7 @@ class MetadataExtractor:
             try:
                 folder = os.path.dirname(filepath)
 
-                # Common names VLC looks for
+                # Common cover-art file names
                 image_names = ['folder.jpg', 'folder.png', 'cover.jpg', 'cover.png',
                             'front.jpg', 'front.png', 'album.jpg', 'album.png',
                             'albumart.jpg', 'albumart.png']
