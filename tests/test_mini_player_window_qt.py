@@ -70,7 +70,7 @@ def test_play_pause_icon_reflects_playing(win, controls):
     controls.is_playing = True
     controls.is_paused = False
     win._update_ui()
-    assert win.btn_play_pause.text() == "⏸"
+    assert win.btn_play_pause.text() == "▮▮"
 
 
 def test_play_pause_icon_reflects_paused(win, controls):

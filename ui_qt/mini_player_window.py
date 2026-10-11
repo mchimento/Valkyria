@@ -61,13 +61,16 @@ class MiniPlayerWindowQt(QWidget):
 
         transport_row = QHBoxLayout()
         transport_row.setSpacing(6)
-        self.btn_prev = QPushButton("⏮")
+        # Built from the Geometric Shapes block rather than the Miscellaneous
+        # Technical "media control" glyphs (⏮/⏭) — Windows' emoji font
+        # renders those in full color regardless of the button's theme color.
+        self.btn_prev = QPushButton("◀◀")
         self.btn_prev.setObjectName("MiniSecondaryButton")
         self.btn_prev.setFixedSize(34, 34)
         self.btn_play_pause = QPushButton("▶")
         self.btn_play_pause.setObjectName("MiniPlayButton")
         self.btn_play_pause.setFixedSize(48, 48)
-        self.btn_next = QPushButton("⏭")
+        self.btn_next = QPushButton("▶▶")
         self.btn_next.setObjectName("MiniSecondaryButton")
         self.btn_next.setFixedSize(34, 34)
         self.btn_prev.clicked.connect(self.prev_requested)
@@ -155,7 +158,7 @@ class MiniPlayerWindowQt(QWidget):
 
     def _update_ui(self) -> None:
         if self.controls.is_playing and not self.controls.is_paused:
-            self.btn_play_pause.setText("⏸")
+            self.btn_play_pause.setText("▮▮")
         else:
             self.btn_play_pause.setText("▶")
 
