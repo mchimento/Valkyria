@@ -6,21 +6,18 @@ from them.
 import copy
 import logging
 import threading
-from typing import Optional
+from typing import Optional, Tuple
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QTreeWidget,
@@ -43,6 +40,7 @@ from audio.playlist_generator import (
     save_templates,
 )
 from ui_qt.preferences_window import _DialogTitleBar
+from ui_qt.toggle_switch import ToggleSwitch
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +112,141 @@ class PlaylistGeneratorWindowQt(QDialog):
         x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
         y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
         self.move(x, y)
+
+    def _prompt_text(self, title: str, label: str, initial: str = "") -> Tuple[str, bool]:
+        # A plain QInputDialog renders with no app theming at all (native OS
+        # chrome, gray titlebar, flat unstyled buttons) — built the same way
+        # every other dialog in this app is: frameless + _DialogTitleBar +
+        # DialogButton-styled buttons.
+        dlg = QDialog(self)
+        dlg.setObjectName("MainWindow")
+        dlg.setWindowFlag(Qt.FramelessWindowHint)
+        dlg.setModal(True)
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(1, 1, 1, 1)
+        outer.setSpacing(0)
+        outer.addWidget(_DialogTitleBar(dlg, title))
+
+        body = QWidget(dlg)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(10)
+        outer.addWidget(body, 1)
+
+        body_layout.addWidget(QLabel(label))
+        entry = QLineEdit(initial)
+        entry.setMinimumWidth(260)
+        entry.selectAll()
+        body_layout.addWidget(entry)
+
+        result = {"ok": False}
+
+        def _accept():
+            result["ok"] = True
+            dlg.accept()
+
+        entry.returnPressed.connect(_accept)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("DialogButton")
+        ok_btn.clicked.connect(_accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("DialogButton")
+        cancel_btn.clicked.connect(dlg.reject)
+        button_row.addWidget(ok_btn)
+        button_row.addWidget(cancel_btn)
+        body_layout.addLayout(button_row)
+
+        dlg.adjustSize()
+        parent_geo = self.frameGeometry()
+        dlg.move(
+            parent_geo.x() + (parent_geo.width() - dlg.width()) // 2,
+            parent_geo.y() + (parent_geo.height() - dlg.height()) // 2,
+        )
+        entry.setFocus()
+        dlg.exec()
+        return entry.text(), result["ok"]
+
+    def _themed_dialog(self, title: str, message: str) -> Tuple[QDialog, QVBoxLayout]:
+        dlg = QDialog(self)
+        dlg.setObjectName("MainWindow")
+        dlg.setWindowFlag(Qt.FramelessWindowHint)
+        dlg.setModal(True)
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(1, 1, 1, 1)
+        outer.setSpacing(0)
+        outer.addWidget(_DialogTitleBar(dlg, title))
+
+        body = QWidget(dlg)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(10)
+        outer.addWidget(body, 1)
+
+        msg_label = QLabel(message)
+        msg_label.setWordWrap(True)
+        msg_label.setMaximumWidth(360)
+        body_layout.addWidget(msg_label)
+
+        return dlg, body_layout
+
+    def _show_info(self, title: str, message: str) -> None:
+        # A plain QMessageBox.information renders with no app theming at all
+        # (native OS chrome, gray titlebar, flat unstyled button) — built the
+        # same way every other dialog in this app is.
+        dlg, body_layout = self._themed_dialog(title, message)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("DialogButton")
+        ok_btn.clicked.connect(dlg.accept)
+        button_row.addWidget(ok_btn)
+        body_layout.addLayout(button_row)
+
+        dlg.adjustSize()
+        parent_geo = self.frameGeometry()
+        dlg.move(
+            parent_geo.x() + (parent_geo.width() - dlg.width()) // 2,
+            parent_geo.y() + (parent_geo.height() - dlg.height()) // 2,
+        )
+        dlg.exec()
+
+    def _confirm(self, title: str, message: str) -> bool:
+        # Same theming rationale as _show_info(); default/escape action is
+        # "No", matching the QMessageBox.No default this replaces.
+        dlg, body_layout = self._themed_dialog(title, message)
+
+        result = {"yes": False}
+
+        def _pick(yes: bool):
+            result["yes"] = yes
+            dlg.accept()
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        yes_btn = QPushButton("Yes")
+        yes_btn.setObjectName("DialogButton")
+        yes_btn.clicked.connect(lambda: _pick(True))
+        no_btn = QPushButton("No")
+        no_btn.setObjectName("DialogButton")
+        no_btn.clicked.connect(lambda: _pick(False))
+        button_row.addWidget(yes_btn)
+        button_row.addWidget(no_btn)
+        body_layout.addLayout(button_row)
+
+        dlg.adjustSize()
+        parent_geo = self.frameGeometry()
+        dlg.move(
+            parent_geo.x() + (parent_geo.width() - dlg.width()) // 2,
+            parent_geo.y() + (parent_geo.height() - dlg.height()) // 2,
+        )
+        dlg.exec()
+        return result["yes"]
 
     # ------------------------------------------------------------------
     # Construction
@@ -189,10 +322,11 @@ class PlaylistGeneratorWindowQt(QDialog):
         self.total_songs_entry.setEnabled(False)
         self.total_songs_entry.textChanged.connect(self._on_total_songs_change)
         songs_row.addWidget(self.total_songs_entry)
-        self.total_songs_unlimited = QCheckBox("Unlimited")
+        self.total_songs_unlimited = ToggleSwitch(self.palette)
         self.total_songs_unlimited.setChecked(True)
         self.total_songs_unlimited.toggled.connect(self._on_total_songs_unlimited_toggle)
         songs_row.addWidget(self.total_songs_unlimited)
+        songs_row.addWidget(QLabel("Unlimited"))
         songs_row.addStretch(1)
         layout.addLayout(songs_row)
 
@@ -203,20 +337,25 @@ class PlaylistGeneratorWindowQt(QDialog):
         self.total_duration_entry.setEnabled(False)
         self.total_duration_entry.textChanged.connect(self._on_total_duration_change)
         duration_row.addWidget(self.total_duration_entry)
-        self.total_duration_unlimited = QCheckBox("Unlimited")
+        self.total_duration_unlimited = ToggleSwitch(self.palette)
         self.total_duration_unlimited.setChecked(True)
         self.total_duration_unlimited.toggled.connect(self._on_total_duration_unlimited_toggle)
         duration_row.addWidget(self.total_duration_unlimited)
+        duration_row.addWidget(QLabel("Unlimited"))
         duration_row.addStretch(1)
         layout.addLayout(duration_row)
 
         rep_row = QHBoxLayout()
-        self.allow_repeats_cb = QCheckBox("Allow repeats")
+        rep_row.setSpacing(8)
+        self.allow_repeats_cb = ToggleSwitch(self.palette)
         self.allow_repeats_cb.toggled.connect(self._on_allow_repeats_change)
         rep_row.addWidget(self.allow_repeats_cb)
-        self.skip_short_cb = QCheckBox("Skip subgroups with insufficient songs")
+        rep_row.addWidget(QLabel("Allow repeats"))
+        rep_row.addSpacing(16)
+        self.skip_short_cb = ToggleSwitch(self.palette)
         self.skip_short_cb.toggled.connect(self._on_skip_short_change)
         rep_row.addWidget(self.skip_short_cb)
+        rep_row.addWidget(QLabel("Skip subgroups with insufficient songs"))
         rep_row.addStretch(1)
         layout.addLayout(rep_row)
 
@@ -326,16 +465,12 @@ class PlaylistGeneratorWindowQt(QDialog):
         self._refresh_template_dropdown()
 
     def _on_save_as_template(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save Template", "Template name:")
+        name, ok = self._prompt_text("Save Template", "Template name:")
         if not ok or not name.strip():
             return
         name = name.strip()
         if any(t.name == name for t in self._templates):
-            reply = QMessageBox.question(
-                self, "Overwrite", f'Template "{name}" already exists. Overwrite?',
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
+            if not self._confirm("Overwrite", f'Template "{name}" already exists. Overwrite?'):
                 return
             self._templates = [t for t in self._templates if t.name != name]
         self._template.name = name
@@ -348,11 +483,7 @@ class PlaylistGeneratorWindowQt(QDialog):
         name = self.template_combo.currentText()
         if not name:
             return
-        reply = QMessageBox.question(
-            self, "Delete Template", f'Delete template "{name}"?',
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
+        if not self._confirm("Delete Template", f'Delete template "{name}"?'):
             return
         self._templates = [t for t in self._templates if t.name != name]
         save_templates(self._templates_path, self._templates)
@@ -472,7 +603,7 @@ class PlaylistGeneratorWindowQt(QDialog):
         kind = data[0]
         obj = data[1] if kind == "group" else data[2]
         current = obj.name
-        new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=current)
+        new_name, ok = self._prompt_text("Rename", "New name:", current)
         if ok and new_name.strip() and new_name.strip() != current:
             obj.name = new_name.strip()
             self._render_tree()
@@ -503,7 +634,7 @@ class PlaylistGeneratorWindowQt(QDialog):
         return None, None
 
     def _on_add_group(self) -> None:
-        name, ok = QInputDialog.getText(self, "Add Group", "Group name:")
+        name, ok = self._prompt_text("Add Group", "Group name:")
         if not ok or not name.strip():
             return
         self._template.groups.append(Group(name=name.strip()))
@@ -512,9 +643,9 @@ class PlaylistGeneratorWindowQt(QDialog):
     def _on_add_subgroup(self) -> None:
         group = self._get_selected_group()
         if group is None:
-            QMessageBox.information(self, "Add Subgroup", "Select a group first")
+            self._show_info("Add Subgroup", "Select a group first")
             return
-        name, ok = QInputDialog.getText(self, "Add Subgroup", "Subgroup name:")
+        name, ok = self._prompt_text("Add Subgroup", "Subgroup name:")
         if not ok or not name.strip():
             return
         group.subgroups.append(Subgroup(name=name.strip()))
@@ -749,18 +880,16 @@ class PlaylistGeneratorWindowQt(QDialog):
 
     def _on_generate(self) -> None:
         if not self._template.groups:
-            QMessageBox.information(self, "Generate", "Add at least one group with sources first")
+            self._show_info("Generate", "Add at least one group with sources first")
             return
 
         empty = [g.name for g in self._template.groups if not any(sg.sources for sg in g.subgroups)]
         if empty:
             names = "\n".join(f"  • {n}" for n in empty)
-            reply = QMessageBox.question(
-                self, "Groups Without Sources",
+            if not self._confirm(
+                "Groups Without Sources",
                 f"These groups have no sources and will contribute no songs:\n{names}\n\nContinue anyway?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
+            ):
                 return
 
         self.generate_btn.setEnabled(False)

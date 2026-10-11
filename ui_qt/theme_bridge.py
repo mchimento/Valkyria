@@ -395,16 +395,37 @@ def build_stylesheet(palette: dict) -> str:
         background: transparent;
     }}
 
-    QLineEdit#SearchEntry {{
+    QLineEdit {{
         background-color: {entry_bg};
         color: {fg};
-        border: none;
+        border: 1px solid {border};
         border-radius: 4px;
+        padding: 4px 6px;
+    }}
+    QLineEdit:focus {{
+        border-color: {accent};
+    }}
+    QLineEdit:disabled {{
+        color: {fg_dim};
+    }}
+    QLineEdit#SearchEntry {{
+        border: none;
         padding: 5px 8px;
     }}
     QLabel#SearchIcon {{
         color: {fg_dim};
         background: transparent;
+    }}
+
+    QSpinBox {{
+        background-color: {entry_bg};
+        color: {fg};
+        border: 1px solid {border};
+        border-radius: 4px;
+        padding: 3px 4px;
+    }}
+    QSpinBox:focus {{
+        border-color: {accent};
     }}
 
     QComboBox {{

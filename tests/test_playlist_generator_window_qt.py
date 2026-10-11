@@ -2,7 +2,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QPushButton
+from PySide6.QtWidgets import QDialog, QFileDialog, QPushButton
 
 from audio.playlist_generator import (
     GeneratorRules,
@@ -52,7 +52,7 @@ def dialog(qtbot, tmp_path):
 
 def test_save_as_creates_and_persists_template(dialog):
     dialog._template.groups.append(Group(name="G1"))
-    with patch.object(QInputDialog, "getText", return_value=("My Template", True)):
+    with patch.object(dialog, "_prompt_text", return_value=("My Template", True)):
         dialog._on_save_as_template()
     assert dialog.template_combo.currentText() == "My Template"
     reloaded = load_templates(dialog._templates_path)
@@ -64,8 +64,8 @@ def test_save_as_creates_and_persists_template(dialog):
 def test_save_as_existing_name_prompts_overwrite_and_declines(dialog):
     dialog._templates.append(GeneratorTemplate(name="Existing"))
     dialog._refresh_template_dropdown()
-    with patch.object(QInputDialog, "getText", return_value=("Existing", True)), \
-         patch.object(QMessageBox, "question", return_value=QMessageBox.No) as mock_q:
+    with patch.object(dialog, "_prompt_text", return_value=("Existing", True)), \
+         patch.object(dialog, "_confirm", return_value=False) as mock_q:
         dialog._on_save_as_template()
     mock_q.assert_called_once()
     assert len(dialog._templates) == 1
@@ -91,7 +91,7 @@ def test_delete_template_removes_and_resets_when_selected(dialog):
     dialog._templates.append(GeneratorTemplate(name="ToDelete"))
     dialog._refresh_template_dropdown()
     dialog.template_combo.setCurrentText("ToDelete")
-    with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+    with patch.object(dialog, "_confirm", return_value=True):
         dialog._on_delete_template()
     assert dialog._templates == []
     assert dialog._template.name == ""
@@ -102,7 +102,7 @@ def test_delete_template_declined_keeps_template(dialog):
     dialog._templates.append(GeneratorTemplate(name="Keep"))
     dialog._refresh_template_dropdown()
     dialog.template_combo.setCurrentText("Keep")
-    with patch.object(QMessageBox, "question", return_value=QMessageBox.No):
+    with patch.object(dialog, "_confirm", return_value=False):
         dialog._on_delete_template()
     assert len(dialog._templates) == 1
 
@@ -129,7 +129,7 @@ def test_templates_load_from_disk_on_construction(qtbot, tmp_path):
 # ---------- tree actions ----------
 
 def test_add_group_appends_and_renders(dialog):
-    with patch.object(QInputDialog, "getText", return_value=("MyGroup", True)):
+    with patch.object(dialog, "_prompt_text", return_value=("MyGroup", True)):
         dialog._on_add_group()
     assert len(dialog._template.groups) == 1
     assert dialog._template.groups[0].name == "MyGroup"
@@ -137,13 +137,13 @@ def test_add_group_appends_and_renders(dialog):
 
 
 def test_add_group_cancelled_does_nothing(dialog):
-    with patch.object(QInputDialog, "getText", return_value=("", False)):
+    with patch.object(dialog, "_prompt_text", return_value=("", False)):
         dialog._on_add_group()
     assert dialog._template.groups == []
 
 
 def test_add_subgroup_without_selection_shows_info(dialog):
-    with patch.object(QMessageBox, "information") as mock_info:
+    with patch.object(dialog, "_show_info") as mock_info:
         dialog._on_add_subgroup()
     mock_info.assert_called_once()
 
@@ -152,7 +152,7 @@ def test_add_subgroup_with_group_selected(dialog):
     dialog._template.groups.append(Group(name="G1"))
     dialog._render_tree()
     dialog._tree.setCurrentItem(dialog._tree.topLevelItem(0))
-    with patch.object(QInputDialog, "getText", return_value=("SG1", True)):
+    with patch.object(dialog, "_prompt_text", return_value=("SG1", True)):
         dialog._on_add_subgroup()
     assert dialog._template.groups[0].subgroups[0].name == "SG1"
 
@@ -187,7 +187,7 @@ def test_rename_group(dialog):
     dialog._template.groups.append(Group(name="Old"))
     dialog._render_tree()
     dialog._tree.setCurrentItem(dialog._tree.topLevelItem(0))
-    with patch.object(QInputDialog, "getText", return_value=("New", True)):
+    with patch.object(dialog, "_prompt_text", return_value=("New", True)):
         dialog._on_rename()
     assert dialog._template.groups[0].name == "New"
 
@@ -324,14 +324,14 @@ def test_group_rules_fields_write_into_selected_group(dialog):
 # ---------- generation ----------
 
 def test_generate_with_no_groups_blocked(dialog):
-    with patch.object(QMessageBox, "information") as mock_info:
+    with patch.object(dialog, "_show_info") as mock_info:
         dialog._on_generate()
     mock_info.assert_called_once()
 
 
 def test_generate_with_empty_group_prompts_confirm_and_declines(dialog):
     dialog._template.groups.append(Group(name="Empty"))
-    with patch.object(QMessageBox, "question", return_value=QMessageBox.No) as mock_q:
+    with patch.object(dialog, "_confirm", return_value=False) as mock_q:
         dialog._on_generate()
     mock_q.assert_called_once()
     assert dialog.generate_btn.isEnabled()
