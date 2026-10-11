@@ -18,9 +18,9 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: '3.12'
 
@@ -56,7 +56,7 @@ jobs:
       shell: cmd
       run: packaging\windows\build_installer.bat
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: windows-installer
         path: dist/installer/ValkyriaSetup-*.exe
@@ -67,9 +67,9 @@ jobs:
     # systems with a glibc at least as new as the one it was built on.
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: '3.12'
 
@@ -117,7 +117,7 @@ jobs:
         zip "Valkyria-$VERSION-linux-x86_64.zip" \
           "Valkyria-$VERSION-x86_64.AppImage" install_appimage.sh uninstall_appimage.sh
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: linux-appimage
         path: dist/Valkyria-*-linux-x86_64.zip
@@ -130,7 +130,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         path: release
         merge-multiple: true
