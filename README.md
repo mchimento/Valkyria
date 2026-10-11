@@ -2,23 +2,42 @@
   <img src="assets/logo.png" alt="Valkyria" width="240"/>
 </p>
 
-A simple audio player which supports playlist management and browsing
-local audio files.
+**Valkyria** is a free, open source desktop audio player for Windows and
+Linux, built for people who care about how their music is played and
+mixed. It combines everyday playlist management with DJ-style tools:
+live loudness, tempo and key analysis, a real-time effects chain, and a
+rule-based playlist generator. It works entirely with your local files.
 
 ## Features
 
-Valkyria features include:
+**Playback**
+-   Plays MP3, WAV, FLAC, OGG and M4A files, with a waveform seek bar.
+-   Play, pause, stop, previous/next, volume and mute, and repeat modes.
+-   Choose the audio output device, and preview tracks on a separate device before playing them.
+-   Mini Player for a small, always-handy view.
+-   Light and dark themes.
 
--   Play audio files (MP3, WAV, FLAC, OGG, M4A).
--   Load single files, multiple files, or playlists (M3U / M3U8).
--   Browse folders to add multiple songs in the playback list.
--   Playback controls: Play, Pause/Resume, Stop, Previous, Next.
--   Automatic next track playback.
--   Metadata display and editing.
--   Metadata album images booklet
--   Save playlists (Save / Save As).
+**Playlists and library**
+-   Open single files, multiple files, folders, or M3U / M3U8 playlists, and save playlists back out.
+-   Add, remove, reorder, search and filter the playlist, with drag-and-drop from the built-in file browser.
+-   Queue a track to play after the current one, or play for a set amount of time.
+-   View and edit metadata, and see album artwork in the booklet viewer.
 
-For the full list of the available features please refer to the user guide documentation (link below).
+**Live audio analysis**
+-   Real-time LUFS loudness, peak level and limiter activity meters.
+-   Automatic BPM and musical key detection, and an energy analyser.
+
+**Audio effects**
+-   Equalizer, compressor, spatializer and vocal remover.
+-   Playback speed and channel mode controls.
+
+**Smooth transitions**
+-   Fade in and fade out, early track advance, and silence detection.
+
+**Playlist generator**
+-   Build playlists from reusable templates: groups and subgroups, BPM and key filters, global rules, and several ordering strategies (in order, shuffled, random, and more).
+
+For the full feature reference, see the [User Guide](docs/user_guide.md).
 
 ## Supported Formats
 
@@ -65,11 +84,9 @@ Get-FileHash .\ValkyriaSetup-<version>.exe -Algorithm SHA256
 
 ### Building installers
 
-To build the installers yourself instead of downloading them:
-
-Instead of running from source, you can generate a standalone installer
-for your platform — no Python, venv, or this repo needed on the machine
-that ends up running the app:
+To build the installers yourself instead of downloading them, generate a
+standalone installer for your platform — no Python, venv, or this repo
+needed on the machine that ends up running the app:
 
 ``` bash
 # Windows: builds a Valkyria.exe installer (Inno Setup)
@@ -129,6 +146,8 @@ python main.py
 -   scipy
 -   mutagen
 -   librosa
+-   Pillow
+-   Markdown
 
 ## File Structure
 
